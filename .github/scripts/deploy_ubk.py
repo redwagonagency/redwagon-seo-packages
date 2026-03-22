@@ -3,7 +3,7 @@
 Deploy unboundkeyword.com to VPS.
 Uploads source from $GITHUB_WORKSPACE/unboundkeyword/ via SFTP tarball.
 """
-import os, sys, tarfile, io, textwrap
+import os, sys, tarfile, io, textwrap, zlib, base64
 import paramiko
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -22,8 +22,8 @@ SRC_DIR = os.path.join(GITHUB_WORKSPACE, "unboundkeyword")
 
 # ── Credentials ───────────────────────────────────────────────────────────────
 NEXTAUTH_SECRET      = "ubk-prod-secret-2025-xK9mPq3wL7vN5rTy"
-GOOGLE_CLIENT_ID     = os.environ["UBK_GOOGLE_CLIENT_ID"]
-GOOGLE_CLIENT_SECRET = os.environ["UBK_GOOGLE_CLIENT_SECRET"]
+GOOGLE_CLIENT_ID     = "311730143264-21mm0e88tvh72lviq18qbtrjfuqog44f.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
 DATAFORSEO_LOGIN     = os.environ.get("DATAFORSEO_LOGIN", "joe@redwagon.agency")
 DATAFORSEO_PASSWORD  = os.environ.get("DATAFORSEO_PASSWORD", "8e2f935e765ad0c7")
 
