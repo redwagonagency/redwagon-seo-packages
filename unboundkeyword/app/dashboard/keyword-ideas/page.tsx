@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatNumber } from "@/lib/utils";
 
 type IdeaRow = {
@@ -60,6 +60,8 @@ export default function KeywordIdeasPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => { void runSearch(); }, []);
 
   const totalIdeas = rows.length.toLocaleString();
   const selected = useMemo(() => rows[0] ?? null, [rows]);

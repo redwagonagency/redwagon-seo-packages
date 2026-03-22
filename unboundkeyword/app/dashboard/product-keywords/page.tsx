@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/utils";
 
 interface ProductListing {
@@ -56,6 +56,8 @@ export default function ProductKeywordsPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => { void runSearch(); }, []);
 
   const totalProducts = results.reduce((sum, r) => sum + r.productCount, 0);
   const expanded = results.find((r) => r.keyword === expandedKeyword);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/utils";
 
 type ContentRow = {
@@ -68,6 +68,8 @@ export default function ContentIdeasPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => { void runSearch(); }, []);
 
   return (
     <div className="p-8 max-w-7xl">

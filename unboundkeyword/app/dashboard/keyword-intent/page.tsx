@@ -1,9 +1,7 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { getSelectedSiteIdForUser } from "@/lib/site-context";
-import { formatNumber } from "@/lib/utils";
+"use client";
 
-export const metadata = { title: "Keyword Intent - UnBoundKeyword" };
+import { useEffect, useMemo, useState } from "react";
+import { formatNumber } from "@/lib/utils";
 
 type IntentType = "informational" | "transactional" | "navigational" | "commercial";
 
@@ -13,8 +11,6 @@ type IntentRow = {
   volume: number;
   difficulty: number | null;
   cpc: number | null;
-  platform: string;
-  sourceIntent: string | null;
 };
 
 const INTENT_META: Record<IntentType, { label: string; description: string; color: string; border: string }> = {
@@ -44,77 +40,93 @@ const INTENT_META: Record<IntentType, { label: string; description: string; colo
   },
 };
 
-function inferIntent(keyword: string, sourceIntent: string | null): IntentType {
-  const normalized = keyword.toLowerCase();
-  const source = (sourceIntent || "").toLowerCase();
-
-  if (["informational", "transactional", "navigational", "commercial"].includes(source)) {
-    return source as IntentType;
-  }
-
-  const informationalSignals = ["how", "what", "why", "when", "guide", "examples", "tutorial", "tips"];
-  const transactionalSignals = ["buy", "price", "pricing", "cost", "order", "coupon", "near me", "book", "hire"];
-  const navigationalSignals = ["login", "official", "website", "dashboard", "app", "brand", "company"];
-  const commercialSignals = ["best", "top", "review", "vs", "versus", "comparison", "alternatives", "software"];
-
-  if (transactionalSignals.some((token) => normalized.includes(token))) return "transactional";
-  if (navigationalSignals.some((token) => normalized.includes(token))) return "navigational";
-  if (commercialSignals.some((token) => normalized.includes(token))) return "commercial";
-  if (informationalSignals.some((token) => normalized.includes(token))) return "informational";
-
+function coerceIntent(raw: string | null | undefined): IntentType {
+  const s = (raw ?? "").toLowerCase();
+  if (s === "transactional" || s === "navigational" || s === "commercial") return s;
   return "informational";
 }
 
-export default async function KeywordIntentPage() {
-  const session = await auth();
-  const userId = (session?.user as { id?: string })?.id;
-  if (!userId) return null;
+export default function KeywordIntentPage() {
+  const [query, setQuery] = useState("digital marketing");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [rows, setRows] = useState<IntentRow[]>([]);
 
-  const siteId = await getSelectedSiteIdForUser(userId);
+  async function runSearch(nextQuery?: string) {
+    const keyword = (nextQuery ?? query).trim();
+    if (!keyword) return;
 
-  const sourceRows = await prisma.discoveryKeyword.findMany({
-    where: {
-      userId,
-      ...(siteId ? { siteId } : { siteId: null }),
-    },
-    select: {
-      keyword: true,
-      intent: true,
-      volume: true,
-      difficulty: true,
-      cpc: true,
-      platform: true,
-    },
-    orderBy: [{ volume: "desc" }, { createdAt: "desc" }],
-    take: 600,
-  });
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/keywords/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, mode: "magic", location: 2840, language: "en" }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        keywords?: Array<{ keyword: string; volume: number | null; difficulty: number | null; cpc: number | null; intent?: string | null }>;
+      };
+      if (!res.ok) throw new Error(data.error || "Search failed");
 
-  const rows: IntentRow[] = sourceRows.map((row) => ({
-    keyword: row.keyword,
-    sourceIntent: row.intent,
-    intent: inferIntent(row.keyword, row.intent),
-    volume: row.volume ?? 0,
-    difficulty: row.difficulty,
-    cpc: row.cpc,
-    platform: row.platform,
-  }));
+      setRows(
+        (data.keywords ?? []).map((r) => ({
+          keyword: r.keyword,
+          intent: coerceIntent(r.intent),
+          volume: r.volume ?? 0,
+          difficulty: r.difficulty ?? null,
+          cpc: r.cpc ?? null,
+        }))
+      );
+      setQuery(keyword);
+    } catch (e) {
+      setRows([]);
+      setError(e instanceof Error ? e.message : "Search failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const grouped = rows.reduce<Record<IntentType, IntentRow[]>>(
-    (acc, row) => {
-      acc[row.intent].push(row);
-      return acc;
-    },
-    { informational: [], transactional: [], navigational: [], commercial: [] }
+  useEffect(() => { void runSearch(); }, []);
+
+  const grouped = useMemo(
+    () =>
+      rows.reduce<Record<IntentType, IntentRow[]>>(
+        (acc, row) => { acc[row.intent].push(row); return acc; },
+        { informational: [], transactional: [], navigational: [], commercial: [] }
+      ),
+    [rows]
   );
 
   const totalKeywords = rows.length;
 
   return (
     <div className="p-8 max-w-7xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-black text-slate-900">Keyword Intent</h1>
-        <p className="text-sm text-slate-500 mt-1">Full intent classification across informational, transactional, navigational, and commercial terms.</p>
+      <div className="rounded-xl border border-[#f15b27] bg-[#fff3ee] p-2 flex gap-2 mb-6">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="seed keyword"
+          className="flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-500"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void runSearch();
+            }
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void runSearch()}
+          disabled={loading || !query.trim()}
+          className="rounded-md bg-[#f15b27] px-4 py-2 text-xs font-black text-white disabled:opacity-60"
+        >
+          {loading ? "Analyzing..." : "Analyze Intent"}
+        </button>
       </div>
+
+      {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-7">
         {(["informational", "transactional", "navigational", "commercial"] as IntentType[]).map((intent) => {
@@ -127,7 +139,7 @@ export default async function KeywordIntentPage() {
             <div key={intent} className={`rounded-xl border ${meta.border} bg-white p-5`}>
               <div className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.color}`}>{meta.label}</div>
               <div className="mt-3 text-4xl font-black text-slate-900">{intentRows.length}</div>
-              <div className="text-xs text-slate-400 mt-1">{pct}% of all tracked terms</div>
+              <div className="text-xs text-slate-400 mt-1">{pct}% of results</div>
               <div className="mt-3 text-sm text-slate-600">{formatNumber(volumeSum)} total monthly volume</div>
               <p className="mt-2 text-xs text-slate-500">{meta.description}</p>
             </div>
@@ -138,9 +150,10 @@ export default async function KeywordIntentPage() {
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-lg font-black text-slate-900">Intent Breakdown Table</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{totalKeywords} keywords analyzed</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
@@ -148,16 +161,17 @@ export default async function KeywordIntentPage() {
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">KD</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Platform</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">No keywords found for this project yet.</td>
+                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
+                    {loading ? "Loading keyword intent data..." : "Search to load keyword intent analysis."}
+                  </td>
                 </tr>
               ) : rows.slice(0, 200).map((row) => (
-                <tr key={`${row.keyword}-${row.platform}`} className="border-b border-slate-100 hover:bg-slate-50">
+                <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-6 py-3 font-medium text-slate-800">{row.keyword}</td>
                   <td className="px-6 py-3 text-center">
                     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${INTENT_META[row.intent].color}`}>
@@ -165,9 +179,8 @@ export default async function KeywordIntentPage() {
                     </span>
                   </td>
                   <td className="px-6 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
-                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>
-                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.difficulty ?? "-"}</td>
-                  <td className="px-6 py-3 text-right text-slate-500">{row.platform}</td>
+                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.difficulty ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
