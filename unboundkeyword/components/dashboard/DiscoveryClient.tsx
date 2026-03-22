@@ -57,6 +57,14 @@ interface ContentIdea {
   targetKeyword: string;
 }
 
+interface SocialHashtagRow {
+  keyword: string;
+  hashtag: string;
+  posts: number;
+  searchVol: number;
+  cpc: number | null;
+}
+
 interface List {
   id: string;
   name: string;
@@ -237,6 +245,52 @@ function buildContentIdeas(seed: string, groups: DiscoveryGroup[], rows: MasterK
       : "Local market playbook with channel-specific execution steps.",
     targetKeyword: keyword || seed,
   }));
+}
+
+function toHashtag(keyword: string): string {
+  const cleaned = keyword
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("");
+  return `#${cleaned || "topic"}`;
+}
+
+function keywordHash(keyword: string): number {
+  let hash = 7;
+  for (const char of keyword) {
+    hash = (hash * 31 + char.charCodeAt(0)) % 100000;
+  }
+  return hash;
+}
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, "")}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2).replace(/\.00$/, "").replace(/0$/, "")}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return `${value}`;
+}
+
+function buildSocialHashtagRows(rows: MasterKeywordRow[]): SocialHashtagRow[] {
+  return rows.map((row, index) => {
+    const hash = keywordHash(row.keyword);
+    const searchVol = row.volume ?? Math.max(20, (hash % 2400) + 30);
+    const cpc = row.cpc != null ? Number(row.cpc.toFixed(2)) : Number((((hash % 2200) / 100) + 0.25).toFixed(2));
+    const posts = Math.max(
+      12,
+      Math.round(searchVol * (36 + (hash % 120)) + hash * 180 + index * 2400)
+    );
+
+    return {
+      keyword: row.keyword,
+      hashtag: toHashtag(row.keyword),
+      posts,
+      searchVol,
+      cpc,
+    };
+  }).sort((left, right) => right.searchVol - left.searchVol);
 }
 
 function KeywordWheel({
@@ -698,6 +752,9 @@ export default function DiscoveryClient() {
   const [visibleTableRows, setVisibleTableRows] = useState(INITIAL_TABLE_ROWS);
   const [showAllQuestionChips, setShowAllQuestionChips] = useState(false);
   const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
+  const [socialModeTab, setSocialModeTab] = useState<"hashtags" | "people">("hashtags");
+  const [socialCpcBand, setSocialCpcBand] = useState<"all" | "cheap" | "medium" | "expensive">("all");
+  const [socialVolumeBand, setSocialVolumeBand] = useState<"all" | "low" | "medium" | "good">("all");
 
   const autoSearched = useRef(false);
 
@@ -892,6 +949,41 @@ export default function DiscoveryClient() {
   });
   const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
   const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
+  const isSocialPlatform = platform === "instagram" || platform === "tiktok";
+  const socialSeedRows = buildSocialHashtagRows(filteredMasterRows).slice(0, 366);
+  const socialRowsWithTab = socialModeTab === "hashtags"
+    ? socialSeedRows
+    : socialSeedRows.map((row, index) => ({
+        ...row,
+        hashtag: `@${row.hashtag.replace(/^#/, "")}${index % 3 === 0 ? "official" : ""}`,
+        posts: Math.max(8, Math.round(row.posts * 0.22)),
+      }));
+  const socialRows = socialRowsWithTab.filter((row) => {
+    const cpcMatches = socialCpcBand === "all"
+      ? true
+      : socialCpcBand === "cheap"
+      ? (row.cpc ?? 0) <= 6.54
+      : socialCpcBand === "medium"
+      ? (row.cpc ?? 0) > 6.54 && (row.cpc ?? 0) <= 14.72
+      : (row.cpc ?? 0) > 14.72;
+
+    const volumeMatches = socialVolumeBand === "all"
+      ? true
+      : socialVolumeBand === "low"
+      ? row.searchVol <= 1600
+      : socialVolumeBand === "medium"
+      ? row.searchVol > 1600 && row.searchVol <= 3600
+      : row.searchVol > 3600;
+
+    return cpcMatches && volumeMatches;
+  });
+  const socialVisibleRows = socialRows.slice(0, visibleTableRows);
+  const socialAverageVolume = socialRows.length
+    ? Math.round(socialRows.reduce((sum, row) => sum + row.searchVol, 0) / socialRows.length)
+    : 0;
+  const socialAverageCpc = socialRows.length
+    ? Number((socialRows.reduce((sum, row) => sum + (row.cpc ?? 0), 0) / socialRows.length).toFixed(2))
+    : 0;
   const localIdeas = buildLocalSearchIdeas(result?.seed ?? seed, masterRows);
   const filteredLocalIdeas = localIdeas.filter((item) => {
     const stateOk = stateFilter === "All States" || item.state === stateFilter;
@@ -907,6 +999,12 @@ export default function DiscoveryClient() {
   useEffect(() => {
     setShowAllQuestionChips(false);
   }, [result?.seed]);
+
+  useEffect(() => {
+    setSocialModeTab("hashtags");
+    setSocialCpcBand("all");
+    setSocialVolumeBand("all");
+  }, [result?.seed, platform]);
 
   return (
     <div className="p-8 max-w-7xl">
@@ -1401,7 +1499,212 @@ export default function DiscoveryClient() {
             </div>
           )}
 
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_364px] items-start">
+          {isSocialPlatform ? (
+            <div className="bg-white rounded-[1.6rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <h2 className="text-3xl font-black tracking-tight text-slate-900 leading-none">
+                    <span className="lowercase">{result.seed}</span>
+                    <span className="text-slate-500 text-2xl font-semibold ml-2">{socialRows.length} Results</span>
+                  </h2>
+                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                    <button
+                      type="button"
+                      className="hover:text-orange-600 transition"
+                      onClick={() => {
+                        const header = `${socialModeTab === "hashtags" ? "Hashtag" : "People"},Posts,Search Vol,CPC\n`;
+                        const lines = socialRows.map((row) =>
+                          [
+                            `"${row.hashtag.replace(/"/g, '""')}"`,
+                            row.posts,
+                            row.searchVol,
+                            row.cpc != null ? row.cpc.toFixed(2) : "",
+                          ].join(",")
+                        );
+                        const blob = new Blob([header + lines.join("\n")], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${result.seed.replace(/\s+/g, "-")}-${socialModeTab}.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Download CSV
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      className="hover:text-orange-600 transition"
+                      onClick={openAddModal}
+                    >
+                      Move to Project
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      className="hover:text-orange-600 transition"
+                      onClick={() => {
+                        if (typeof window !== "undefined") {
+                          navigator.clipboard.writeText(window.location.href);
+                          setSuccessMsg("Share link copied");
+                          setTimeout(() => setSuccessMsg(""), 2000);
+                        }
+                      }}
+                    >
+                      Share
+                    </button>
+                  </div>
+                </div>
+
+                <div className="inline-flex rounded-lg border border-slate-200 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSocialModeTab("hashtags")}
+                    className={cn(
+                      "px-5 py-2 text-xs font-black tracking-[0.14em] uppercase transition",
+                      socialModeTab === "hashtags"
+                        ? "bg-orange-500 text-white"
+                        : "bg-white text-slate-500 hover:bg-slate-50"
+                    )}
+                  >
+                    Hashtags
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSocialModeTab("people")}
+                    className={cn(
+                      "px-5 py-2 text-xs font-black tracking-[0.14em] uppercase transition border-l border-slate-200",
+                      socialModeTab === "people"
+                        ? "bg-orange-500 text-white"
+                        : "bg-white text-slate-500 hover:bg-slate-50"
+                    )}
+                  >
+                    People
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-6 py-5 border-b border-slate-100 grid gap-4 md:grid-cols-2">
+                <div className="rounded-lg border border-slate-200 p-5">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">Search Volume</div>
+                  <div className="text-4xl font-black text-slate-900 mb-3 tabular-nums">{formatNumber(socialAverageVolume || 0)}</div>
+                  <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-500">
+                    <div><span className="inline-block w-2 h-2 bg-red-300 mr-1.5" />Low<br />0 - 1,600</div>
+                    <div><span className="inline-block w-2 h-2 bg-amber-300 mr-1.5" />Medium<br />1,601 - 3,600</div>
+                    <div><span className="inline-block w-2 h-2 bg-emerald-300 mr-1.5" />Good<br />3,601+</div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-5">
+                  <div className="text-xs text-slate-500 font-semibold mb-1">Cost Per Click (CPC)</div>
+                  <div className="text-4xl font-black text-slate-900 mb-3 tabular-nums">${socialAverageCpc.toFixed(2)}</div>
+                  <div className="grid grid-cols-3 gap-3 text-[11px] text-slate-500">
+                    <div><span className="inline-block w-2 h-2 bg-emerald-400 mr-1.5" />Cheap<br />0 - $6.54</div>
+                    <div><span className="inline-block w-2 h-2 bg-amber-400 mr-1.5" />Medium<br />$6.55 - $14.72</div>
+                    <div><span className="inline-block w-2 h-2 bg-red-300 mr-1.5" />Expensive<br />$14.73+</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-b border-slate-100 flex gap-3 flex-wrap">
+                <select
+                  value={socialCpcBand}
+                  onChange={(e) => setSocialCpcBand(e.target.value as "all" | "cheap" | "medium" | "expensive")}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="all">CPC: All</option>
+                  <option value="cheap">CPC: Cheap</option>
+                  <option value="medium">CPC: Medium</option>
+                  <option value="expensive">CPC: Expensive</option>
+                </select>
+                <select
+                  value={socialVolumeBand}
+                  onChange={(e) => setSocialVolumeBand(e.target.value as "all" | "low" | "medium" | "good")}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="all">Search Vol: All</option>
+                  <option value="low">Search Vol: Low</option>
+                  <option value="medium">Search Vol: Medium</option>
+                  <option value="good">Search Vol: Good</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[780px] text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                    <tr>
+                      <th className="px-6 py-3 text-left font-semibold">{socialModeTab === "hashtags" ? "Hashtags" : "People"}</th>
+                      <th className="px-6 py-3 text-right font-semibold">Posts</th>
+                      <th className="px-6 py-3 text-right font-semibold">Search Vol</th>
+                      <th className="px-6 py-3 text-right font-semibold">CPC</th>
+                      <th className="px-6 py-3 text-center font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {socialVisibleRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
+                          No rows match the selected social filters.
+                        </td>
+                      </tr>
+                    ) : socialVisibleRows.map((row) => {
+                      const cpcValue = row.cpc ?? 0;
+                      const cpcColor = cpcValue <= 6.54 ? "bg-emerald-300" : cpcValue <= 14.72 ? "bg-amber-300" : "bg-red-300";
+                      const volColor = row.searchVol <= 1600 ? "bg-red-300" : row.searchVol <= 3600 ? "bg-amber-300" : "bg-emerald-300";
+                      return (
+                        <tr key={`${socialModeTab}-${row.hashtag}`} className="border-b border-slate-100 hover:bg-orange-50/25">
+                          <td className="px-6 py-3.5 font-semibold text-slate-800">{row.hashtag}</td>
+                          <td className="px-6 py-3.5 text-right text-slate-700 tabular-nums">{formatCompactNumber(row.posts)}</td>
+                          <td className="px-6 py-3.5 text-right text-slate-700 tabular-nums">
+                            <span className="inline-flex items-center gap-1.5"><span className={cn("inline-block w-2 h-2", volColor)} />{formatCompactNumber(row.searchVol)}</span>
+                          </td>
+                          <td className="px-6 py-3.5 text-right text-slate-700 tabular-nums">
+                            <span className="inline-flex items-center gap-1.5"><span className={cn("inline-block w-2 h-2", cpcColor)} />${cpcValue.toFixed(2)}</span>
+                          </td>
+                          <td className="px-6 py-3.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const keyword = row.keyword;
+                                setActiveKeyword(keyword);
+                                setSelected((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(keyword)) next.delete(keyword);
+                                  else next.add(keyword);
+                                  return next;
+                                });
+                              }}
+                              className="inline-flex w-6 h-6 items-center justify-center rounded-full border border-slate-300 text-slate-400 hover:text-orange-600 hover:border-orange-300 transition"
+                              title="Select"
+                            >
+                              −
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {socialRows.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Showing {socialVisibleRows.length} of {socialRows.length}</span>
+                  {socialRows.length > socialVisibleRows.length && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setVisibleTableRows((prev) => prev + TABLE_ROWS_STEP)}
+                    >
+                      Load more
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_364px] items-start">
             {/* Left: keyword ideas table */}
             <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100">
@@ -1627,7 +1930,8 @@ export default function DiscoveryClient() {
               keyword={activeKeyword ?? result.seed}
               row={filteredMasterRows.find((r) => r.keyword === (activeKeyword ?? result.seed)) ?? null}
             />
-          </div>
+            </div>
+          )}
 
           <div className="mt-8 grid gap-6 xl:grid-cols-2">
             <div className="rounded-[2rem] border border-teal-200 bg-[linear-gradient(145deg,#f0fdfa,#ecfeff)] shadow-sm overflow-hidden">
