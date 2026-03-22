@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/utils";
+import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 
 interface ProductListing {
   position: number | null;
@@ -27,6 +28,9 @@ export default function ProductKeywordsPage() {
   const [error, setError] = useState("");
   const [results, setResults] = useState<ProductKeywordResult[]>([]);
   const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   async function runSearch(nextQuery?: string) {
     const keyword = (nextQuery ?? query).trim();
@@ -47,6 +51,7 @@ export default function ProductKeywordsPage() {
       if (!res.ok) throw new Error(data.error || "Search failed");
 
       setResults(data.results ?? []);
+      setSelected(new Set());
       setQuery(keyword);
       setExpandedKeyword((data.results ?? [])[0]?.keyword ?? null);
     } catch (e) {
@@ -61,6 +66,25 @@ export default function ProductKeywordsPage() {
 
   const totalProducts = results.reduce((sum, r) => sum + r.productCount, 0);
   const expanded = results.find((r) => r.keyword === expandedKeyword);
+  const allChecked = results.length > 0 && selected.size === results.length;
+
+  function toggleRow(keyword: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyword)) next.delete(keyword);
+      else next.add(keyword);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(results.map((r) => r.keyword)));
+  }
+
+  const selectedKws: KWToSave[] = results
+    .filter((r) => selected.has(r.keyword))
+    .map((r) => ({ keyword: r.keyword }));
 
   return (
     <div className="p-8 max-w-7xl">
@@ -92,34 +116,60 @@ export default function ProductKeywordsPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         {/* Keywords list */}
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-500">Product Keyword Variants</p>
-            <span className="text-xs font-semibold text-slate-500">{results.length} found</span>
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                onChange={toggleAll}
+                className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+              />
+              <p className="text-sm font-semibold text-slate-500">Product Keyword Variants</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {selected.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(true)}
+                  className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
+                >
+                  + Save {selected.size} to List
+                </button>
+              )}
+              {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
+              <span className="text-xs font-semibold text-slate-500">{results.length} found</span>
+            </div>
           </div>
-          <div className="space-y-1 max-h-[550px] overflow-y-auto">
+          <div className="space-y-0 max-h-[550px] overflow-y-auto divide-y divide-slate-100">
             {results.length === 0 ? (
               <div className="px-6 py-8 text-center text-sm text-slate-400">Search to discover product keywords and shopping results.</div>
             ) : (
               results.map((result) => (
-                <button
-                  key={result.keyword}
-                  onClick={() => setExpandedKeyword(result.keyword)}
-                  className={`w-full text-left px-6 py-3 border-b border-slate-100 transition-colors ${
-                    expandedKeyword === result.keyword
-                      ? "bg-[#fff3ee] border-l-4 border-l-[#f15b27]"
-                      : "hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-800">{result.keyword}</p>
-                      <p className="text-xs text-slate-500">{result.productCount} products · {result.avgPrice || "—"}</p>
+                <div key={result.keyword} className="flex items-center gap-3 px-4 py-1 hover:bg-slate-50 transition">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(result.keyword)}
+                    onChange={() => toggleRow(result.keyword)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-shrink-0 rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                  />
+                  <button
+                    onClick={() => setExpandedKeyword(result.keyword)}
+                    className={`flex-1 text-left py-2 transition-colors ${
+                      expandedKeyword === result.keyword ? "text-[#f15b27]" : "text-slate-800"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{result.keyword}</p>
+                        <p className="text-xs text-slate-500">{result.productCount} products · {result.avgPrice || "—"}</p>
+                      </div>
+                      <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
-                    <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </button>
+                  </button>
+                </div>
               ))
             )}
           </div>
@@ -156,6 +206,18 @@ export default function ProductKeywordsPage() {
             <span className="font-semibold">{results.length}</span> keyword variants. Click any keyword to see live Google Shopping results.
           </p>
         </div>
+      )}
+
+      {showSaveModal && (
+        <SaveToListModal
+          keywords={selectedKws}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={(count) => {
+            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
+            setSelected(new Set());
+            setTimeout(() => setSavedMsg(""), 4000);
+          }}
+        />
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatNumber } from "@/lib/utils";
+import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 
 type IdeaRow = {
   keyword: string;
@@ -23,6 +24,9 @@ export default function KeywordIdeasPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<IdeaRow[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   async function runSearch(nextQuery?: string) {
     const keyword = (nextQuery ?? query).trim();
@@ -52,6 +56,7 @@ export default function KeywordIdeasPage() {
       }));
 
       setRows(normalized.sort((a, b) => b.volume - a.volume).slice(0, 160));
+      setSelected(new Set());
       setQuery(keyword);
     } catch (e) {
       setRows([]);
@@ -64,7 +69,26 @@ export default function KeywordIdeasPage() {
   useEffect(() => { void runSearch(); }, []);
 
   const totalIdeas = rows.length.toLocaleString();
-  const selected = useMemo(() => rows[0] ?? null, [rows]);
+  const selected_overview = useMemo(() => rows[0] ?? null, [rows]);
+  const allChecked = rows.length > 0 && selected.size === rows.length;
+
+  function toggleRow(keyword: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyword)) next.delete(keyword);
+      else next.add(keyword);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.keyword)));
+  }
+
+  const selectedKws: KWToSave[] = rows
+    .filter((r) => selected.has(r.keyword))
+    .map((r) => ({ keyword: r.keyword, volume: r.volume, difficulty: r.seoDifficulty, cpc: r.cpc ?? undefined, intent: r.intent ?? undefined }));
 
   return (
     <div className="p-8 max-w-7xl">
@@ -95,15 +119,35 @@ export default function KeywordIdeasPage() {
 
       <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
             <h1 className="text-2xl font-black text-slate-900">{totalIdeas} Keyword Ideas</h1>
-            <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {selected.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveModal(true)}
+                  className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
+                >
+                  + Save {selected.size} to List
+                </button>
+              )}
+              {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
+              <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
+                  <th className="px-4 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      onChange={toggleAll}
+                      className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Vol</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
@@ -115,10 +159,22 @@ export default function KeywordIdeasPage() {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">Search to load keyword ideas.</td>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">Search to load keyword ideas.</td>
                   </tr>
                 ) : rows.map((row) => (
-                  <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50">
+                  <tr
+                    key={row.keyword}
+                    onClick={() => toggleRow(row.keyword)}
+                    className={`border-b border-slate-100 cursor-pointer transition ${selected.has(row.keyword) ? "bg-orange-50" : "hover:bg-slate-50"}`}
+                  >
+                    <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.keyword)}
+                        onChange={() => toggleRow(row.keyword)}
+                        className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                      />
+                    </td>
                     <td className="px-4 py-2.5 font-medium text-slate-800">{row.keyword}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>
@@ -137,10 +193,10 @@ export default function KeywordIdeasPage() {
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100">
             <h2 className="text-3xl leading-tight font-black text-slate-900">Keyword Overview</h2>
-            <p className="text-slate-500">{selected?.keyword ?? "Run a search"}</p>
+            <p className="text-slate-500">{selected_overview?.keyword ?? "Run a search"}</p>
           </div>
           <div className="px-5 py-4 border-b border-slate-100 text-sm text-slate-600">
-            {selected ? (
+            {selected_overview ? (
               <>
                 <span className="font-semibold text-[#f15b27]">Live metrics loaded.</span> Use these ideas to seed discovery, lists, and content workflows.
               </>
@@ -149,13 +205,25 @@ export default function KeywordIdeasPage() {
             )}
           </div>
           <div className="p-5 space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-slate-500">Volume</span><span className="font-semibold text-slate-800">{selected ? formatNumber(selected.volume) : "-"}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">CPC</span><span className="font-semibold text-slate-800">{selected?.cpc != null ? `$${selected.cpc.toFixed(2)}` : "-"}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">SEO Difficulty</span><span className="font-semibold text-slate-800">{selected?.seoDifficulty ?? "-"}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Intent</span><span className="font-semibold text-slate-800 capitalize">{selected?.intent ?? "-"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Volume</span><span className="font-semibold text-slate-800">{selected_overview ? formatNumber(selected_overview.volume) : "-"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">CPC</span><span className="font-semibold text-slate-800">{selected_overview?.cpc != null ? `$${selected_overview.cpc.toFixed(2)}` : "-"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">SEO Difficulty</span><span className="font-semibold text-slate-800">{selected_overview?.seoDifficulty ?? "-"}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Intent</span><span className="font-semibold text-slate-800 capitalize">{selected_overview?.intent ?? "-"}</span></div>
           </div>
         </div>
       </div>
+
+      {showSaveModal && (
+        <SaveToListModal
+          keywords={selectedKws}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={(count) => {
+            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
+            setSelected(new Set());
+            setTimeout(() => setSavedMsg(""), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }

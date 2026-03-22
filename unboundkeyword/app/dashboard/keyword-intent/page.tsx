@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatNumber } from "@/lib/utils";
+import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 
 type IntentType = "informational" | "transactional" | "navigational" | "commercial";
 
@@ -51,6 +52,9 @@ export default function KeywordIntentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<IntentRow[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   async function runSearch(nextQuery?: string) {
     const keyword = (nextQuery ?? query).trim();
@@ -79,6 +83,7 @@ export default function KeywordIntentPage() {
           cpc: r.cpc ?? null,
         }))
       );
+      setSelected(new Set());
       setQuery(keyword);
     } catch (e) {
       setRows([]);
@@ -100,6 +105,25 @@ export default function KeywordIntentPage() {
   );
 
   const totalKeywords = rows.length;
+  const allChecked = rows.length > 0 && selected.size === rows.length;
+
+  function toggleRow(keyword: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyword)) next.delete(keyword);
+      else next.add(keyword);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.keyword)));
+  }
+
+  const selectedKws: KWToSave[] = rows
+    .filter((r) => selected.has(r.keyword))
+    .map((r) => ({ keyword: r.keyword, volume: r.volume, difficulty: r.difficulty ?? undefined, cpc: r.cpc ?? undefined, intent: r.intent }));
 
   return (
     <div className="p-8 max-w-7xl">
@@ -148,14 +172,36 @@ export default function KeywordIntentPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-lg font-black text-slate-900">Intent Breakdown Table</h2>
-          <p className="text-xs text-slate-500 mt-0.5">{totalKeywords} keywords analyzed</p>
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Intent Breakdown Table</h2>
+            <p className="text-xs text-slate-500 mt-0.5">{totalKeywords} keywords analyzed</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(true)}
+                className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
+              >
+                + Save {selected.size} to List
+              </button>
+            )}
+            {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
+                <th className="px-6 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
                 <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Intent</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
@@ -166,12 +212,24 @@ export default function KeywordIntentPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">
                     {loading ? "Loading keyword intent data..." : "Search to load keyword intent analysis."}
                   </td>
                 </tr>
               ) : rows.slice(0, 200).map((row) => (
-                <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50">
+                <tr
+                  key={row.keyword}
+                  onClick={() => toggleRow(row.keyword)}
+                  className={`border-b border-slate-100 cursor-pointer transition ${selected.has(row.keyword) ? "bg-orange-50" : "hover:bg-slate-50"}`}
+                >
+                  <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(row.keyword)}
+                      onChange={() => toggleRow(row.keyword)}
+                      className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                    />
+                  </td>
                   <td className="px-6 py-3 font-medium text-slate-800">{row.keyword}</td>
                   <td className="px-6 py-3 text-center">
                     <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${INTENT_META[row.intent].color}`}>
@@ -187,6 +245,18 @@ export default function KeywordIntentPage() {
           </table>
         </div>
       </div>
+
+      {showSaveModal && (
+        <SaveToListModal
+          keywords={selectedKws}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={(count) => {
+            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
+            setSelected(new Set());
+            setTimeout(() => setSavedMsg(""), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }

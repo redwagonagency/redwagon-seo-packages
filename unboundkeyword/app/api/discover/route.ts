@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
         languageCode: String(language),
         limit: 2000,
       }),
-      getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 300),
+      getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 500),
       deepMode
         ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
         : Promise.resolve([]),

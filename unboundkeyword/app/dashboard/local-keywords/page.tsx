@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatNumber } from "@/lib/utils";
+import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 
 type LocalRow = {
   location: string;
@@ -49,6 +50,9 @@ export default function LocalKeywordsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<LocalKeywordApiResponse | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   async function runSearch() {
     const kw = keyword.trim();
@@ -69,6 +73,7 @@ export default function LocalKeywordsPage() {
       const data = (await res.json()) as LocalKeywordApiResponse & { error?: string };
       if (!res.ok) throw new Error(data.error || "Local keyword lookup failed");
       setResult(data);
+      setSelected(new Set());
     } catch (e) {
       setResult(null);
       setError(e instanceof Error ? e.message : "Error fetching local keywords");
@@ -79,6 +84,25 @@ export default function LocalKeywordsPage() {
 
   const rows = result?.rows ?? [];
   const totalVolume = useMemo(() => rows.reduce((s, r) => s + (r.volume || 0), 0), [rows]);
+  const allChecked = rows.length > 0 && selected.size === rows.length;
+
+  function toggleRow(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => `${r.location}:::${r.localizedKeyword}`)));
+  }
+
+  const selectedKws: KWToSave[] = rows
+    .filter((r) => selected.has(`${r.location}:::${r.localizedKeyword}`))
+    .map((r) => ({ keyword: r.localizedKeyword, volume: r.volume, difficulty: r.difficulty ?? undefined, cpc: r.cpc ?? undefined }));
 
   return (
     <div className="p-8 max-w-7xl">
@@ -173,14 +197,36 @@ export default function LocalKeywordsPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100">
-          <h2 className="text-lg font-black text-slate-900">Localized Keyword Results</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Shows the best-performing localized variant per location.</p>
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-900">Localized Keyword Results</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Shows the best-performing localized variant per location.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(true)}
+                className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
+              >
+                + Save {selected.size} to List
+              </button>
+            )}
+            {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
+                <th className="px-6 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Location</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Best Keyword</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
@@ -192,16 +238,29 @@ export default function LocalKeywordsPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-slate-400">
                     Select locations and a keyword above, then click Run.
                   </td>
                 </tr>
               ) : rows.map((row) => {
+                const rowKey = `${row.location}:::${row.localizedKeyword}`;
                 const altVariant = row.localizedKeyword === row.inVariant.keyword
                   ? row.bareVariant
                   : row.inVariant;
                 return (
-                  <tr key={`${row.location}-${row.localizedKeyword}`} className="border-b border-slate-100 hover:bg-slate-50">
+                  <tr
+                    key={rowKey}
+                    onClick={() => toggleRow(rowKey)}
+                    className={`border-b border-slate-100 cursor-pointer transition ${selected.has(rowKey) ? "bg-orange-50" : "hover:bg-slate-50"}`}
+                  >
+                    <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(rowKey)}
+                        onChange={() => toggleRow(rowKey)}
+                        className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                      />
+                    </td>
                     <td className="px-6 py-3">
                       <div className="font-semibold text-slate-800">{row.location}</div>
                       <div className="text-[11px] text-slate-400 uppercase tracking-wide">{row.locationType}</div>
@@ -227,6 +286,18 @@ export default function LocalKeywordsPage() {
           </table>
         </div>
       </div>
+
+      {showSaveModal && (
+        <SaveToListModal
+          keywords={selectedKws}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={(count) => {
+            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
+            setSelected(new Set());
+            setTimeout(() => setSavedMsg(""), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }

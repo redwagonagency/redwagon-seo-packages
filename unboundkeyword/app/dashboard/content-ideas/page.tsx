@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatNumber } from "@/lib/utils";
+import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 
 type ContentRow = {
   title: string;
@@ -27,6 +28,9 @@ export default function ContentIdeasPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [rows, setRows] = useState<ContentRow[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [savedMsg, setSavedMsg] = useState("");
 
   async function runSearch(nextQuery?: string) {
     const keyword = (nextQuery ?? query).trim();
@@ -60,6 +64,7 @@ export default function ContentIdeasPage() {
       });
 
       setRows(nextRows);
+      setSelected(new Set());
       setQuery(keyword);
     } catch (e) {
       setRows([]);
@@ -70,6 +75,26 @@ export default function ContentIdeasPage() {
   }
 
   useEffect(() => { void runSearch(); }, []);
+
+  const allChecked = rows.length > 0 && selected.size === rows.length;
+
+  function toggleRow(keyword: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(keyword)) next.delete(keyword);
+      else next.add(keyword);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.keyword)));
+  }
+
+  const selectedKws: KWToSave[] = rows
+    .filter((r) => selected.has(r.keyword))
+    .map((r) => ({ keyword: r.keyword }));
 
   return (
     <div className="p-8 max-w-7xl">
@@ -99,16 +124,35 @@ export default function ContentIdeasPage() {
       {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-3xl font-black text-slate-900">Content Ideas: <span className="font-semibold text-slate-500">{query}</span></h1>
-          <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowSaveModal(true)}
+                className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
+              >
+                + Save {selected.size} to List
+              </button>
+            )}
+            {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
+            <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="px-4 py-3 w-8" />
+                <th className="px-4 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    checked={allChecked}
+                    onChange={toggleAll}
+                    className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Page Title / URL</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Est. Visits</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Backlinks</th>
@@ -122,8 +166,19 @@ export default function ContentIdeasPage() {
                   <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">Search to generate content ideas from live keyword data.</td>
                 </tr>
               ) : rows.map((row, idx) => (
-                <tr key={`${row.keyword}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300" /></td>
+                <tr
+                  key={`${row.keyword}-${idx}`}
+                  onClick={() => toggleRow(row.keyword)}
+                  className={`border-b border-slate-100 cursor-pointer transition ${selected.has(row.keyword) ? "bg-orange-50" : "hover:bg-slate-50"}`}
+                >
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(row.keyword)}
+                      onChange={() => toggleRow(row.keyword)}
+                      className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-[#f15b27] hover:underline cursor-pointer">{row.title}</div>
                     <div className="text-xs text-slate-400 mt-1">topic: {row.keyword}</div>
@@ -138,6 +193,18 @@ export default function ContentIdeasPage() {
           </table>
         </div>
       </div>
+
+      {showSaveModal && (
+        <SaveToListModal
+          keywords={selectedKws}
+          onClose={() => setShowSaveModal(false)}
+          onSaved={(count) => {
+            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
+            setSelected(new Set());
+            setTimeout(() => setSavedMsg(""), 4000);
+          }}
+        />
+      )}
     </div>
   );
 }
