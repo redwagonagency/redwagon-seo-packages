@@ -27,6 +27,14 @@ export default async function LocalSeoPage() {
   const project = projects[0] ?? null;
   const snapshot = project?.reportSnapshots?.[0] ?? null;
   const local = parseLocal(snapshot?.localJson ?? null);
+  const localData = (local ?? {}) as {
+    position?: number | null;
+    rating?: number | null;
+    reviews?: number | null;
+    found?: boolean;
+    address?: string | null;
+    phone?: string | null;
+  };
 
   return (
     <div style={{ padding: "32px 36px" }}>
@@ -63,10 +71,10 @@ export default async function LocalSeoPage() {
           {/* Stats */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 18, marginBottom: 28 }}>
             {[
-              { label: "Local Pack Position", value: local?.position !== null && local?.position !== undefined ? `#${local.position}` : "—", color: "#d97706" },
-              { label: "Google Rating", value: local?.rating !== null && local?.rating !== undefined ? `${local.rating}★` : "—", color: "#f59e0b" },
-              { label: "Reviews", value: local?.reviews !== null && local?.reviews !== undefined ? local.reviews.toLocaleString() : "—", color: "#1a56db" },
-              { label: "Found in Pack", value: local ? (local.found ? "Yes" : "No") : "—", color: local?.found ? "#10b981" : "#ef4444" },
+              { label: "Local Pack Position", value: localData.position !== null && localData.position !== undefined ? `#${localData.position}` : "—", color: "#d97706" },
+              { label: "Google Rating", value: localData.rating !== null && localData.rating !== undefined ? `${localData.rating}★` : "—", color: "#f59e0b" },
+              { label: "Reviews", value: localData.reviews !== null && localData.reviews !== undefined ? localData.reviews.toLocaleString() : "—", color: "#1a56db" },
+              { label: "Found in Pack", value: local ? (localData.found ? "Yes" : "No") : "—", color: localData.found ? "#10b981" : "#ef4444" },
             ].map(s => (
               <div key={s.label} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "20px 22px" }}>
                 <p style={{ fontSize: 13, color: "#64748b", marginBottom: 8 }}>{s.label}</p>
@@ -79,7 +87,7 @@ export default async function LocalSeoPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 28 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>Business Details from Google</h3>
-              {!local || !local.found ? (
+              {!local || !localData.found ? (
                 <div style={{ textAlign: "center", padding: "32px 0" }}>
                   <div style={{ fontSize: 32, marginBottom: 12 }}>📍</div>
                   <p style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
@@ -95,11 +103,11 @@ export default async function LocalSeoPage() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   {[
                     { label: "Business Name", value: project?.name },
-                    { label: "Address", value: local.address ?? "Not available" },
-                    { label: "Phone", value: local.phone ?? "Not available" },
-                    { label: "Local Pack Position", value: local.position !== null ? `#${local.position} of 3` : "Not in pack" },
-                    { label: "Star Rating", value: local.rating !== null ? `${local.rating} / 5.0` : "—" },
-                    { label: "Review Count", value: local.reviews !== null ? local.reviews.toLocaleString() : "—" },
+                    { label: "Address", value: localData.address ?? "Not available" },
+                    { label: "Phone", value: localData.phone ?? "Not available" },
+                    { label: "Local Pack Position", value: localData.position !== null ? `#${localData.position} of 3` : "Not in pack" },
+                    { label: "Star Rating", value: localData.rating !== null ? `${localData.rating} / 5.0` : "—" },
+                    { label: "Review Count", value: localData.reviews != null ? localData.reviews.toLocaleString() : "—" },
                     { label: "Target Location", value: project?.location ?? "United States" },
                   ].map(row => (
                     <div key={row.label} style={{ display: "flex", justifyContent: "space-between", paddingBottom: 12, borderBottom: "1px solid #f8fafc" }}>
