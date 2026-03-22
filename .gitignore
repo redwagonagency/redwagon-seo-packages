@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# deployment guide (contains secrets — keep local only)
+README.deploy.md
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
