@@ -4,6 +4,7 @@ import IntegrationConnectPanel from "@/components/dashboard/IntegrationConnectPa
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSelectedSiteForUser } from "@/lib/site-context";
+import { buildJoeInsight } from "@/lib/joe-insights";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -12,7 +13,7 @@ export default async function DashboardPage() {
 
   const selectedSite = await getSelectedSiteForUser(userId);
 
-  const [listCount, keywordCount, discoveryCount, googleLinked] = await Promise.all([
+  const [listCount, keywordCount, discoveryCount, googleLinked, topKeywordRow, avgCpcRow, industryStats] = await Promise.all([
     prisma.keywordList.count({ where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) } }),
     prisma.keywordInList.count({
       where: {
@@ -21,7 +22,36 @@ export default async function DashboardPage() {
     }),
     prisma.discoverySession.count({ where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) } }),
     prisma.account.findFirst({ where: { userId, provider: "google" } }),
+    prisma.discoveryKeyword.findFirst({
+      where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+      orderBy: [{ volume: "desc" }],
+      select: { keyword: true, volume: true },
+    }),
+    prisma.discoveryKeyword.aggregate({
+      where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+      _avg: { cpc: true },
+    }),
+    (prisma as unknown as {
+      industryStat: {
+        findMany: (args: unknown) => Promise<Array<{ metricKey: string; metricValue: number; unit: string | null; note: string | null }>>;
+      };
+    }).industryStat.findMany({
+      where: { industry: "general" },
+      select: { metricKey: true, metricValue: true, unit: true, note: true },
+      take: 20,
+    }),
   ]);
+
+  const joeInsight = buildJoeInsight({
+    domain: selectedSite?.domain || "your site",
+    listCount,
+    keywordCount,
+    discoveryCount,
+    topKeyword: topKeywordRow?.keyword || null,
+    topKeywordVolume: topKeywordRow?.volume || 0,
+    avgKeywordCpc: avgCpcRow._avg.cpc || 0,
+    industryStats,
+  });
 
   return (
     <div className="p-8 max-w-7xl">
@@ -97,6 +127,20 @@ export default async function DashboardPage() {
           ga4Connected={selectedSite?.ga4Connected ?? false}
           gscConnected={selectedSite?.gscConnected ?? false}
         />
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-start gap-4">
+          <img
+            src="/joe-headshot.png"
+            alt="Joe from Redwagon"
+            className="h-14 w-14 rounded-full object-cover ring-2 ring-[#f15b27]/25"
+          />
+          <div className="flex-1">
+            <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black">Joe's Industry Insight</div>
+            <p className="mt-2 text-sm leading-6 text-slate-700">{joeInsight}</p>
+          </div>
+        </div>
       </div>
     </div>
   );

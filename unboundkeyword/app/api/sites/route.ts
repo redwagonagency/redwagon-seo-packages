@@ -4,12 +4,25 @@ import { prisma } from "@/lib/prisma";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 
 function normalizeDomain(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .split("/")[0];
+  const raw = value.trim();
+  if (!raw) return "";
+
+  try {
+    const maybeUrl = raw.includes("://") ? raw : `https://${raw}`;
+    const hostname = new URL(maybeUrl).hostname;
+    return hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return raw
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0]
+      .trim();
+  }
+}
+
+function isValidDomain(value: string) {
+  return /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(value);
 }
 
 export async function GET() {
@@ -34,28 +47,36 @@ export async function POST(req: NextRequest) {
   const domain = normalizeDomain(body.domain ?? "");
 
   if (!domain) return Response.json({ error: "Domain is required" }, { status: 400 });
+  if (!isValidDomain(domain)) {
+    return Response.json({ error: "Enter a valid domain like example.com" }, { status: 400 });
+  }
 
-  const site = await prisma.siteProject.upsert({
-    where: { userId_domain: { userId, domain } },
-    update: {
-      label: body.label ?? undefined,
-      location: body.location ?? undefined,
-      language: body.language ?? undefined,
-    },
-    create: {
-      userId,
-      domain,
-      label: body.label ?? null,
-      location: body.location ?? "United States",
-      language: body.language ?? "en",
-    },
-  });
+  try {
+    const site = await prisma.siteProject.upsert({
+      where: { userId_domain: { userId, domain } },
+      update: {
+        label: body.label ?? undefined,
+        location: body.location ?? undefined,
+        language: body.language ?? undefined,
+      },
+      create: {
+        userId,
+        domain,
+        label: body.label ?? null,
+        location: body.location ?? "United States",
+        language: body.language ?? "en",
+      },
+    });
 
-  await prisma.userPreference.upsert({
-    where: { userId },
-    update: { selectedSiteId: site.id },
-    create: { userId, selectedSiteId: site.id },
-  });
+    await prisma.userPreference.upsert({
+      where: { userId },
+      update: { selectedSiteId: site.id },
+      create: { userId, selectedSiteId: site.id },
+    });
 
-  return Response.json({ site });
+    return Response.json({ site });
+  } catch (error) {
+    console.error("Failed to create/update site project", error);
+    return Response.json({ error: "Unable to save domain right now. Please try again." }, { status: 500 });
+  }
 }

@@ -8,6 +8,24 @@ type ProjectRequiredGateProps = {
   onProjectCreated?: () => void;
 };
 
+function sanitizeDomainInput(input: string): string {
+  const value = input.trim();
+  if (!value) return "";
+
+  try {
+    const maybeUrl = value.includes("://") ? value : `https://${value}`;
+    const hostname = new URL(maybeUrl).hostname;
+    return hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return value
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0]
+      .trim();
+  }
+}
+
 export default function ProjectRequiredGate({ loading, hasProject, onProjectCreated }: ProjectRequiredGateProps) {
   const [domain, setDomain] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,7 +44,7 @@ export default function ProjectRequiredGate({ loading, hasProject, onProjectCrea
   if (hasProject) return null;
 
   async function createProject() {
-    const clean = domain.trim();
+    const clean = sanitizeDomainInput(domain);
     if (!clean) {
       setError("Enter a domain first");
       return;
@@ -82,9 +100,9 @@ export default function ProjectRequiredGate({ loading, hasProject, onProjectCrea
             </p>
           </div>
           <div>
-            <h2 className="mb-2 text-sm font-bold text-slate-900">Monitor and track SEO health</h2>
+            <h2 className="mb-2 text-sm font-bold text-slate-900">Find revenue-driving keywords</h2>
             <p className="text-xs leading-6 text-slate-500">
-              Keep traffic, keyword positions, and trend data in one project-centered workspace.
+              Cut through the noise and find your keywords that will drive revenue.
             </p>
           </div>
         </div>

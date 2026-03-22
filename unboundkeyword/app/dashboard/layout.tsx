@@ -8,6 +8,7 @@ import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import SiteSwitcher from "@/components/dashboard/SiteSwitcher";
 import ProjectRequiredGate from "@/components/dashboard/ProjectRequiredGate";
+import { isJoeSuperAdmin } from "@/lib/superadmin";
 
 const NAV_GROUPS = [
   {
@@ -85,6 +86,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const path = usePathname();
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
+  const userEmail = session?.user?.email ?? "";
+  const canAccessSuperadmin = isJoeSuperAdmin(userEmail);
   const [projectCheckLoading, setProjectCheckLoading] = useState(true);
   const [hasProject, setHasProject] = useState(false);
 
@@ -157,6 +160,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Sign out */}
         <div className="px-3 py-4 border-t border-slate-100">
+          {canAccessSuperadmin ? (
+            <Link
+              href="/superadmin"
+              className="mb-2 w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium bg-[#fff3ee] text-[#f15b27] hover:bg-[#ffe8de] transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.2 0-4 1.8-4 4m4-4c2.2 0 4 1.8 4 4m-4-4v-2m0 10v2m8-6h-2M6 12H4m12.95 4.95-1.4-1.4M8.45 8.45l-1.4-1.4m9.9 0-1.4 1.4m-7.1 7.1-1.4 1.4" /></svg>
+              Superadmin
+            </Link>
+          ) : null}
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition"

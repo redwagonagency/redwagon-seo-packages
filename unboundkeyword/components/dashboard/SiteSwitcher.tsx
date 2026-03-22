@@ -17,6 +17,7 @@ export default function SiteSwitcher() {
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [domainInput, setDomainInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function load() {
     const res = await fetch("/api/sites", { cache: "no-store" });
@@ -37,14 +38,19 @@ export default function SiteSwitcher() {
   async function createSite() {
     if (!domainInput.trim()) return;
     setBusy(true);
+    setError("");
     try {
-      await fetch("/api/sites", {
+      const res = await fetch("/api/sites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain: domainInput.trim() }),
       });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error || "Unable to add domain");
       setDomainInput("");
       await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to add domain");
     } finally {
       setBusy(false);
     }
@@ -109,6 +115,7 @@ export default function SiteSwitcher() {
           GSC
         </div>
       ) : null}
+      {error ? <span className="hidden md:inline text-[11px] text-rose-600">{error}</span> : null}
     </div>
   );
 }

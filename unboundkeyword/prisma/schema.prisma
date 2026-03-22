@@ -269,3 +269,18 @@ model DailyIntelDigest {
   @@index([userId, createdAt])
   @@index([userId, siteId, createdAt])
 }
+
+model IndustryStat {
+  id          String   @id @default(cuid())
+  industry    String   @default("general")
+  metricKey   String
+  metricValue Float
+  unit        String?
+  note        String?
+  source      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([industry, metricKey])
+  @@index([industry])
+}

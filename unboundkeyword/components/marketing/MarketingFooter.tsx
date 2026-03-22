@@ -4,16 +4,16 @@ import Link from "next/link";
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-white/[0.07] bg-slate-950/50 py-12">
+    <footer className="border-t border-white/[0.07] bg-slate-950/70 py-14">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 mb-12">
           {/* Brand */}
           <div>
             <h3 className="text-lg font-black tracking-tight ubk-logo mb-4">
               Unbound<span className="text-white/50">Keyword</span>
             </h3>
             <p className="text-white/50 text-sm">
-              Keyword research software built by people who actually do SEO.
+              Cut through the noise and find the keywords that drive revenue.
             </p>
           </div>
 
@@ -93,6 +93,38 @@ export function MarketingFooter() {
               <li>
                 <a href="https://twitter.com/unboundkeyword" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
                   Twitter
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Redwagon Ecosystem */}
+          <div>
+            <h4 className="font-bold text-white mb-4">Redwagon Ecosystem</h4>
+            <ul className="space-y-2">
+              <li>
+                <a href="https://redwagon.agency" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
+                  redwagon.agency
+                </a>
+              </li>
+              <li>
+                <a href="https://ppcgrader.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
+                  ppcgrader.com
+                </a>
+              </li>
+              <li>
+                <a href="https://e-mailgrader.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
+                  e-mailgrader.com
+                </a>
+              </li>
+              <li>
+                <a href="https://searchauditpro.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
+                  searchauditpro.com
+                </a>
+              </li>
+              <li>
+                <a href="https://optinyeti.com" target="_blank" rel="noopener noreferrer" className="text-white/60 hover:text-white text-sm transition">
+                  optinyeti.com
                 </a>
               </li>
             </ul>
