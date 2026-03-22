@@ -14,6 +14,7 @@ type RequestBody = {
   competitorDomains?: string[];
   location?: number;
   language?: string;
+  useDefaultCompetitors?: boolean;
 };
 
 function normalizeDomain(value: string | undefined): string {
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
       : [];
     const location = body.location ?? 2840;
     const language = body.language ?? "en";
+    const useDefaultCompetitors = Boolean(body.useDefaultCompetitors);
 
     if (!domain) {
       return Response.json({ error: "domain is required" }, { status: 400 });
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     const [yourOverviewResult, suggestedCompetitorsResult] = await Promise.allSettled([
       getDomainRankOverview(domain, location, language),
-      getDomainCompetitors(domain, location, language, 8),
+      useDefaultCompetitors ? getDomainCompetitors(domain, location, language, 8) : Promise.resolve([]),
     ]);
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatNumber } from "@/lib/utils";
 
@@ -50,7 +50,7 @@ export default function CompetitorIntelligenceClient() {
     setError("");
     try {
       const competitors = (nextCompetitors ?? competitorInput.split(/[,\n]/).map((d) => d.trim()).filter(Boolean)).slice(0, 5);
-      const res = await fetch("/api/traffic/overview", {
+      const res = await fetch("/api/competitors/intelligence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -70,10 +70,6 @@ export default function CompetitorIntelligenceClient() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    void loadData();
-  }, []);
 
   const parsedCustomCompetitors = useMemo(
     () => competitorInput.split(/[,\n]/).map((d) => d.trim()).filter(Boolean).slice(0, 5),
@@ -125,6 +121,12 @@ export default function CompetitorIntelligenceClient() {
           <span key={competitor} className="inline-flex items-center gap-2 rounded-md border border-[#f15b27] bg-[#fff3ee] px-3 py-1.5 text-xs text-[#f15b27]">{competitor}</span>
         )) : <span className="text-xs text-slate-500">No custom competitors entered yet.</span>}
       </div>
+
+      {!data && !loading ? (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 mb-5">
+          Enter up to 5 custom competitor domains, then click Search.
+        </div>
+      ) : null}
 
       {activeView === "overview" ? (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mb-5">

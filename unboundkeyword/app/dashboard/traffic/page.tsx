@@ -5,6 +5,8 @@ import { formatNumber } from "@/lib/utils";
 
 type TrafficResponse = {
   domain: string;
+  requiresDomain?: boolean;
+  message?: string;
   overview: {
     organicTraffic: number;
     organicKeywords: number;
@@ -136,9 +138,10 @@ export default function TrafficPage() {
           </button>
         </div>
         {error ? <p className="text-sm text-red-600 mt-2">{error}</p> : null}
+        {data?.requiresDomain ? <p className="text-sm text-slate-600 mt-2">{data.message}</p> : null}
       </div>
 
-      <div className="mb-5 text-[42px] leading-none font-black text-slate-900">Traffic Overview <span className="text-slate-500 font-semibold">: {data?.domain}</span></div>
+      <div className="mb-5 text-[42px] leading-none font-black text-slate-900">Traffic Overview <span className="text-slate-500 font-semibold">: {data?.domain || "Add your domain"}</span></div>
 
       <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] mb-6">
         <div className="bg-white border border-slate-200 rounded-2xl p-6">

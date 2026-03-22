@@ -144,8 +144,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 const normalizedHref = item.href.split("#")[0].split("?")[0];
                 const query = item.href.includes("?") ? item.href.split("?")[1] : "";
                 const itemView = query.startsWith("view=") ? query.slice(5) : "";
+                const isCompetitorBase = normalizedHref === "/dashboard/competitor" && !itemView;
                 const active = itemView
                   ? path === normalizedHref && currentView === itemView
+                  : isCompetitorBase
+                  ? path === "/dashboard/competitor" && (currentView === "" || currentView === "overview")
                   : normalizedHref === "/dashboard"
                   ? path === "/dashboard"
                   : path.startsWith(normalizedHref);
