@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       ...related.map((r) => r.keyword),
     ].filter(Boolean).slice(0, 50);
 
-    let intentMap: Record<string, string> = {};
+    const intentMap: Record<string, string> = {};
     if (allKeywords.length > 0) {
       const intentData = await getSearchIntent(allKeywords, location, language).catch(() => []);
       for (const item of intentData) {
