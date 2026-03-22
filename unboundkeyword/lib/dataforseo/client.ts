@@ -2152,6 +2152,111 @@ export async function getKeywordIdeasLabs(
   }));
 }
 
+function extractPaaQuestionsFromNode(value: unknown, out: Set<string>) {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized.length >= 5) out.add(normalized);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    for (const child of value) extractPaaQuestionsFromNode(child, out);
+    return;
+  }
+
+  if (!value || typeof value !== "object") return;
+
+  const record = value as Record<string, unknown>;
+  for (const key of ["question", "title", "keyword", "text", "description"]) {
+    extractPaaQuestionsFromNode(record[key], out);
+  }
+
+  for (const key of ["items", "expanded_element", "related_searches", "faq", "answer_box"]) {
+    extractPaaQuestionsFromNode(record[key], out);
+  }
+}
+
+export async function getPeopleAlsoAskQuestions(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+): Promise<RelatedKeywordItem[]> {
+  const data = await dfsPost("/serp/google/organic/live/advanced", [
+    {
+      keyword,
+      location_code: locationCode,
+      language_code: languageCode,
+      device: "desktop",
+      depth: 40,
+      calculate_rectangles: false,
+    },
+  ]);
+
+  const serpItems = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Array<Record<string, unknown>>;
+  const questions = new Set<string>();
+
+  for (const item of serpItems) {
+    if (String(item.type ?? "") !== "people_also_ask") continue;
+    extractPaaQuestionsFromNode(item, questions);
+  }
+
+  const cleanedQuestions = [...questions]
+    .filter((q) => q.length >= 6)
+    .filter((q) => q.includes(" "))
+    .slice(0, Math.max(20, Math.min(limit, 500)));
+
+  if (cleanedQuestions.length === 0) return [];
+
+  try {
+    const volumeData = await getKeywordData(cleanedQuestions.slice(0, 700));
+    const volumeItems =
+      (volumeData as { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> })
+        ?.tasks?.[0]?.result?.[0]?.items ?? [];
+
+    const byKeyword = new Map<string, RelatedKeywordItem>();
+    for (const item of volumeItems) {
+      if (typeof item.keyword !== "string") continue;
+      const normalized = item.keyword.trim().toLowerCase();
+      byKeyword.set(normalized, {
+        keyword: normalized,
+        searchVolume:
+          typeof item.search_volume === "number"
+            ? item.search_volume
+            : typeof item.searchVolume === "number"
+            ? item.searchVolume
+            : 0,
+        cpc:
+          typeof item.cpc === "number"
+            ? item.cpc
+            : typeof item.low_top_of_page_bid === "number"
+            ? item.low_top_of_page_bid
+            : null,
+        competition: null,
+      });
+    }
+
+    return cleanedQuestions.slice(0, limit).map((q) => {
+      const normalized = q.trim().toLowerCase();
+      return (
+        byKeyword.get(normalized) ?? {
+          keyword: normalized,
+          searchVolume: 0,
+          cpc: null,
+          competition: null,
+        }
+      );
+    });
+  } catch {
+    return cleanedQuestions.slice(0, limit).map((q) => ({
+      keyword: q.trim().toLowerCase(),
+      searchVolume: 0,
+      cpc: null,
+      competition: null,
+    }));
+  }
+}
+
 export interface KeywordOverviewItem {
   keyword: string;
   searchVolume: number;

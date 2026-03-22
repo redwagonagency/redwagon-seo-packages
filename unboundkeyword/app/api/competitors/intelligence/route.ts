@@ -2,23 +2,11 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
   getDomainRankOverview,
+  getDomainCompetitors,
   getKeywordGap,
+  getKeywordsForSite,
 } from "@/lib/dataforseo/client";
-
-// TODO: Implement getDomainCompetitors and getKeywordsForSite
-const getDomainCompetitors = async (
-  domain: string,
-  location: number,
-  language: string,
-  limit: number
-): Promise<Array<{ domain: string }>> => [];
-const getKeywordsForSite = async (
-  domain: string,
-  location: number,
-  language: string,
-  limit: number
-): Promise<Array<{ keyword: string; url: string | null; position: number; searchVolume: number; traffic: number }>> =>
-  [];
+import { getSelectedSiteForUser } from "@/lib/site-context";
 
 type RequestBody = {
   domain?: string;
@@ -44,7 +32,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json()) as RequestBody;
-    const domain = normalizeDomain(body.domain);
+    const userId = (session.user as { id: string }).id;
+    const selectedSite = await getSelectedSiteForUser(userId);
+    const domain = normalizeDomain(body.domain || selectedSite?.domain);
     const competitorDomain = normalizeDomain(body.competitorDomain);
     const location = body.location ?? 2840;
     const language = body.language ?? "en";

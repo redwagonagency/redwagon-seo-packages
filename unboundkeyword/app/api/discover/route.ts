@@ -11,16 +11,19 @@ import {
   getKeywordData,
   getSearchIntent,
   getGoogleAutocompleteLiveAdvanced,
+  getPeopleAlsoAskQuestions,
   type KeywordSuggestionItem,
   type RelatedKeywordItem,
 } from "@/lib/dataforseo/client";
 import { prisma } from "@/lib/prisma";
+import { getSelectedSiteIdForUser } from "@/lib/site-context";
 
 type DiscoverySessionCreateResult = { id: string };
 
 type DiscoveryKeywordCreateInput = {
   sessionId: string;
   userId: string;
+  siteId: string | null;
   seedKeyword: string;
   keyword: string;
   groupType: string;
@@ -361,7 +364,20 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "seed keyword required" }, { status: 400 });
   }
 
+  const supportedPlatforms = new Set(["google"]);
+  if (!supportedPlatforms.has(String(platform).toLowerCase())) {
+    return Response.json(
+      {
+        error: `Platform ${platform} is not yet wired to a dedicated platform API. Please use Google for now to avoid mixed-source results.`,
+        code: "UNSUPPORTED_PLATFORM",
+      },
+      { status: 422 }
+    );
+  }
+
   const seedClean = seed.trim().toLowerCase();
+  const userId = (session.user as { id: string }).id;
+  const selectedSiteId = await getSelectedSiteIdForUser(userId);
   const excludedTerms = sanitizeTermsCsv(excludeTerms);
   const extraLocationHints = sanitizeTermsCsv(locationHints);
 
@@ -377,7 +393,7 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, forcedResult] = await Promise.allSettled([
+    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, paaResult, forcedResult] = await Promise.allSettled([
       getKeywordSuggestions(seedClean, location, language, 2000),
       getRelatedKeywords(seedClean, location, language, 2000),
       getKeywordIdeasLabs(seedClean, location, language, 2000),
@@ -386,6 +402,7 @@ export async function POST(req: NextRequest) {
         languageCode: String(language),
         limit: 2000,
       }),
+      getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 300),
       deepMode
         ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
         : Promise.resolve([]),
@@ -402,6 +419,10 @@ export async function POST(req: NextRequest) {
       (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
     );
     const related = relatedRaw.filter(
+      (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
+    );
+    const paaRaw: RelatedKeywordItem[] = paaResult.status === "fulfilled" ? paaResult.value : [];
+    const peopleAlsoAsk = paaRaw.filter(
       (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
     );
     const forcedRaw: RelatedKeywordItem[] = forcedResult.status === "fulfilled" ? forcedResult.value : [];
@@ -429,6 +450,7 @@ export async function POST(req: NextRequest) {
     const allKeywords = [
       ...suggestions.map((s) => s.keyword),
       ...related.map((r) => r.keyword),
+      ...peopleAlsoAsk.map((p) => p.keyword),
       ...ideaFallback.map((i) => i.keyword),
       ...autocompleteFallback.map((i) => i.keyword),
       ...forcedRaw.map((i) => i.keyword),
@@ -442,11 +464,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const relatedPool = uniqueByKeyword([...related, ...ideaFallback, ...autocompleteFallback, ...forcedRaw]);
+    const relatedPool = uniqueByKeyword([
+      ...related,
+      ...peopleAlsoAsk,
+      ...ideaFallback,
+      ...autocompleteFallback,
+      ...forcedRaw,
+    ]);
 
     // 1. Questions (suggestions-first, with related/ideas fallback)
     let questionKeywords = uniqueByKeyword([
       ...suggestions.filter((s) => isQuestionKeyword(s.keyword)).map((s) => toDiscovery(s, intentMap)),
+      ...peopleAlsoAsk.map((p) => relToDiscovery(p, intentMap)),
       ...relatedPool.filter((r) => isQuestionKeyword(r.keyword)).map((r) => relToDiscovery(r, intentMap)),
     ]);
 
@@ -576,7 +605,8 @@ export async function POST(req: NextRequest) {
     if (save) {
       const createdSession = await prismaCompat.discoverySession.create({
         data: {
-          userId: (session.user as { id: string }).id,
+          userId,
+          siteId: selectedSiteId,
           seedKeyword: seedClean,
           location: String(location),
           language,
@@ -610,7 +640,8 @@ export async function POST(req: NextRequest) {
 
           return {
             sessionId: createdSession.id,
-            userId: (session.user as { id: string }).id,
+            userId,
+            siteId: selectedSiteId,
             seedKeyword: seedClean,
             keyword: keyword.keyword,
             groupType: group.type,

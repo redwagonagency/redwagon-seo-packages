@@ -1,181 +1,179 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Suspense } from "react";
+import { getSelectedSiteIdForUser } from "@/lib/site-context";
+import { formatNumber } from "@/lib/utils";
 
-const INTENT_TYPES = [
-  {
-    type: "informational",
+export const metadata = { title: "Keyword Intent - UnBoundKeyword" };
+
+type IntentType = "informational" | "transactional" | "navigational" | "commercial";
+
+type IntentRow = {
+  keyword: string;
+  intent: IntentType;
+  volume: number;
+  difficulty: number | null;
+  cpc: number | null;
+  platform: string;
+  sourceIntent: string | null;
+};
+
+const INTENT_META: Record<IntentType, { label: string; description: string; color: string; border: string }> = {
+  informational: {
     label: "Informational",
-    description: "Users seeking knowledge or answers",
-    icon: "ℹ️",
-    color: "bg-blue-50",
-    accent: "text-blue-700",
+    description: "Learning intent: guides, definitions, and explanations.",
+    color: "bg-blue-50 text-blue-700",
     border: "border-blue-200",
   },
-  {
-    type: "transactional",
+  transactional: {
     label: "Transactional",
-    description: "Users ready to buy or complete an action",
-    icon: "🛒",
-    color: "bg-green-50",
-    accent: "text-green-700",
-    border: "border-green-200",
+    description: "Action intent: ready to buy, sign up, or convert.",
+    color: "bg-emerald-50 text-emerald-700",
+    border: "border-emerald-200",
   },
-  {
-    type: "navigational",
+  navigational: {
     label: "Navigational",
-    description: "Users looking for a specific brand/site",
-    icon: "📍",
-    color: "bg-purple-50",
-    accent: "text-purple-700",
-    border: "border-purple-200",
+    description: "Brand intent: trying to reach a specific site/page.",
+    color: "bg-violet-50 text-violet-700",
+    border: "border-violet-200",
   },
-  {
-    type: "commercial",
+  commercial: {
     label: "Commercial",
-    description: "Users comparing products or researching",
-    icon: "🔍",
-    color: "bg-amber-50",
-    accent: "text-amber-700",
+    description: "Research intent: comparison and evaluation before purchase.",
+    color: "bg-amber-50 text-amber-700",
     border: "border-amber-200",
   },
-];
+};
 
-async function KeywordIntentClient() {
+function inferIntent(keyword: string, sourceIntent: string | null): IntentType {
+  const normalized = keyword.toLowerCase();
+  const source = (sourceIntent || "").toLowerCase();
+
+  if (["informational", "transactional", "navigational", "commercial"].includes(source)) {
+    return source as IntentType;
+  }
+
+  const informationalSignals = ["how", "what", "why", "when", "guide", "examples", "tutorial", "tips"];
+  const transactionalSignals = ["buy", "price", "pricing", "cost", "order", "coupon", "near me", "book", "hire"];
+  const navigationalSignals = ["login", "official", "website", "dashboard", "app", "brand", "company"];
+  const commercialSignals = ["best", "top", "review", "vs", "versus", "comparison", "alternatives", "software"];
+
+  if (transactionalSignals.some((token) => normalized.includes(token))) return "transactional";
+  if (navigationalSignals.some((token) => normalized.includes(token))) return "navigational";
+  if (commercialSignals.some((token) => normalized.includes(token))) return "commercial";
+  if (informationalSignals.some((token) => normalized.includes(token))) return "informational";
+
+  return "informational";
+}
+
+export default async function KeywordIntentPage() {
   const session = await auth();
   const userId = (session?.user as { id?: string })?.id;
+  if (!userId) return null;
 
-  // Fetch all keywords with their intent
-  const keywords = await prisma.discoveryKeyword.findMany({
-    where: { userId: userId! },
+  const siteId = await getSelectedSiteIdForUser(userId);
+
+  const sourceRows = await prisma.discoveryKeyword.findMany({
+    where: {
+      userId,
+      ...(siteId ? { siteId } : { siteId: null }),
+    },
     select: {
       keyword: true,
       intent: true,
       volume: true,
       difficulty: true,
+      cpc: true,
       platform: true,
-      seedKeyword: true,
     },
-    orderBy: [{ intent: "asc" }, { volume: "desc" }],
+    orderBy: [{ volume: "desc" }, { createdAt: "desc" }],
+    take: 600,
   });
 
-  // Group by intent
-  const grouped: Record<string, any[]> = {
-    informational: [],
-    transactional: [],
-    navigational: [],
-    commercial: [],
-    unknown: [],
-  };
+  const rows: IntentRow[] = sourceRows.map((row) => ({
+    keyword: row.keyword,
+    sourceIntent: row.intent,
+    intent: inferIntent(row.keyword, row.intent),
+    volume: row.volume ?? 0,
+    difficulty: row.difficulty,
+    cpc: row.cpc,
+    platform: row.platform,
+  }));
 
-  keywords.forEach((kw) => {
-    const intentKey = kw.intent?.toLowerCase() || "unknown";
-    if (intentKey in grouped) {
-      grouped[intentKey].push(kw);
-    } else {
-      grouped.unknown.push(kw);
-    }
-  });
+  const grouped = rows.reduce<Record<IntentType, IntentRow[]>>(
+    (acc, row) => {
+      acc[row.intent].push(row);
+      return acc;
+    },
+    { informational: [], transactional: [], navigational: [], commercial: [] }
+  );
+
+  const totalKeywords = rows.length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Keyword Intent Analysis</h1>
-        <p className="text-slate-600 mt-2">
-          Understand the true intent behind keywords to optimize your content strategy
-        </p>
+    <div className="p-8 max-w-7xl">
+      <div className="mb-6">
+        <h1 className="text-3xl font-black text-slate-900">Keyword Intent</h1>
+        <p className="text-sm text-slate-500 mt-1">Full intent classification across informational, transactional, navigational, and commercial terms.</p>
       </div>
 
-      {/* Intent Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {INTENT_TYPES.map((intentInfo) => {
-          const keywords_in_intent = grouped[intentInfo.type] || [];
-          const totalVolume = keywords_in_intent.reduce((sum, k) => sum + (k.volume || 0), 0);
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 mb-7">
+        {(["informational", "transactional", "navigational", "commercial"] as IntentType[]).map((intent) => {
+          const intentRows = grouped[intent];
+          const volumeSum = intentRows.reduce((sum, row) => sum + row.volume, 0);
+          const pct = totalKeywords ? Math.round((intentRows.length / totalKeywords) * 100) : 0;
+          const meta = INTENT_META[intent];
 
           return (
-            <div
-              key={intentInfo.type}
-              className={`rounded-lg border-2 ${intentInfo.border} ${intentInfo.color} p-6`}
-            >
-              {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl">{intentInfo.icon}</span>
-                <div>
-                  <h3 className={`text-lg font-bold ${intentInfo.accent}`}>{intentInfo.label}</h3>
-                  <p className="text-xs text-slate-600">{intentInfo.description}</p>
-                </div>
-              </div>
-
-              {/* Stats */}
-              <div className="flex gap-3 mb-4 pb-4 border-b border-slate-200">
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{keywords_in_intent.length}</p>
-                  <p className="text-xs text-slate-600">Keywords</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{totalVolume.toLocaleString()}</p>
-                  <p className="text-xs text-slate-600">Total Volume</p>
-                </div>
-              </div>
-
-              {/* Keywords List */}
-              {keywords_in_intent.length > 0 ? (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {keywords_in_intent.slice(0, 10).map((kw, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 rounded hover:bg-white/50 transition">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{kw.keyword}</p>
-                        <div className="flex gap-2 text-xs text-slate-500 mt-0.5">
-                          <span>📊 {kw.volume?.toLocaleString() || "N/A"}</span>
-                          {kw.difficulty && <span>KD {kw.difficulty}</span>}
-                          <span className="text-[#f15b27]">{kw.platform}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  {keywords_in_intent.length > 10 && (
-                    <p className="text-xs text-slate-500 py-2 text-center">
-                      +{keywords_in_intent.length - 10} more keywords
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500 py-4">No keywords with this intent yet</p>
-              )}
+            <div key={intent} className={`rounded-xl border ${meta.border} bg-white p-5`}>
+              <div className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${meta.color}`}>{meta.label}</div>
+              <div className="mt-3 text-4xl font-black text-slate-900">{intentRows.length}</div>
+              <div className="text-xs text-slate-400 mt-1">{pct}% of all tracked terms</div>
+              <div className="mt-3 text-sm text-slate-600">{formatNumber(volumeSum)} total monthly volume</div>
+              <p className="mt-2 text-xs text-slate-500">{meta.description}</p>
             </div>
           );
         })}
       </div>
 
-      {/* Summary Stats */}
-      <div className="bg-white rounded-lg border border-slate-100 p-6 mt-8">
-        <h2 className="text-lg font-bold text-slate-900 mb-4">Overall Intent Distribution</h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {["informational", "transactional", "navigational", "commercial", "unknown"].map((intent) => {
-            const count = grouped[intent]?.length || 0;
-            const total = Object.values(grouped).flat().length;
-            const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-
-            return (
-              <div key={intent} className="bg-slate-50 rounded p-4 text-center">
-                <p className="text-2xl font-bold text-slate-900">{percentage}%</p>
-                <p className="text-xs text-slate-600 mt-1 capitalize">{intent}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{count} keywords</p>
-              </div>
-            );
-          })}
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-lg font-black text-slate-900">Intent Breakdown Table</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] text-sm">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
+                <th className="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Intent</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">KD</th>
+                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Platform</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">No keywords found for this project yet.</td>
+                </tr>
+              ) : rows.slice(0, 200).map((row) => (
+                <tr key={`${row.keyword}-${row.platform}`} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-6 py-3 font-medium text-slate-800">{row.keyword}</td>
+                  <td className="px-6 py-3 text-center">
+                    <span className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${INTENT_META[row.intent].color}`}>
+                      {INTENT_META[row.intent].label}
+                    </span>
+                  </td>
+                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
+                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>
+                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.difficulty ?? "-"}</td>
+                  <td className="px-6 py-3 text-right text-slate-500">{row.platform}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
-  );
-}
-
-export default function KeywordIntentPage() {
-  return (
-    <div className="p-8">
-      <Suspense fallback={<div className="text-center py-12">Loading keyword intents...</div>}>
-        <KeywordIntentClient />
-      </Suspense>
     </div>
   );
 }

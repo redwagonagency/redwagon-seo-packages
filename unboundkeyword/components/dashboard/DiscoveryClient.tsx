@@ -106,12 +106,13 @@ const LANGUAGE_OPTIONS = [
 
 const PLATFORM_OPTIONS = [
   { value: "google", label: "Google" },
-  { value: "youtube", label: "YouTube" },
-  { value: "amazon", label: "Amazon" },
-  { value: "bing", label: "Bing" },
-  { value: "instagram", label: "Instagram" },
-  { value: "tiktok", label: "TikTok" },
-  { value: "chatgpt", label: "ChatGPT" },
+  { value: "youtube", label: "YouTube (soon)" },
+  { value: "amazon", label: "Amazon (soon)" },
+  { value: "bing", label: "Bing (soon)" },
+  { value: "instagram", label: "Instagram (soon)" },
+  { value: "tiktok", label: "TikTok (soon)" },
+  { value: "pinterest", label: "Pinterest (soon)" },
+  { value: "chatgpt", label: "ChatGPT (soon)" },
 ];
 
 const STATE_OPTIONS = [
@@ -445,6 +446,49 @@ function KeywordWheel({
           <text x={centerX} y={centerY + 16} textAnchor="middle" className="fill-slate-300 text-[10px] tracking-[0.25em] uppercase">
             Explore
           </text>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function QuestionIntentMap({
+  root,
+  keywords,
+}: {
+  root: string;
+  keywords: DiscoveryKeyword[];
+}) {
+  const items = keywords.slice(0, 8);
+
+  return (
+    <div className="rounded-[2rem] border border-slate-200 bg-white shadow-sm p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-900">Question-to-Keyword Intelligence</h3>
+          <p className="text-sm text-slate-500">Connected question clusters to help you map intent branches from one seed.</p>
+        </div>
+        <Badge variant="orange">{items.length} branches</Badge>
+      </div>
+
+      <div className="overflow-x-auto">
+        <svg viewBox="0 0 900 360" className="w-full min-w-[820px]">
+          <text x="120" y="186" textAnchor="middle" className="fill-slate-900 text-[34px] font-black">{root}</text>
+          <circle cx="190" cy="180" r="12" fill="#fff" stroke="#f15b27" strokeWidth="3" />
+
+          {items.map((item, idx) => {
+            const y = 52 + idx * 36;
+            return (
+              <g key={`${item.keyword}-${idx}`}>
+                <path d={`M 202 180 C 290 ${180 - ((180 - y) * 0.6)} 320 ${y + 2} 345 ${y + 2}`} fill="none" stroke="#cbd5e1" strokeWidth="2" />
+                <circle cx="360" cy={y} r="12" fill="#fff" stroke="#f15b27" strokeWidth="3" />
+                <text x="388" y={y + 4} className="fill-slate-900 text-[15px] font-semibold">{item.keyword}</text>
+                <text x="388" y={y + 24} className="fill-slate-500 text-[12px]">
+                  Volume: {item.volume ?? 0} | CPC: {item.cpc != null ? `$${item.cpc.toFixed(2)}` : "-"} | SEO Difficulty: {item.difficulty ?? "-"}
+                </text>
+              </g>
+            );
+          })}
         </svg>
       </div>
     </div>
@@ -950,6 +994,7 @@ export default function DiscoveryClient() {
   const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
   const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
   const isSocialPlatform = platform === "instagram" || platform === "tiktok";
+  const unsupportedPlatform = platform !== "google";
   const socialSeedRows = buildSocialHashtagRows(filteredMasterRows).slice(0, 366);
   const socialRowsWithTab = socialModeTab === "hashtags"
     ? socialSeedRows
@@ -1063,6 +1108,11 @@ export default function DiscoveryClient() {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
+                {unsupportedPlatform ? (
+                  <p className="text-[11px] text-amber-600 mt-1">
+                    Platform-specific discovery APIs are not enabled yet for this platform. Use Google for production results.
+                  </p>
+                ) : null}
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1">Market</label>
@@ -1358,6 +1408,16 @@ export default function DiscoveryClient() {
             }
             return null;
           })()}
+
+            {(() => {
+              const questionGroup = allGroups.find((group) => group.type === "questions");
+              if (!questionGroup || questionGroup.keywords.length === 0) return null;
+              return (
+                <div className="mb-8">
+                  <QuestionIntentMap root={result.seed} keywords={questionGroup.keywords} />
+                </div>
+              );
+            })()}
 
           {(() => {
             const wheelGroups = WHEEL_GROUPS
