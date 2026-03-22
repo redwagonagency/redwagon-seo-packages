@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -265,7 +265,7 @@ export default function DiscoveryClient() {
     setError("");
     setResult(null);
     setSelected(new Set());
-    setActiveGroup("questions");
+    setActiveGroup(null);
     setTableQuery("");
     try {
       const res = await fetch("/api/discover", {
@@ -325,6 +325,16 @@ export default function DiscoveryClient() {
   }
 
   const allGroups = result?.groups ?? [];
+
+  useEffect(() => {
+    if (!result || !activeGroup) return;
+
+    const hasActiveGroup = (result.groups ?? []).some((group) => group.type === activeGroup);
+    if (!hasActiveGroup) {
+      setActiveGroup(null);
+    }
+  }, [result, activeGroup]);
+
   const masterRows = buildMasterKeywordRows(allGroups);
   const groupTotals = Object.fromEntries(
     ["questions", "prepositions", "comparisons", "alphabetical", "related"].map((type) => [
