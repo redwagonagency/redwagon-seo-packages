@@ -15,10 +15,53 @@ import {
 import { prisma } from "@/lib/prisma";
 
 const QUESTION_PREFIXES = [
-  "how", "what", "why", "where", "when", "which", "who", "can", "is", "are",
-  "will", "would", "should", "does", "do", "was", "were",
+  // Core question words
+  "how", "what", "why", "where", "when", "which", "who",
+  // Auxiliary / modal
+  "can", "could", "will", "would", "should", "shall", "may", "might",
+  "is", "are", "was", "were", "has", "have", "had", "does", "do", "did",
+  "need", "dare", "used",
+  // Negations
+  "isn't", "aren't", "wasn't", "weren't", "can't", "cannot", "won't",
+  "wouldn't", "shouldn't", "doesn't", "don't", "didn't", "hasn't", "haven't",
+  // Two-word openings (common ATP-style question phrases)
+  "how do", "how to", "how can", "how much", "how many", "how long",
+  "how often", "how far", "how fast", "how big", "how old", "how else",
+  "what is", "what are", "what does", "what can", "what if", "what happens",
+  "what makes", "what causes", "what should", "what will", "what was",
+  "why is", "why are", "why does", "why do", "why would", "why should",
+  "when is", "when are", "when does", "when do", "when to", "when will",
+  "where is", "where are", "where can", "where to", "where do", "where does",
+  "which is", "which are", "which one", "which way",
+  "who is", "who are", "who can", "who does", "who makes", "who uses",
 ];
-const PREPOSITIONS = ["for", "with", "without", "near", "to", "vs", "like", "and", "or"];
+
+const PREPOSITIONS = [
+  // Core prepositions
+  "for", "with", "without", "near", "to", "into", "onto", "from",
+  "in", "on", "at", "by", "of", "off", "up", "down", "out",
+  // Relational
+  "about", "across", "after", "against", "along", "among", "around",
+  "before", "behind", "below", "beneath", "beside", "between", "beyond",
+  "despite", "during", "except", "inside", "like", "outside", "over",
+  "past", "since", "through", "throughout", "under", "underneath", "until",
+  "upon", "via", "within", "worth",
+  // Compound / comparative
+  "vs", "or", "and", "plus", "not",
+  "than", "per", "as",
+  // Action phrases used in keyword modifiers
+  "using", "using a", "with a", "without a", "instead of", "rather than",
+  "compared to", "next to", "due to", "according to",
+];
+
+const COMPARISON_TERMS = [
+  "vs", "versus", "or", "alternative", "alternatives", "alternative to",
+  "compared to", "compared with", "better than", "worse than", "instead of",
+  "similar to", "like", "review", "reviews", "difference between", "pros and cons",
+  "pros cons", "worth it", "is it worth", "pricing", "price", "cost", "cheap",
+  "affordable", "free", "best", "top", "best alternative",
+];
+
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
 export interface DiscoveryKeyword {
@@ -114,14 +157,14 @@ export async function POST(req: NextRequest) {
       .map((s) => toDiscovery(s, intentMap))
       .slice(0, 40);
 
-    // 3. Comparisons
+    // 3. Comparisons — use the expanded COMPARISON_TERMS list
     const compKeywords = suggestions
       .filter((s) => {
         const kw = s.keyword.toLowerCase();
-        return kw.includes(" vs ") || kw.includes(" versus ") || kw.includes("alternative") || kw.includes("compared");
+        return COMPARISON_TERMS.some((t) => kw.includes(t));
       })
       .map((s) => toDiscovery(s, intentMap))
-      .slice(0, 20);
+      .slice(0, 30);
 
     const alphaGroups: DiscoveryGroup[] = [];
     for (const letter of ALPHABET) {

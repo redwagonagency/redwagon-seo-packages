@@ -2518,3 +2518,103 @@ export async function getPerplexityLlmResponsesLive(
   });
 }
 
+// ─── NEW: Keyword Research extras ────────────────────────────────────────────
+
+/**
+ * Get top organic competitor domains for a given domain.
+ */
+export async function getDomainCompetitors(
+  domain: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 20
+) {
+  const data = await dfsPost("/dataforseo_labs/google/competitors_domain/live", [
+    {
+      target: domain.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      location_code: locationCode,
+      language_code: languageCode,
+      limit,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    domain: String(i.domain ?? ""),
+    intersections: typeof i.intersections === "number" ? i.intersections : 0,
+    avgPosition: typeof i.avg_position === "number" ? i.avg_position : null,
+    etv: typeof i.etv === "number" ? i.etv : null,
+  }));
+}
+
+/**
+ * Bulk keyword difficulty (convenience alias using the /keyword_difficulty endpoint).
+ */
+export async function getKeywordDifficulty(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/dataforseo_labs/google/keyword_difficulty/live", [
+    {
+      keywords: keywords.slice(0, 1000),
+      location_code: locationCode,
+      language_code: languageCode,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    difficulty: typeof i.keyword_difficulty === "number" ? i.keyword_difficulty : null,
+  }));
+}
+
+/**
+ * Google Ads: keywords for a seed domain (keyword planner data).
+ */
+export async function getKeywordsForSiteGoogleAds(
+  domain: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+) {
+  const data = await dfsPost("/keywords_data/google_ads/keywords_for_site/live", [
+    {
+      target: domain.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+      location_code: locationCode,
+      language_code: languageCode,
+      limit,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    volume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    competition: String(i.competition ?? ""),
+    cpc: typeof i.cpc === "number" ? i.cpc : null,
+  }));
+}
+
+/**
+ * Google Ads: related keywords for seed keywords (keyword planner).
+ */
+export async function getKeywordsForKeywords(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/keywords_data/google_ads/keywords_for_keywords/live", [
+    {
+      keywords: keywords.slice(0, 20),
+      location_code: locationCode,
+      language_code: languageCode,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    volume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    competition: String(i.competition ?? ""),
+    cpc: typeof i.cpc === "number" ? i.cpc : null,
+  }));
+}
+
