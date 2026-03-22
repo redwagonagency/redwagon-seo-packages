@@ -30,21 +30,7 @@ export default async function SiteAuditPage() {
   const pageLimits: Record<string, number> = {
     STARTER: 10, PRO: 50, ENTERPRISE: 100, AGENCY: 500, ADMIN: 9999,
   };
-  const parsePositiveInt = (value: string | undefined, fallback: number) => {
-    if (!value) return fallback;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-  };
-  const globalMaxPages = parsePositiveInt(process.env.REPORT_GLOBAL_MAX_PAGES, 500);
-  const coreAuditLimit = parsePositiveInt(process.env.REPORT_CORE_AUDIT_MAX_PAGES, 500);
-  const projectDomain = (member?.tenant?.projects?.[0]?.domain ?? "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .toLowerCase();
-  const planLimit = pageLimits[plan] ?? 10;
-  const requestedPages = projectDomain === "redwagon.agency" ? Math.max(planLimit, coreAuditLimit) : planLimit;
-  const pageLimit = Math.min(requestedPages, globalMaxPages);
+  const pageLimit = pageLimits[plan] ?? 10;
 
   const projects = member?.tenant?.projects ?? [];
   const project = projects[0] ?? null;

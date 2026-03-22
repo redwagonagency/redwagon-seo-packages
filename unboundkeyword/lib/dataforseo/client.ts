@@ -1754,6 +1754,76 @@ export async function getGoogleShoppingRankings(
   return { items: parsed.slice(0, 20), yourItems };
 }
 
+export interface ProductKeywordResult {
+  keyword: string;
+  productCount: number;
+  avgPrice: string | null;
+  products: MerchantResult[];
+}
+
+export async function getProductKeywords(
+  seed: string,
+  locationCode = 2840
+): Promise<ProductKeywordResult[]> {
+  const variants = [
+    `${seed}`,
+    `${seed} price`,
+    `${seed} review`,
+    `best ${seed}`,
+    `${seed} near me`,
+    `${seed} online`,
+  ];
+
+  const results: ProductKeywordResult[] = [];
+  const deduped = new Set<string>();
+
+  for (const variant of variants) {
+    try {
+      const data = await dfsPost("/serp/google/shopping/live/advanced", [
+        { keyword: variant, location_code: locationCode, language_code: "en" },
+      ]);
+      const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+      const products = items
+        .filter((i) => i.type === "shopping" || i.type === "paid")
+        .map((i) => ({
+          position: typeof i.rank_absolute === "number" ? i.rank_absolute : null,
+          title: typeof i.title === "string" ? i.title : null,
+          price: typeof i.price === "string" ? i.price : typeof i.price === "number" ? String(i.price) : null,
+          seller: typeof i.seller === "string" ? i.seller : null,
+          rating: typeof i.rating === "number" ? i.rating : null,
+          reviews: typeof i.review_count === "number" ? i.review_count : null,
+          url: typeof i.url === "string" ? i.url : null,
+          imageUrl: typeof i.image_url === "string" ? i.image_url : null,
+        }))
+        .slice(0, 15);
+
+      if (products.length > 0) {
+        const keyStr = variant.toLowerCase();
+        if (!deduped.has(keyStr)) {
+          deduped.add(keyStr);
+          const prices = products
+            .map((p) => (p.price ? parseFloat(p.price.replace(/[^0-9.]/g, "")) : null))
+            .filter((p): p is number => p !== null);
+          const avgPrice = prices.length > 0
+            ? `$${(prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2)}`
+            : null;
+
+          results.push({
+            keyword: variant,
+            productCount: products.length,
+            avgPrice,
+            products,
+          });
+        }
+      }
+    } catch {
+      // Continue to next variant if one fails
+    }
+  }
+
+  return results;
+}
+
 // ─── Business Data / GMB / Reviews ───────────────────────────────────────────
 
 export interface BusinessReview {

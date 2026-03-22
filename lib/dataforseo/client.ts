@@ -15,7 +15,6 @@ async function dfsPost(endpoint: string, body: unknown) {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(45000),
   });
   if (!res.ok) {
     throw new Error(`DataForSEO ${endpoint} failed: ${res.status}`);
@@ -29,9 +28,9 @@ export async function createSiteAuditTask(domain: string) {
   return dfsPost("/on_page/task_post", [
     {
       target: domain,
-      max_crawl_pages: 5000,
+      max_crawl_pages: 100,
       load_resources: true,
-      enable_javascript: true,
+      enable_javascript: false,
       store_raw_html: false,
     },
   ]);
@@ -203,302 +202,17 @@ export interface PageAuditResult {
   hasSchema: boolean;
   loadTimeMs: number;
   responseCode: number;
-  lighthousePerformance?: number | null;
-  lighthouseAccessibility?: number | null;
-  lighthouseBestPractices?: number | null;
-  lighthouseSeo?: number | null;
   issues: SiteAuditIssue[];
 }
 
-export interface CrawlProgressUpdate {
-  phase: "task" | "fallback";
-  crawledPages: number;
-  targetPages: number;
-  pages: PageAuditResult[];
-}
-
-// ─── On-Page Audit Extras (errors, duplicate tags, broken links) ──────────────
-
-export interface OnPageErrorItem {
-  errorType: string;
-  count: number;
-  description: string;
-  severity: "critical" | "warning" | "info";
-}
-
-export interface DuplicateTagItem {
-  tagType: "title" | "description";
-  value: string;
-  pages: string[];
-  count: number;
-}
-
-export interface OnPageLinkItem {
-  urlFrom: string;
-  urlTo: string;
-  anchor: string | null;
-  statusCode: number | null;
-  linkType: "internal" | "external";
-  doFollow: boolean;
-}
-
-export interface OnPageCrawlResult {
-  pages: PageAuditResult[];
-  taskId: string | null;
-  errors: OnPageErrorItem[];
-  duplicateTags: DuplicateTagItem[];
-  brokenLinks: OnPageLinkItem[];
-}
-
-// Severity map for known DataForSEO error_type values
-const ERROR_SEVERITY_MAP: Record<string, "critical" | "warning" | "info"> = {
-  "4xx_page": "critical",
-  "5xx_page": "critical",
-  "broken_link": "critical",
-  "redirect_loop": "critical",
-  "http_page": "critical",
-  "missing_title": "critical",
-  "no_content_encoding": "critical",
-  "duplicate_title_tag": "warning",
-  "duplicate_description_tag": "warning",
-  "missing_description": "warning",
-  "missing_h1_tag": "warning",
-  "missing_canonical": "warning",
-  "broken_resources": "warning",
-  "high_loading_time": "warning",
-  "large_page_size": "warning",
-  "redirect_chain": "warning",
-  "no_image_alt": "info",
-  "orphan_page": "info",
-  "small_page_size": "info",
-  "no_structured_data": "info",
-};
-
-function mapErrorSeverity(errType: string): "critical" | "warning" | "info" {
-  return ERROR_SEVERITY_MAP[errType] ?? "info";
-}
-
-export async function getOnPageErrors(taskId: string, limit = 200): Promise<OnPageErrorItem[]> {
-  const data = await dfsPost("/on_page/errors", [{ id: taskId, limit }]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items
-    .map((item) => ({
-      errorType: String(item.error_type ?? ""),
-      count: typeof item.total_count === "number" ? item.total_count
-           : typeof item.pages_count === "number" ? item.pages_count : 0,
-      description: String(item.description ?? item.error_type ?? ""),
-      severity: mapErrorSeverity(String(item.error_type ?? "")),
-    }))
-    .filter((e) => e.errorType && e.count > 0)
-    .sort((a, b) => {
-      const order = { critical: 0, warning: 1, info: 2 };
-      return order[a.severity] - order[b.severity] || b.count - a.count;
-    });
-}
-
-export async function getOnPageDuplicateTags(taskId: string, limit = 200): Promise<DuplicateTagItem[]> {
-  const data = await dfsPost("/on_page/duplicate_tags", [{ id: taskId, limit }]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items
-    .map((item) => ({
-      tagType: (item.tag_type === "meta_description" ? "description" : "title") as "title" | "description",
-      value: String(item.tag ?? item.value ?? ""),
-      pages: Array.isArray(item.urls) ? (item.urls as string[])
-           : Array.isArray(item.pages) ? (item.pages as string[]) : [],
-      count: typeof item.total_count === "number" ? item.total_count : 0,
-    }))
-    .filter((d) => d.count > 1);
-}
-
-export async function getOnPageBrokenLinks(taskId: string, limit = 200): Promise<OnPageLinkItem[]> {
-  const data = await dfsPost("/on_page/links", [
-    { id: taskId, limit, filters: [["url_to_http_code", ">", 399]] },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items
-    .map((item) => ({
-      urlFrom: String(item.link_from ?? item.url_from ?? ""),
-      urlTo: String(item.link_to ?? item.url_to ?? ""),
-      anchor: typeof item.anchor === "string" ? item.anchor : null,
-      statusCode: typeof item.url_to_http_code === "number" ? item.url_to_http_code
-                : typeof item.status_code === "number" ? item.status_code : null,
-      linkType: (item.type === "external" ? "external" : "internal") as "internal" | "external",
-      doFollow: item.dofollow !== false,
-    }))
-    .filter((l) => l.urlTo && (!l.statusCode || l.statusCode >= 400));
-}
-
-export async function crawlSitePages(
-  domain: string,
-  maxPages: number,
-  onProgress?: (update: CrawlProgressUpdate) => Promise<void> | void
-): Promise<OnPageCrawlResult> {
-  try {
-    const taskResult = await crawlSitePagesWithOnPageTask(domain, maxPages, onProgress);
-    if (taskResult.pages.length > 0) return taskResult;
-  } catch {
-    // Fall back to instant analysis crawl if async on-page task path fails.
-  }
-
-  return crawlSitePagesFallback(domain, maxPages, onProgress);
-}
-
-async function crawlSitePagesWithOnPageTask(
-  domain: string,
-  maxPages: number,
-  onProgress?: (update: CrawlProgressUpdate) => Promise<void> | void
-): Promise<OnPageCrawlResult> {
-  const normalizedDomain = normalizeDomainHost(domain);
-  const taskData = await dfsPost("/on_page/task_post", [
-    {
-      target: normalizedDomain,
-      max_crawl_pages: maxPages,
-      load_resources: true,
-      enable_javascript: true,
-      custom_js: null,
-      browser_preset: null,
-    },
-  ]);
-
-  const task = (taskData?.tasks?.[0] ?? {}) as Record<string, unknown>;
-  const taskId = typeof task.id === "string" ? task.id : null;
-  if (!taskId) throw new Error("On-page task ID missing");
-
-  const started = Date.now();
-  const maxWaitMs = 12 * 60 * 1000;
-
-  while (Date.now() - started < maxWaitMs) {
-    const summaryData = await dfsPost("/on_page/summary", [{ id: taskId }]);
-    const summaryTask = (summaryData?.tasks?.[0] ?? {}) as Record<string, unknown>;
-    const summaryResults = Array.isArray(summaryTask.result)
-      ? (summaryTask.result as Record<string, unknown>[])
-      : [];
-    const result = (summaryResults[0] ?? {}) as Record<string, unknown>;
-
-    const crawlStatus = String(result.crawl_status ?? result.status ?? "").toLowerCase();
-    const progress = typeof result.crawl_progress === "number"
-      ? result.crawl_progress
-      : typeof result.progress === "number"
-      ? result.progress
-      : null;
-
-    const completeByStatus = crawlStatus.includes("finished") || crawlStatus.includes("completed");
-    const completeByProgress = progress !== null && progress >= 100;
-
-    if (completeByStatus || completeByProgress) break;
-
-    await new Promise((resolve) => setTimeout(resolve, 8000));
-  }
-
-  const pages: PageAuditResult[] = [];
-  const pageSize = 100;
-  for (let offset = 0; offset < maxPages; offset += pageSize) {
-    const pageData = await dfsPost("/on_page/pages", [{ id: taskId, limit: Math.min(pageSize, maxPages - offset), offset }]);
-    const items = (pageData?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-    if (items.length === 0) break;
-
-    for (const item of items) {
-      const parsed = mapOnPagePageItem(item);
-      if (parsed) pages.push(parsed);
-      if (pages.length >= maxPages) break;
-    }
-
-    if (onProgress) {
-      await onProgress({
-        phase: "task",
-        crawledPages: pages.length,
-        targetPages: maxPages,
-        pages: [...pages],
-      });
-    }
-
-    if (items.length < pageSize || pages.length >= maxPages) break;
-  }
-
-  await enrichPagesWithLighthouse(pages, Math.min(maxPages, 120));
-  if (onProgress) {
-    await onProgress({
-      phase: "task",
-      crawledPages: pages.length,
-      targetPages: maxPages,
-      pages: [...pages],
-    });
-  }
-
-  // Fetch site-wide error summary, duplicate tags, and broken links now that crawl is complete.
-  const [errorsResult, dupTagsResult, brokenLinksResult] = await Promise.allSettled([
-    getOnPageErrors(taskId),
-    getOnPageDuplicateTags(taskId),
-    getOnPageBrokenLinks(taskId),
-  ]);
-
-  return {
-    pages,
-    taskId,
-    errors: errorsResult.status === "fulfilled" ? errorsResult.value : [],
-    duplicateTags: dupTagsResult.status === "fulfilled" ? dupTagsResult.value : [],
-    brokenLinks: brokenLinksResult.status === "fulfilled" ? brokenLinksResult.value : [],
-  };
-}
-
-function mapOnPagePageItem(item: Record<string, unknown>): PageAuditResult | null {
-  const url = typeof item.url === "string"
-    ? item.url
-    : typeof item.page_url === "string"
-    ? item.page_url
-    : null;
-  if (!url) return null;
-
-  const meta = (item.meta ?? {}) as Record<string, unknown>;
-  const checks = (item.checks ?? {}) as Record<string, unknown>;
-  const loadTime = typeof item.page_timing === "object" && item.page_timing
-    ? (((item.page_timing as Record<string, unknown>).time_to_interactive as number) ?? 0)
-    : 0;
-  const score = typeof item.onpage_score === "number" ? Math.round(item.onpage_score) : 0;
-  const lighthouse = (item.lighthouse as Record<string, unknown> | undefined) ?? undefined;
-
-  const issues: SiteAuditIssue[] = [];
-  if (!meta.title) issues.push({ type: "missing_title", severity: "critical", description: "Missing <title> tag", count: 1 });
-  if (!meta.description) issues.push({ type: "missing_description", severity: "warning", description: "Missing meta description", count: 1 });
-  if (checks.is_4xx_code) issues.push({ type: "4xx_error", severity: "critical", description: "Page returns 4xx error code", count: 1 });
-  if (checks.is_5xx_code) issues.push({ type: "5xx_error", severity: "critical", description: "Page returns 5xx server error", count: 1 });
-  if (!checks.has_h1_tag) issues.push({ type: "missing_h1", severity: "warning", description: "Missing H1 heading tag", count: 1 });
-  if (!meta.canonical) issues.push({ type: "missing_canonical", severity: "warning", description: "Missing canonical URL tag", count: 1 });
-  if (!checks.has_structured_data) issues.push({ type: "missing_schema", severity: "info", description: "No structured data/schema detected", count: 1 });
-  if (loadTime > 4000) issues.push({ type: "slow_load", severity: "warning", description: `Slow page load: ${(loadTime / 1000).toFixed(1)}s (>4s)`, count: 1 });
-
-  return {
-    url,
-    score,
-    title: typeof meta.title === "string" ? meta.title : null,
-    description: typeof meta.description === "string" ? meta.description : null,
-    hasCanonical: !!meta.canonical,
-    hasSchema: !!checks.has_structured_data,
-    loadTimeMs: loadTime,
-    responseCode: typeof item.status_code === "number" ? item.status_code : 200,
-    lighthousePerformance: normalizeLighthouseScore(lighthouse?.performance),
-    lighthouseAccessibility: normalizeLighthouseScore(lighthouse?.accessibility),
-    lighthouseBestPractices: normalizeLighthouseScore(lighthouse?.best_practices),
-    lighthouseSeo: normalizeLighthouseScore(lighthouse?.seo),
-    issues,
-  };
-}
-
-async function crawlSitePagesFallback(
-  domain: string,
-  maxPages: number,
-  onProgress?: (update: CrawlProgressUpdate) => Promise<void> | void
-): Promise<OnPageCrawlResult> {
-  const normalizedDomain = normalizeDomainHost(domain);
-
-  // Seed from sitemap, then expand via internal link discovery to improve coverage.
-  const sitemapUrls = await extractSitemapUrls(normalizedDomain, maxPages);
-  const urls = await discoverInternalUrls(normalizedDomain, sitemapUrls, maxPages);
+export async function crawlSitePages(domain: string, maxPages: number): Promise<PageAuditResult[]> {
+  // Fetch sitemap and extract URLs
+  const urls = await extractSitemapUrls(domain, maxPages);
 
   if (urls.length === 0) {
     // Fallback: just analyse homepage
     const result = await analyzePageInstant(`https://${domain}`);
-    const singlePage = [{
+    return [{
       url: `https://${domain}`,
       score: result.score,
       title: result.title,
@@ -509,22 +223,12 @@ async function crawlSitePagesFallback(
       responseCode: result.responseCode,
       issues: result.issues,
     }];
-    if (onProgress) {
-      await onProgress({
-        phase: "fallback",
-        crawledPages: singlePage.length,
-        targetPages: maxPages,
-        pages: [...singlePage],
-      });
-    }
-    return { pages: singlePage, taskId: null, errors: [], duplicateTags: [], brokenLinks: [] };
   }
 
-  // Run in small batches to balance throughput and API rate limits.
+  // Run in batches of 5 to avoid rate limits
   const results: PageAuditResult[] = [];
-  const batchSize = maxPages >= 200 ? 10 : 5;
-  for (let i = 0; i < urls.length; i += batchSize) {
-    const batch = urls.slice(i, i + batchSize);
+  for (let i = 0; i < urls.length; i += 5) {
+    const batch = urls.slice(i, i + 5);
     const settled = await Promise.allSettled(
       batch.map(async (url) => {
         const r = await analyzePageInstant(url);
@@ -534,366 +238,47 @@ async function crawlSitePagesFallback(
     for (const r of settled) {
       if (r.status === "fulfilled") results.push(r.value);
     }
-    if (onProgress) {
-      await onProgress({
-        phase: "fallback",
-        crawledPages: results.length,
-        targetPages: maxPages,
-        pages: [...results],
-      });
-    }
   }
-  await enrichPagesWithLighthouse(results, Math.min(maxPages, 120));
-  if (onProgress) {
-    await onProgress({
-      phase: "fallback",
-      crawledPages: results.length,
-      targetPages: maxPages,
-      pages: [...results],
-    });
-  }
-  return { pages: results, taskId: null, errors: [], duplicateTags: [], brokenLinks: [] };
-}
-
-function normalizeLighthouseScore(value: unknown): number | null {
-  if (typeof value !== "number" || Number.isNaN(value)) return null;
-  if (value <= 1) return Math.round(value * 100);
-  if (value <= 100) return Math.round(value);
-  return null;
-}
-
-async function getLighthouseAuditScores(url: string): Promise<{
-  performance: number | null;
-  accessibility: number | null;
-  bestPractices: number | null;
-  seo: number | null;
-} | null> {
-  const data = await dfsPost("/on_page/lighthouse/audits", [
-    {
-      url,
-      enable_javascript: true,
-      load_resources: true,
-    },
-  ]);
-
-  const item = (data?.tasks?.[0]?.result?.[0]?.items?.[0] ?? data?.tasks?.[0]?.result?.[0] ?? null) as Record<string, unknown> | null;
-  if (!item) return null;
-
-  const lighthouse = (item.lighthouse as Record<string, unknown> | undefined) ?? item;
-  return {
-    performance: normalizeLighthouseScore(lighthouse.performance),
-    accessibility: normalizeLighthouseScore(lighthouse.accessibility),
-    bestPractices: normalizeLighthouseScore(lighthouse.best_practices),
-    seo: normalizeLighthouseScore(lighthouse.seo),
-  };
-}
-
-async function enrichPagesWithLighthouse(pages: PageAuditResult[], maxToAudit: number): Promise<void> {
-  if (pages.length === 0 || maxToAudit <= 0) return;
-
-  const targets = pages.filter((p) =>
-    p.lighthousePerformance == null ||
-    p.lighthouseAccessibility == null ||
-    p.lighthouseBestPractices == null ||
-    p.lighthouseSeo == null
-  ).slice(0, maxToAudit);
-
-  const batchSize = 4;
-  for (let i = 0; i < targets.length; i += batchSize) {
-    const batch = targets.slice(i, i + batchSize);
-    const settled = await Promise.allSettled(
-      batch.map(async (page) => ({
-        page,
-        scores: await getLighthouseAuditScores(page.url),
-      }))
-    );
-
-    for (const result of settled) {
-      if (result.status !== "fulfilled") continue;
-      const { page, scores } = result.value;
-      if (!scores) continue;
-      page.lighthousePerformance = scores.performance;
-      page.lighthouseAccessibility = scores.accessibility;
-      page.lighthouseBestPractices = scores.bestPractices;
-      page.lighthouseSeo = scores.seo;
-    }
-  }
-}
-
-async function discoverInternalUrls(domain: string, seedUrls: string[], maxUrls: number): Promise<string[]> {
-  const startUrl = `https://${domain}`;
-  const discovered = new Set<string>([startUrl, ...seedUrls]);
-  const queue: string[] = [startUrl, ...seedUrls].slice(0, maxUrls);
-  const crawled = new Set<string>();
-
-  const maxFetches = Math.max(200, Math.min(maxUrls * 3, 2000));
-  while (queue.length > 0 && discovered.size < maxUrls && crawled.size < maxFetches) {
-    const current = queue.shift();
-    if (!current || crawled.has(current)) continue;
-    crawled.add(current);
-
-    let html = "";
-    try {
-      const res = await fetch(current, {
-        headers: { "User-Agent": "SearchAuditPro/1.0" },
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!res.ok) continue;
-
-      const type = res.headers.get("content-type") ?? "";
-      if (!type.includes("text/html")) continue;
-      html = await res.text();
-    } catch {
-      continue;
-    }
-
-    const links = extractInternalLinksFromHtml(html, current, domain);
-    for (const link of links) {
-      if (discovered.has(link)) continue;
-      discovered.add(link);
-      queue.push(link);
-      if (discovered.size >= maxUrls) break;
-    }
-  }
-
-  return [...discovered].slice(0, maxUrls);
+  return results;
 }
 
 async function extractSitemapUrls(domain: string, maxUrls: number): Promise<string[]> {
-  const normalizedDomain = normalizeDomainHost(domain);
-  const pageUrls = new Set<string>();
-  const seenSitemaps = new Set<string>();
-  const sitemapQueue: string[] = [
-    `https://${normalizedDomain}/sitemap.xml`,
-    `https://${normalizedDomain}/sitemap_index.xml`,
-    `https://${normalizedDomain}/sitemap/sitemap.xml`,
+  const sitemapCandidates = [
+    `https://${domain}/sitemap.xml`,
+    `https://${domain}/sitemap_index.xml`,
+    `https://${domain}/sitemap/sitemap.xml`,
   ];
 
-  // Pull additional sitemap hints from robots.txt when available.
-  try {
-    const robotsRes = await fetch(`https://${normalizedDomain}/robots.txt`, {
-      headers: { "User-Agent": "SearchAuditPro/1.0" },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (robotsRes.ok) {
-      const robotsTxt = await robotsRes.text();
-      for (const line of robotsTxt.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed.toLowerCase().startsWith("sitemap:")) continue;
-        const hinted = trimmed.slice(8).trim();
-        if (hinted.startsWith("http")) sitemapQueue.push(hinted);
-      }
-    }
-  } catch {
-    // Ignore robots fetch failures and rely on default sitemap locations.
-  }
-
-  const maxSitemapFetches = 30;
-  while (sitemapQueue.length > 0 && pageUrls.size < maxUrls && seenSitemaps.size < maxSitemapFetches) {
-    const sitemapUrl = sitemapQueue.shift();
-    if (!sitemapUrl || seenSitemaps.has(sitemapUrl)) continue;
-    seenSitemaps.add(sitemapUrl);
-
-    let xml = "";
+  for (const sitemapUrl of sitemapCandidates) {
     try {
       const res = await fetch(sitemapUrl, {
         headers: { "User-Agent": "SearchAuditPro/1.0" },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(8000),
       });
       if (!res.ok) continue;
-      xml = await res.text();
-    } catch {
-      continue;
-    }
+      const xml = await res.text();
 
-    const locs = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)]
-      .map((m) => m[1].trim())
-      .filter(Boolean);
+      // Parse <loc> tags from sitemap
+      const locs = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/gi)]
+        .map((m) => m[1].trim())
+        .filter((u) => u.startsWith("http"))
+        .slice(0, maxUrls);
 
-    for (const loc of locs) {
-      if (!loc.startsWith("http")) continue;
-
-      const parsed = safeParseUrl(loc);
-      if (!parsed) continue;
-
-      const host = normalizeDomainHost(parsed.hostname);
-      const sameSite = host === normalizedDomain || host.endsWith(`.${normalizedDomain}`);
-      if (!sameSite) continue;
-
-      const maybeXml = parsed.pathname.toLowerCase().endsWith(".xml");
-      if (maybeXml) {
-        if (!seenSitemaps.has(loc)) sitemapQueue.push(loc);
-        continue;
-      }
-
-      pageUrls.add(loc);
-      if (pageUrls.size >= maxUrls) break;
-    }
+      if (locs.length > 0) return locs;
+    } catch { /* try next */ }
   }
-
-  return [...pageUrls].slice(0, maxUrls);
-}
-
-function normalizeDomainHost(value: string): string {
-  return value
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .trim()
-    .toLowerCase();
-}
-
-function safeParseUrl(value: string): URL | null {
-  try {
-    return new URL(value);
-  } catch {
-    return null;
-  }
-}
-
-function extractInternalLinksFromHtml(html: string, baseUrl: string, domain: string): string[] {
-  const hrefMatches = [...html.matchAll(/<a\s+[^>]*href=["']([^"'#]+)["']/gi)]
-    .map((match) => match[1].trim())
-    .filter(Boolean);
-
-  const links: string[] = [];
-  const binaryExtensionPattern = /\.(pdf|jpg|jpeg|png|gif|webp|svg|zip|rar|mp4|mp3|woff2?|ttf|eot|ico|xml)(\?|$)/i;
-
-  for (const href of hrefMatches) {
-    const absolute = safeParseUrl(href.startsWith("http") ? href : new URL(href, baseUrl).toString());
-    if (!absolute) continue;
-
-    const host = normalizeDomainHost(absolute.hostname);
-    const sameSite = host === domain || host.endsWith(`.${domain}`);
-    if (!sameSite) continue;
-    if (binaryExtensionPattern.test(absolute.pathname)) continue;
-
-    absolute.hash = "";
-    if (absolute.searchParams.toString().length > 0) {
-      // Avoid query-variant URL explosion for crawl discovery.
-      absolute.search = "";
-    }
-
-    links.push(absolute.toString().replace(/\/$/, "") || absolute.toString());
-  }
-
-  return links;
+  return [];
 }
 
 // ─── Local SEO / Business Data ───────────────────────────────────────────────
-
-export interface LocalBusinessInfo {
-  businessName: string | null;
-  located: boolean;
-  verified: boolean;
-  rating: number | null;
-  reviewCount: number | null;
-  phone: string | null;
-  website: string | null;
-  address: string | null;
-  cid: string | null;
-}
 
 export async function getLocalBusinessInfo(
   keyword: string,
   locationCode: number = 2840
 ) {
-  const data = await dfsPost("/business_data/google/my_business_info/live", [
+  return dfsPost("/business_data/google/my_business_info/live", [
     { keyword, location_code: locationCode, language_code: "en" },
   ]);
-
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as any[];
-  const item = items[0] ?? null;
-
-  if (!item) {
-    return {
-      businessName: null,
-      located: false,
-      verified: false,
-      rating: null,
-      reviewCount: null,
-      phone: null,
-      website: null,
-      address: null,
-      cid: null,
-    } as LocalBusinessInfo;
-  }
-
-  return {
-    businessName: typeof item.business_name === "string" ? item.business_name : null,
-    located: !!item.latitude && !!item.longitude,
-    verified: item.review_status === "verified",
-    rating: typeof item.rating?.value === "number" ? Math.round(item.rating.value * 10) / 10 : null,
-    reviewCount: typeof item.review_count === "number" ? item.review_count : null,
-    phone: typeof item.phone === "string" ? item.phone : null,
-    website: typeof item.website === "string" ? item.website : null,
-    address: typeof item.address === "string" ? item.address : null,
-    cid: typeof item.cid === "string" ? item.cid : null,
-  } as LocalBusinessInfo;
-}
-
-export interface QaItem {
-  question: string;
-  answerCount: number;
-  topAnswer: string | null;
-  topAnswerAuthor: string | null;
-}
-
-export async function getQuestionsAndAnswers(
-  businessName: string,
-  locationCode: number = 2840
-): Promise<QaItem[]> {
-  const data = await dfsPost("/business_data/google/questions_and_answers/live", [
-    { keyword: businessName, location_code: locationCode, language_code: "en", limit: 50 },
-  ]);
-
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as any[];
-  return items.slice(0, 20).map((item: any) => ({
-    question: typeof item.question === "string" ? item.question : "",
-    answerCount: typeof item.answers_count === "number" ? item.answers_count : 0,
-    topAnswer: typeof item.top_answer?.answer_text === "string" ? item.top_answer.answer_text : null,
-    topAnswerAuthor: typeof item.top_answer?.author === "string" ? item.top_answer.author : null,
-  }));
-}
-
-export interface LocalRankingItem {
-  keyword: string;
-  location: string;
-  position: number | null;
-  title: string | null;
-  url: string | null;
-}
-
-export async function getLocalKeywordRanking(
-  keyword: string,
-  businessName: string,
-  locationCode: number = 2840
-): Promise<LocalRankingItem> {
-  const data = await dfsPost("/serp/google/organic/live/advanced", [
-    {
-      keyword,
-      location_code: locationCode,
-      language_code: "en",
-      device: "mobile",
-      calculate_rectangles: false,
-    },
-  ]);
-
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as any[];
-  const cleanBusiness = businessName.toLowerCase().replace(/[^\w\s]/g, "");
-  
-  const match = items.find((item: any) => {
-    const itemText = `${item.title ?? ""} ${item.description ?? ""} ${item.url ?? ""}`.toLowerCase();
-    return itemText.includes(cleanBusiness) || (typeof item.cid === "string" && item.cid.length > 0);
-  });
-
-  return {
-    keyword,
-    location: "Local Pack",
-    position: match ? (typeof match.rank_absolute === "number" ? match.rank_absolute : null) : null,
-    title: match ? (typeof match.title === "string" ? match.title : null) : null,
-    url: match ? (typeof match.url === "string" ? match.url : null) : null,
-  };
 }
 
 export async function getLocalCitations(businessName: string, location: string) {
@@ -966,19 +351,10 @@ export async function analyzePageInstant(url: string): Promise<InstantAuditResul
 
   if (checks.is_4xx_code) issues.push({ type: "4xx_error", severity: "critical", description: "Page returns 4xx error code", count: 1 });
   if (checks.is_5xx_code) issues.push({ type: "5xx_error", severity: "critical", description: "Page returns 5xx server error", count: 1 });
-  if (checks.is_broken) issues.push({ type: "broken_page", severity: "critical", description: "Page appears broken to crawler", count: 1 });
   if (!checks.has_html_doctype) issues.push({ type: "missing_doctype", severity: "warning", description: "Missing HTML doctype declaration", count: 1 });
   if (checks.is_http) issues.push({ type: "no_https", severity: "critical", description: "Page served over HTTP (not HTTPS)", count: 1 });
-  if (checks.has_mixed_content) issues.push({ type: "mixed_content", severity: "warning", description: "HTTPS page loads HTTP resources (mixed content)", count: 1 });
   if (!checks.has_h1_tag) issues.push({ type: "missing_h1", severity: "warning", description: "Missing H1 heading tag", count: 1 });
-  if (!meta.canonical) issues.push({ type: "missing_canonical", severity: "warning", description: "Missing canonical URL tag", count: 1 });
-  if (!checks.has_structured_data) issues.push({ type: "missing_schema", severity: "info", description: "No structured data/schema detected", count: 1 });
   if (checks.duplicate_title) issues.push({ type: "duplicate_title", severity: "warning", description: "Duplicate title tag found", count: 1 });
-  if (checks.duplicate_description) issues.push({ type: "duplicate_description", severity: "warning", description: "Duplicate meta description found", count: 1 });
-  if (checks.duplicate_content) issues.push({ type: "duplicate_content", severity: "warning", description: "Potential duplicate page content detected", count: 1 });
-  if (checks.is_redirect || checks.has_meta_refresh_redirect) issues.push({ type: "redirect_page", severity: "info", description: "Page redirects and may dilute crawl focus", count: 1 });
-  if (checks.has_render_blocking_resources) issues.push({ type: "render_blocking", severity: "warning", description: "Render-blocking resources may hurt performance", count: 1 });
-  if (checks.low_content_rate) issues.push({ type: "thin_content", severity: "warning", description: "Page appears to have thin content", count: 1 });
   if (checks.no_image_alt) issues.push({ type: "missing_alt", severity: "info", description: "Images missing alt text", count: 1 });
   if (loadTime > 4000) issues.push({ type: "slow_load", severity: "warning", description: `Slow page load: ${(loadTime / 1000).toFixed(1)}s (>4s)`, count: 1 });
 
@@ -1139,99 +515,32 @@ export async function getKeywordGap(
   languageCode = "en",
   limit = 100
 ): Promise<KeywordGapItem[]> {
-  const normalizeDomain = (value: string) =>
-    value
-      .replace(/^https?:\/\//i, "")
-      .replace(/^www\./i, "")
-      .split("/")[0]
-      .toLowerCase();
+  const targets = [yourDomain, ...competitorDomains].map((url) => ({ url, type: "domain" }));
+  const data = await dfsPost("/dataforseo_labs/google/keyword_gap/live", [
+    { targets, location_code: locationCode, language_code: languageCode, limit, filters: [["keyword_data.keyword_info.search_volume", ">", 100]] },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((item) => {
+    const kd = (item.keyword_data as Record<string, unknown>) ?? {};
+    const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
+    const positions = (item.ranked_elements as Record<string, unknown>[]) ?? [];
+    const yourPos = positions.find((p) => String(p.url ?? "").includes(yourDomain));
+    const yourRank = typeof yourPos?.rank_absolute === "number" ? yourPos.rank_absolute : null;
 
-  const cleanYou = normalizeDomain(yourDomain);
-  const cleanCompetitors = competitorDomains.map(normalizeDomain).filter(Boolean);
-  const perCompetitorLimit = Math.max(50, Math.ceil(limit / Math.max(cleanCompetitors.length, 1)));
+    const compPositions = competitorDomains.map((d) => {
+      const cp = positions.find((p) => String(p.url ?? "").includes(d));
+      return { domain: d, position: typeof cp?.rank_absolute === "number" ? cp.rank_absolute : null };
+    });
 
-  const byKeyword = new Map<string, KeywordGapItem>();
-
-  for (const competitor of cleanCompetitors) {
-    const data = await dfsPost("/dataforseo_labs/google/domain_intersection/live", [
-      {
-        targets: [
-          { target: cleanYou, type: "domain" },
-          { target: competitor, type: "domain" },
-        ],
-        location_code: locationCode,
-        language_code: languageCode,
-        limit: perCompetitorLimit,
-        order_by: ["keyword_data.keyword_info.search_volume,desc"],
-      },
-    ]);
-
-    const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-    for (const item of items) {
-      const kd = (item.keyword_data as Record<string, unknown>) ?? {};
-      const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
-      const keyword = String(kd.keyword ?? "");
-      if (!keyword) continue;
-
-      const ranked = (item.ranked_elements as Record<string, unknown>[]) ?? [];
-      const yourElement = ranked.find((r) => {
-        const raw = String(r.target ?? r.domain ?? r.url ?? "").toLowerCase();
-        return raw.includes(cleanYou);
-      });
-      const compElement = ranked.find((r) => {
-        const raw = String(r.target ?? r.domain ?? r.url ?? "").toLowerCase();
-        return raw.includes(competitor);
-      });
-
-      const yourPosition = typeof yourElement?.rank_absolute === "number" ? yourElement.rank_absolute : null;
-      const competitorPosition = typeof compElement?.rank_absolute === "number" ? compElement.rank_absolute : null;
-      const volume = typeof ki.search_volume === "number" ? ki.search_volume : null;
-
-      const existing = byKeyword.get(keyword);
-      if (!existing) {
-        byKeyword.set(keyword, {
-          keyword,
-          yourPosition,
-          competitorPositions: [{ domain: competitor, position: competitorPosition }],
-          volume,
-          opportunity: yourPosition === null ? "missing" : yourPosition > 20 ? "weak" : "strong",
-        });
-        continue;
-      }
-
-      existing.competitorPositions.push({ domain: competitor, position: competitorPosition });
-      if (existing.yourPosition === null && yourPosition !== null) {
-        existing.yourPosition = yourPosition;
-      }
-      if (existing.volume === null && volume !== null) {
-        existing.volume = volume;
-      }
-    }
-  }
-
-  const merged = [...byKeyword.values()].map((item) => {
-    const bestCompetitor = item.competitorPositions
-      .filter((c) => c.position !== null)
-      .sort((a, b) => (a.position as number) - (b.position as number))[0];
-
-    const opportunity: KeywordGapItem["opportunity"] = item.yourPosition === null
-      ? "missing"
-      : bestCompetitor && bestCompetitor.position !== null && item.yourPosition > bestCompetitor.position
-      ? "weak"
-      : item.yourPosition > 20
-      ? "weak"
-      : "strong";
-
+    const opportunity: KeywordGapItem["opportunity"] = yourRank === null ? "missing" : yourRank > 20 ? "weak" : "strong";
     return {
-      ...item,
+      keyword: String(kd.keyword ?? ""),
+      yourPosition: yourRank,
+      competitorPositions: compPositions,
+      volume: typeof ki.search_volume === "number" ? ki.search_volume : null,
       opportunity,
     };
   });
-
-  return merged
-    .filter((item) => item.opportunity === "missing" || item.opportunity === "weak")
-    .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
-    .slice(0, limit);
 }
 
 // ─── Multi-Engine SERP ────────────────────────────────────────────────────────
@@ -1445,210 +754,6 @@ export async function getBacklinkGap(
   }));
 }
 
-// ─── DataForSEO Labs: Advanced Competitive Research APIs ───────────────────
-
-export interface RankedKeywordItem {
-  keyword: string;
-  position: number;
-  searchVolume: number;
-  cpc: number | null;
-  url: string | null;
-}
-
-export async function getRankedKeywords(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 100
-): Promise<RankedKeywordItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/ranked_keywords/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode, limit, order_by: ["keyword_data.keyword_info.search_volume,desc"] },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => {
-    const kd = (item.keyword_data as Record<string, unknown>) ?? {};
-    const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
-    const rse = (item.ranked_serp_element as Record<string, unknown>) ?? {};
-    const si = (rse.serp_item as Record<string, unknown>) ?? {};
-    return {
-      keyword: String(kd.keyword ?? ""),
-      position: typeof si.rank_absolute === "number" ? si.rank_absolute : 0,
-      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
-      cpc: typeof ki.cpc === "number" ? ki.cpc : null,
-      url: typeof si.url === "string" ? si.url : null,
-    };
-  });
-}
-
-export interface DomainIntersectionItem {
-  keyword: string;
-  yourPosition: number | null;
-  theirPosition: number | null;
-  searchVolume: number;
-  opportunity: "you_rank_higher" | "they_rank_higher" | "both_rank";
-}
-
-export async function getDomainIntersection(
-  yourDomain: string,
-  theirDomain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 100
-): Promise<DomainIntersectionItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/domain_intersection/live", [
-    {
-      targets: [
-        { target: yourDomain, type: "domain" },
-        { target: theirDomain, type: "domain" },
-      ],
-      location_code: locationCode,
-      language_code: languageCode,
-      limit,
-      order_by: ["keyword_data.keyword_info.search_volume,desc"],
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => {
-    const kd = (item.keyword_data as Record<string, unknown>) ?? {};
-    const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
-    const ranked = (item.ranked_elements as Record<string, unknown>[]) ?? [];
-    
-    const yourRank = ranked.find((r) => String(r.url ?? "").includes(yourDomain));
-    const theirRank = ranked.find((r) => String(r.url ?? "").includes(theirDomain));
-    
-    const yourPos = typeof yourRank?.rank_absolute === "number" ? yourRank.rank_absolute : null;
-    const theirPos = typeof theirRank?.rank_absolute === "number" ? theirRank.rank_absolute : null;
-    
-    let opportunity: DomainIntersectionItem["opportunity"] = "both_rank";
-    if (yourPos !== null && theirPos !== null) {
-      opportunity = yourPos < theirPos ? "you_rank_higher" : "they_rank_higher";
-    }
-    
-    return {
-      keyword: String(kd.keyword ?? ""),
-      yourPosition: yourPos,
-      theirPosition: theirPos,
-      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
-      opportunity,
-    };
-  });
-}
-
-export interface RelevantPageItem {
-  url: string;
-  title: string | null;
-  traffic: number;
-  keywordCount: number;
-}
-
-export async function getRelevantPages(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<RelevantPageItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/relevant_pages/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode, limit, order_by: ["etv,desc"] },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => ({
-    url: String(item.url ?? ""),
-    title: typeof item.title === "string" ? item.title : null,
-    traffic: typeof item.etv === "number" ? Math.round(item.etv) : 0,
-    keywordCount: typeof item.keyword_count === "number" ? item.keyword_count : 0,
-  }));
-}
-
-export interface HistoricalSerpItem {
-  keyword: string;
-  position: number;
-  date: string;
-  searchVolume: number;
-}
-
-export async function getHistoricalSerps(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<HistoricalSerpItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/historical_serps/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode, limit, order_by: ["keyword_data.keyword_info.search_volume,desc"] },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => {
-    const kd = (item.keyword_data as Record<string, unknown>) ?? {};
-    const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
-    const historicalRanks = (item.historical_serp_ranks as Record<string, unknown>[]) ?? [];
-    const latest = historicalRanks[historicalRanks.length - 1];
-    
-    return {
-      keyword: String(kd.keyword ?? ""),
-      position: typeof latest?.rank_absolute === "number" ? latest.rank_absolute : 0,
-      date: typeof latest?.date === "string" ? latest.date : new Date().toISOString().split("T")[0],
-      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
-    };
-  });
-}
-
-export interface HistoricalRankMetrics {
-  date: string;
-  avgPosition: number;
-  keywordCount: number;
-  organicTraffic: number;
-}
-
-export async function getHistoricalRankOverview(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<HistoricalRankMetrics[]> {
-  const data = await dfsPost("/dataforseo_labs/google/historical_rank_overview/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => ({
-    date: typeof item.date === "string" ? item.date : new Date().toISOString().split("T")[0],
-    avgPosition: typeof item.avg_position === "number" ? Math.round(item.avg_position * 10) / 10 : 0,
-    keywordCount: typeof item.keyword_count === "number" ? item.keyword_count : 0,
-    organicTraffic: typeof item.etv === "number" ? Math.round(item.etv) : 0,
-  }));
-}
-
-export interface PageIntersectionItem {
-  url: string;
-  domain: string;
-  title: string | null;
-  matchingPages: number;
-}
-
-export async function getPageIntersection(
-  yourDomain: string,
-  theirDomain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<PageIntersectionItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/page_intersection/live", [
-    {
-      targets: [
-        { target: yourDomain, type: "domain" },
-        { target: theirDomain, type: "domain" },
-      ],
-      location_code: locationCode,
-      language_code: languageCode,
-      limit,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((item) => ({
-    url: String(item.url ?? ""),
-    domain: String(item.domain ?? ""),
-    title: typeof item.title === "string" ? item.title : null,
-    matchingPages: typeof item.common_pages_count === "number" ? item.common_pages_count : 0,
-  }));
-}
-
 export interface ReferringDomainItem {
   domain: string;
   backlinks: number;
@@ -1775,14 +880,14 @@ export async function getGmbDetails(
   const reviewItems = (reviewData?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
   const reviews: BusinessReview[] = reviewItems.map((r) => ({
     author: String(r.author_title ?? r.profile_name ?? "Anonymous"),
-    rating: (() => {
-      const ratingObj = (r.rating as Record<string, unknown> | undefined) ?? undefined;
-      if (ratingObj && typeof ratingObj.value === "number") return ratingObj.value;
-      return typeof r.rating === "number" ? r.rating : 0;
-    })(),
-    text: typeof r.review_text === "string" ? r.review_text : null,
-    date: typeof r.timestamp === "string" ? r.timestamp : null,
-    response: typeof r.owner_answer === "string" ? r.owner_answer : null,
+    rating: typeof (r.rating as Record<string, unknown>)?.value === "number"
+      ? ((r.rating as Record<string, unknown>).value as number)
+      : typeof r.rating === "number"
+      ? (r.rating as number)
+      : 0,
+    text: typeof r.review_text === "string" ? (r.review_text as string) : null,
+    date: typeof r.timestamp === "string" ? (r.timestamp as string) : null,
+    response: typeof r.owner_answer === "string" ? (r.owner_answer as string) : null,
   }));
 
   return { info, reviews };
@@ -1803,36 +908,18 @@ export interface CitationDirectoryResult {
 
 // Key citation directories to check NAP consistency
 const CITATION_DIRECTORIES = [
-  { name: "Google Business Profile", searchBase: "https://www.google.com/search?q=", domainHints: ["google.com", "maps.google.com"] },
-  { name: "Bing Places", searchBase: "https://www.bing.com/maps?q=", domainHints: ["bing.com", "bingplaces.com"] },
-  { name: "Apple Maps", searchBase: "https://maps.apple.com/?q=", domainHints: ["maps.apple.com"] },
-  { name: "Yelp", searchBase: "https://www.yelp.com/search?find_desc=", domainHints: ["yelp.com"] },
-  { name: "Yellow Pages", searchBase: "https://www.yellowpages.com/search?search_terms=", domainHints: ["yellowpages.com"] },
-  { name: "Facebook", searchBase: "https://www.facebook.com/search/pages/?q=", domainHints: ["facebook.com"] },
-  { name: "Foursquare", searchBase: "https://foursquare.com/explore?q=", domainHints: ["foursquare.com"] },
-  { name: "Tripadvisor", searchBase: "https://www.tripadvisor.com/Search?q=", domainHints: ["tripadvisor.com"] },
-  { name: "BBB", searchBase: "https://www.bbb.org/search?find_text=", domainHints: ["bbb.org"] },
-  { name: "Manta", searchBase: "https://www.manta.com/search?search_source=nav&search=", domainHints: ["manta.com"] },
-  { name: "MapQuest", searchBase: "https://www.mapquest.com/search/results?query=", domainHints: ["mapquest.com"] },
-  { name: "Superpages", searchBase: "https://www.superpages.com/search?search_terms=", domainHints: ["superpages.com"] },
-  { name: "CitySquares", searchBase: "https://citysquares.com/search?what=", domainHints: ["citysquares.com"] },
-  { name: "Local.com", searchBase: "https://www.local.com/search?keyword=", domainHints: ["local.com"] },
-  { name: "Chamber of Commerce", searchBase: "https://www.chamberofcommerce.com/search?what=", domainHints: ["chamberofcommerce.com"] },
-  { name: "Brownbook", searchBase: "https://www.brownbook.net/search/", domainHints: ["brownbook.net"] },
-  { name: "Hotfrog", searchBase: "https://www.hotfrog.com/search/", domainHints: ["hotfrog.com"] },
-  { name: "MerchantCircle", searchBase: "https://www.merchantcircle.com/search?query=", domainHints: ["merchantcircle.com"] },
-  { name: "Cylex", searchBase: "https://www.cylex.us.com/s?query=", domainHints: ["cylex.us.com"] },
-  { name: "Alignable", searchBase: "https://www.alignable.com/search?query=", domainHints: ["alignable.com"] },
-  { name: "Angi", searchBase: "https://www.angi.com/search?what=", domainHints: ["angi.com"] },
-  { name: "Houzz", searchBase: "https://www.houzz.com/professionals/query/", domainHints: ["houzz.com"] },
-  { name: "Thumbtack", searchBase: "https://www.thumbtack.com/k/", domainHints: ["thumbtack.com"] },
-  { name: "Nextdoor", searchBase: "https://nextdoor.com/search/?query=", domainHints: ["nextdoor.com"] },
-  { name: "Trustpilot", searchBase: "https://www.trustpilot.com/search?query=", domainHints: ["trustpilot.com"] },
-  { name: "Sitejabber", searchBase: "https://www.sitejabber.com/search?query=", domainHints: ["sitejabber.com"] },
-  { name: "Birdeye", searchBase: "https://birdeye.com/search/?q=", domainHints: ["birdeye.com"] },
-  { name: "Demandforce", searchBase: "https://www.demandforce.com/search/?q=", domainHints: ["demandforce.com"] },
-  { name: "Insider Pages", searchBase: "https://www.insiderpages.com/search?query=", domainHints: ["insiderpages.com"] },
-  { name: "Judy's Book", searchBase: "https://www.judysbook.com/search?query=", domainHints: ["judysbook.com"] },
+  { name: "Google Business Profile", searchBase: "https://www.google.com/search?q=" },
+  { name: "Yelp", searchBase: "https://www.yelp.com/search?find_desc=" },
+  { name: "Yellow Pages", searchBase: "https://www.yellowpages.com/search?search_terms=" },
+  { name: "Bing Places", searchBase: "https://www.bingplaces.com/SearchForms?q=" },
+  { name: "Facebook", searchBase: "https://www.facebook.com/search/pages/?q=" },
+  { name: "Apple Maps", searchBase: "https://maps.apple.com/?q=" },
+  { name: "Foursquare", searchBase: "https://foursquare.com/explore?q=" },
+  { name: "TripAdvisor", searchBase: "https://www.tripadvisor.com/Search?q=" },
+  { name: "Angi (Angie's List)", searchBase: "https://www.angi.com/search?what=" },
+  { name: "Better Business Bureau", searchBase: "https://www.bbb.org/search?find_text=" },
+  { name: "Houzz", searchBase: "https://www.houzz.com/professionals/search?q=" },
+  { name: "Nextdoor", searchBase: "https://nextdoor.com/find-neighborhood/?query=" },
 ];
 
 export async function checkBusinessListings(
@@ -1849,54 +936,19 @@ export async function checkBusinessListings(
       { keyword: businessName, location_name: locationName, limit },
     ]);
     listings = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  } catch {
-    // Continue to database endpoint fallback below.
-  }
-
-  if (listings.length === 0) {
-    try {
-      const dbData = await dfsPost("/databases/business_listings/search/live", [
-        { keyword: businessName, location_name: locationName, limit },
-      ]);
-      listings = (dbData?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-    } catch {
-      // Keep empty listings and return missing rows.
-    }
-  }
+  } catch { /* offline – return directory list with missing status */ }
 
   const normalizePhone = (p: string) => p.replace(/\D/g, "").slice(-10);
-  const normalizeText = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  const normalizeHost = (value: string) => value.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
-
-  const businessTokens = new Set(normalizeText(businessName).split(" ").filter((token) => token.length >= 3));
   const phoneNorm = normalizePhone(phone);
-  const addrNorm = normalizeText(address);
+  const addrLower = address.toLowerCase().split(",")[0].trim(); // street address for comparison
 
-  return CITATION_DIRECTORIES.map((dir) => {
-    let bestMatch: Record<string, unknown> | null = null;
-    let bestScore = -1;
+  return CITATION_DIRECTORIES.slice(0, 12).map((dir) => {
+    const match = listings.find((l) => {
+      const title = String(l.title ?? l.name ?? "").toLowerCase();
+      return title.includes(businessName.split(" ")[0].toLowerCase());
+    });
 
-    for (const listing of listings) {
-      const title = normalizeText(String(listing.title ?? listing.name ?? ""));
-      const listingAddress = normalizeText(String((listing.address_info as Record<string, unknown>)?.address ?? listing.address ?? ""));
-      const listingPhone = normalizePhone(String(listing.phone ?? ""));
-      const listingUrl = String(listing.url ?? listing.domain ?? "");
-      const listingHost = normalizeHost(listingUrl);
-
-      const tokenHits = [...businessTokens].filter((token) => title.includes(token)).length;
-      const tokenScore = businessTokens.size > 0 ? tokenHits / businessTokens.size : 0;
-      const directoryScore = dir.domainHints.some((hint) => listingHost.includes(hint)) ? 1 : 0;
-      const phoneScore = listingPhone.length > 0 && phoneNorm.length > 0 && listingPhone === phoneNorm ? 1 : 0;
-      const addressScore = listingAddress.length > 0 && addrNorm.length > 0 && (listingAddress.includes(addrNorm) || addrNorm.includes(listingAddress)) ? 1 : 0;
-
-      const totalScore = tokenScore * 0.5 + directoryScore * 0.2 + phoneScore * 0.2 + addressScore * 0.1;
-      if (totalScore > bestScore) {
-        bestScore = totalScore;
-        bestMatch = listing;
-      }
-    }
-
-    if (!bestMatch || bestScore < 0.35) {
+    if (!match) {
       return {
         directory: dir.name,
         url: `${dir.searchBase}${encodeURIComponent(businessName)}`,
@@ -1909,16 +961,13 @@ export async function checkBusinessListings(
       };
     }
 
-    const listingPhone = normalizePhone(String(bestMatch.phone ?? ""));
-    const listingAddress = normalizeText(String((bestMatch.address_info as Record<string, unknown>)?.address ?? bestMatch.address ?? ""));
-    const listingTitle = normalizeText(String(bestMatch.title ?? bestMatch.name ?? ""));
-
-    const tokenHits = [...businessTokens].filter((token) => listingTitle.includes(token)).length;
-    const nameMatch = businessTokens.size > 0 ? tokenHits / businessTokens.size >= 0.5 : false;
+    const listingPhone = normalizePhone(String(match.phone ?? ""));
+    const listingAddr = String((match.address_info as Record<string, unknown>)?.borough ?? match.address ?? "").toLowerCase();
+    const nameMatch = String(match.title ?? "").toLowerCase().includes(businessName.toLowerCase().split(" ")[0]);
     const phoneMatch = listingPhone.length > 0 && phoneNorm.length > 0 && (listingPhone === phoneNorm || listingPhone.endsWith(phoneNorm.slice(-7)));
-    const addressMatch = listingAddress.length > 0 && addrNorm.length > 0 && (listingAddress.includes(addrNorm) || addrNorm.includes(listingAddress));
-    const consistent = nameMatch && (phoneMatch || phoneNorm.length === 0) && (addressMatch || addrNorm.length === 0);
+    const addressMatch = listingAddr.length > 0 && (listingAddr.includes(addrLower.split(" ")[0].toLowerCase()) || addrLower.includes(listingAddr.split(" ")[0].toLowerCase()));
 
+    const consistent = nameMatch && (phoneMatch || phoneNorm.length === 0) && (addressMatch || addrLower.length === 0);
     return {
       directory: dir.name,
       url: `${dir.searchBase}${encodeURIComponent(businessName)}`,
@@ -1927,7 +976,7 @@ export async function checkBusinessListings(
       addressMatch,
       phoneMatch,
       status: consistent ? ("consistent" as const) : ("inconsistent" as const),
-      listingUrl: typeof bestMatch.url === "string" ? bestMatch.url : null,
+      listingUrl: typeof match.url === "string" ? match.url : null,
     };
   });
 }
@@ -1949,10 +998,10 @@ export async function getDomainTechnologies(domain: string): Promise<TechItem[]>
   for (const item of items) {
     const technologies = (item.technologies ?? []) as Record<string, unknown>[];
     for (const tech of technologies) {
-      const categories = Array.isArray(tech.categories) ? (tech.categories as unknown[]) : [];
+      const categories = tech.categories as unknown[]; // Cast to unknown array
       techList.push({
         name: String(tech.name ?? ""),
-        category: String(categories[0] ?? "Other"),
+        category: String((Array.isArray(categories) ? categories[0] : null) ?? "Other"),
         version: typeof tech.version === "string" ? tech.version : null,
       });
     }
@@ -1990,531 +1039,5 @@ export async function getSerpCompetitors(
       ((typeof i.intersections === "number" ? i.intersections : 0) / (keywords.length || 1)) * 100
     ),
   }));
-}
-
-// ─── Advanced Keyword Research Labs APIs ──────────────────────────────────────
-
-export interface TopSearchItem {
-  query: string;
-  searchVolume: number;
-  lastUpdated: string | null;
-  trend: number | null;
-}
-
-export async function getTopSearches(
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<TopSearchItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/top_searches/live", [
-    { location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    query: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    lastUpdated: typeof i.last_updated === "string" ? i.last_updated : null,
-    trend: typeof i.trend === "number" ? i.trend : null,
-  }));
-}
-
-export interface RelatedKeywordItem {
-  keyword: string;
-  searchVolume: number;
-  cpc: number | null;
-  competition: number | null;
-}
-
-export async function getRelatedKeywords(
-  keyword: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<RelatedKeywordItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/related_keywords/live", [
-    { keyword, location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    cpc: typeof i.cpc === "number" ? i.cpc : null,
-    competition: typeof i.competition === "number" ? i.competition : null,
-  }));
-}
-
-export interface KeywordSuggestionItem {
-  keyword: string;
-  searchVolume: number;
-  cpc: number | null;
-  difficulty: number | null;
-}
-
-export async function getKeywordSuggestions(
-  keyword: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<KeywordSuggestionItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/keyword_suggestions/live", [
-    { keyword, location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as any[];
-  return items.map((i: any) => ({
-    keyword: String(i.keyword_data?.keyword ?? ""),
-    searchVolume: typeof i.keyword_data?.keyword_info?.search_volume === "number" ? i.keyword_data.keyword_info.search_volume : 0,
-    cpc: typeof i.keyword_data?.keyword_info?.cpc === "number" ? i.keyword_data.keyword_info.cpc : null,
-    difficulty: typeof i.keyword_difficulty === "number" ? i.keyword_difficulty : null,
-  }));
-}
-
-export interface KeywordIdeaItem {
-  keyword: string;
-  searchVolume: number;
-  cpc: number | null;
-  seasonality: string | null;
-  intent: "commercial" | "transactional" | "informational" | "navigational" | null;
-}
-
-export async function getKeywordIdeasLabs(
-  seed: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<KeywordIdeaItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/keyword_ideas/live", [
-    { keyword: seed, location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as any[];
-  return items.map((i: any) => ({
-    keyword: String(i.keyword_data?.keyword ?? ""),
-    searchVolume: typeof i.keyword_data?.keyword_info?.search_volume === "number" ? i.keyword_data.keyword_info.search_volume : 0,
-    cpc: typeof i.keyword_data?.keyword_info?.cpc === "number" ? i.keyword_data.keyword_info.cpc : null,
-    seasonality: String((i.keyword_data?.keyword_info?.seasonality ?? [])?.[0] ?? null),
-    intent: null,
-  }));
-}
-
-export interface KeywordOverviewItem {
-  keyword: string;
-  searchVolume: number;
-  cpc: number | null;
-  competition: number | null;
-  seResults: number | null;
-  domainRank: number | null;
-}
-
-export async function getKeywordOverviewLabs(
-  keywords: string[],
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<KeywordOverviewItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/keyword_overview/live", [
-    { keywords, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    cpc: typeof i.cpc === "number" ? i.cpc : null,
-    competition: typeof i.competition === "number" ? i.competition : null,
-    seResults: typeof i.se_results_count === "number" ? i.se_results_count : null,
-    domainRank: typeof i.rank === "number" ? i.rank : null,
-  }));
-}
-
-export interface BulkKeywordDifficultyItem {
-  keyword: string;
-  difficulty: number | null;
-  difficultyLevel: "easy" | "medium" | "hard" | null;
-}
-
-export async function getBulkKeywordDifficulty(
-  keywords: string[],
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<BulkKeywordDifficultyItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/bulk_keyword_difficulty/live", [
-    { keywords, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => {
-    const diff = typeof i.keyword_difficulty === "number" ? i.keyword_difficulty : null;
-    let level: "easy" | "medium" | "hard" | null = null;
-    if (diff !== null) {
-      if (diff < 30) level = "easy";
-      else if (diff < 70) level = "medium";
-      else level = "hard";
-    }
-    return { keyword: String(i.keyword ?? ""), difficulty: diff, difficultyLevel: level };
-  });
-}
-
-export interface SearchIntentItem {
-  keyword: string;
-  intent: "commercial" | "transactional" | "informational" | "navigational";
-  confidence: number;
-}
-
-export async function getSearchIntent(
-  keywords: string[],
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<SearchIntentItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/search_intent/live", [
-    { keywords, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => {
-    const intentStr = String(i.search_intent ?? "informational").toLowerCase();
-    let intent: SearchIntentItem["intent"] = "informational";
-    if (intentStr.includes("commercial")) intent = "commercial";
-    else if (intentStr.includes("transactional")) intent = "transactional";
-    else if (intentStr.includes("navigational")) intent = "navigational";
-    return {
-      keyword: String(i.keyword ?? ""),
-      intent,
-      confidence: typeof i.confidence === "number" ? Math.round(i.confidence * 100) : 0,
-    };
-  });
-}
-
-// ─── Category-Based Keyword Research APIs ─────────────────────────────────────
-
-export interface CategoryItem {
-  id: string;
-  name: string;
-  title: string | null;
-}
-
-export async function getCategoriesForKeywords(
-  keywords: string[],
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<CategoryItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/categories_for_keywords/live", [
-    { keywords, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  const categories = new Map<string, CategoryItem>();
-  
-  for (const item of items) {
-    const cats = (item.categories ?? []) as Record<string, unknown>[];
-    for (const cat of cats) {
-      const id = String(cat.id ?? cat.category_id ?? "");
-      if (id && !categories.has(id)) {
-        categories.set(id, {
-          id,
-          name: String(cat.name ?? cat.title ?? ""),
-          title: typeof cat.title === "string" ? cat.title : null,
-        });
-      }
-    }
-  }
-  
-  return Array.from(categories.values()).slice(0, 50);
-}
-
-export interface KeywordForCategoryItem {
-  keyword: string;
-  searchVolume: number;
-  difficulty: number | null;
-}
-
-export async function getKeywordsForCategories(
-  categoryIds: string[],
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 50
-): Promise<KeywordForCategoryItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/keywords_for_categories/live", [
-    { categories: categoryIds, location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    difficulty: typeof i.difficulty === "number" ? i.difficulty : null,
-  }));
-}
-
-export interface DomainCategoryItem {
-  categoryId: string;
-  categoryName: string;
-  relevance: number;
-  matchingKeywords: number;
-}
-
-export async function getCategoriesForDomain(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<DomainCategoryItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/categories_for_domain/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    categoryId: String(i.id ?? i.category_id ?? ""),
-    categoryName: String(i.name ?? i.category_name ?? ""),
-    relevance: typeof i.relevance === "number" ? Math.round(i.relevance * 100) : 0,
-    matchingKeywords: typeof i.keyword_count === "number" ? i.keyword_count : 0,
-  }));
-}
-
-export interface DomainMetricsByCategoryItem {
-  categoryId: string;
-  categoryName: string;
-  organicKeywords: number;
-  organicTraffic: number;
-  domainRank: number;
-}
-
-export async function getDomainMetricsByCategories(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en"
-): Promise<DomainMetricsByCategoryItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/domain_metrics_by_categories/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    categoryId: String(i.id ?? i.category_id ?? ""),
-    categoryName: String(i.name ?? i.category_name ?? ""),
-    organicKeywords: typeof i.keyword_count === "number" ? i.keyword_count : 0,
-    organicTraffic: typeof i.etv === "number" ? Math.round(i.etv) : 0,
-    domainRank: typeof i.rank === "number" ? i.rank : 0,
-  }));
-}
-
-// ─── Site-Specific Keyword Research APIs ──────────────────────────────────────
-
-export interface KeywordForSiteItem {
-  keyword: string;
-  url: string | null;
-  position: number;
-  searchVolume: number;
-  traffic: number;
-}
-
-export async function getKeywordsForSite(
-  domain: string,
-  locationCode = 2840,
-  languageCode = "en",
-  limit = 100
-): Promise<KeywordForSiteItem[]> {
-  const data = await dfsPost("/dataforseo_labs/google/keywords_for_site/live", [
-    { target: domain, location_code: locationCode, language_code: languageCode, limit },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    url: typeof i.url === "string" ? i.url : null,
-    position: typeof i.position === "number" ? i.position : 0,
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    traffic: typeof i.traffic === "number" ? Math.round(i.traffic) : 0,
-  }));
-}
-
-// ─── AI Optimization / LLM Mentions (LIVE) ───────────────────────────────────
-
-export interface LlmMentionLiveItem {
-  query: string;
-  llm: string;
-  source: string;
-  url: string | null;
-  title: string | null;
-  snippet: string | null;
-  mentioned: boolean;
-}
-
-export interface LlmTopPageItem {
-  page: string;
-  mentions: number;
-  share: number | null;
-}
-
-export interface LlmTopDomainItem {
-  domain: string;
-  mentions: number;
-  share: number | null;
-}
-
-export interface LlmAggregatedMetricItem {
-  llm: string;
-  mentions: number;
-  mentionRate: number | null;
-}
-
-export interface LlmCrossAggregatedMetricItem {
-  query: string;
-  llm: string;
-  mentions: number;
-}
-
-function normalizeHost(input: string): string {
-  return input
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .toLowerCase();
-}
-
-function matchesDomain(value: string | null, targetDomain: string): boolean {
-  if (!value) return false;
-  const h = normalizeHost(value);
-  return h === targetDomain || h.endsWith(`.${targetDomain}`);
-}
-
-export async function getLlmMentionsSearchLive(
-  keyword: string,
-  domain: string,
-  limit = 30
-): Promise<LlmMentionLiveItem[]> {
-  const targetDomain = normalizeHost(domain);
-  const data = await dfsPost("/ai_optimization/llm_mentions/search/live", [
-    {
-      keyword,
-      target: targetDomain,
-      limit,
-    },
-  ]);
-
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => {
-    const url = typeof i.url === "string" ? i.url : null;
-    const sourceDomain = typeof i.domain === "string" ? i.domain : null;
-    const title = typeof i.title === "string" ? i.title : null;
-    const snippet = typeof i.snippet === "string"
-      ? i.snippet
-      : typeof i.description === "string"
-      ? i.description
-      : null;
-    const llm = typeof i.llm === "string"
-      ? i.llm
-      : typeof i.llm_name === "string"
-      ? i.llm_name
-      : "unknown";
-
-    const mentionedByFlag = typeof i.mentioned === "boolean" ? i.mentioned : false;
-    const mentionedByUrl = matchesDomain(url, targetDomain);
-    const mentionedBySourceDomain = matchesDomain(sourceDomain, targetDomain);
-
-    return {
-      query: keyword,
-      llm,
-      source: llm,
-      url,
-      title,
-      snippet,
-      mentioned: mentionedByFlag || mentionedByUrl || mentionedBySourceDomain,
-    };
-  });
-}
-
-export async function getLlmTopPagesLive(
-  domain: string,
-  limit = 20
-): Promise<LlmTopPageItem[]> {
-  const targetDomain = normalizeHost(domain);
-  const data = await dfsPost("/ai_optimization/llm_mentions/top_pages/live", [
-    {
-      target: targetDomain,
-      limit,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    page: String(i.page ?? i.url ?? ""),
-    mentions: typeof i.mentions === "number" ? i.mentions : 0,
-    share: typeof i.share === "number" ? i.share : null,
-  }));
-}
-
-export async function getLlmTopDomainsLive(
-  keyword: string,
-  limit = 20
-): Promise<LlmTopDomainItem[]> {
-  const data = await dfsPost("/ai_optimization/llm_mentions/top_domains/live", [
-    {
-      keyword,
-      limit,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    domain: String(i.domain ?? ""),
-    mentions: typeof i.mentions === "number" ? i.mentions : 0,
-    share: typeof i.share === "number" ? i.share : null,
-  }));
-}
-
-export async function getLlmAggregatedMetricsLive(
-  domain: string
-): Promise<LlmAggregatedMetricItem[]> {
-  const targetDomain = normalizeHost(domain);
-  const data = await dfsPost("/ai_optimization/llm_mentions/aggregated_metrics/live", [
-    {
-      target: targetDomain,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    llm: String(i.llm ?? i.llm_name ?? "unknown"),
-    mentions: typeof i.mentions === "number" ? i.mentions : 0,
-    mentionRate: typeof i.mention_rate === "number" ? i.mention_rate : null,
-  }));
-}
-
-export async function getLlmCrossAggregatedMetricsLive(
-  domain: string
-): Promise<LlmCrossAggregatedMetricItem[]> {
-  const targetDomain = normalizeHost(domain);
-  const data = await dfsPost("/ai_optimization/llm_mentions/cross_aggregated_metrics/live", [
-    {
-      target: targetDomain,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    query: String(i.keyword ?? i.query ?? ""),
-    llm: String(i.llm ?? i.llm_name ?? "unknown"),
-    mentions: typeof i.mentions === "number" ? i.mentions : 0,
-  }));
-}
-
-export async function getPerplexityLlmResponsesLive(
-  keyword: string,
-  domain: string,
-  limit = 10
-): Promise<LlmMentionLiveItem[]> {
-  const targetDomain = normalizeHost(domain);
-  const data = await dfsPost("/ai_optimization/perplexity/llm_responses/live", [
-    {
-      keyword,
-      target: targetDomain,
-      limit,
-    },
-  ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => {
-    const url = typeof i.url === "string" ? i.url : null;
-    const snippet = typeof i.response === "string"
-      ? i.response
-      : typeof i.snippet === "string"
-      ? i.snippet
-      : null;
-
-    return {
-      query: keyword,
-      llm: "perplexity",
-      source: "perplexity",
-      url,
-      title: typeof i.title === "string" ? i.title : null,
-      snippet,
-      mentioned: matchesDomain(url, targetDomain),
-    };
-  });
 }
 

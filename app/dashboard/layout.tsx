@@ -11,7 +11,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <DashboardNav
         userName={session.user.name ?? ""}
         userEmail={session.user.email ?? ""}
-        userRole={(session.user as { role?: string }).role ?? "USER"}
       />
       <main style={{ flex: 1, overflowY: "auto" }}>
         {children}

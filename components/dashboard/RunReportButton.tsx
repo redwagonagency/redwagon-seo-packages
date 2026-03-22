@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -12,71 +12,8 @@ interface Props {
 export default function RunReportButton({ projectId, projectName, lastRunAt }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [tracking, setTracking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-  const pollRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!tracking) {
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-      return;
-    }
-
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/reports/progress?projectId=${encodeURIComponent(projectId)}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!data) return;
-
-        const percent = typeof data.percent === "number" ? data.percent : null;
-        const crawledPages = typeof data.crawledPages === "number" ? data.crawledPages : null;
-        const targetPages = typeof data.targetPages === "number" && data.targetPages > 0 ? data.targetPages : null;
-        const pagesText = crawledPages !== null
-          ? targetPages !== null
-            ? ` - ${crawledPages}/${targetPages} pages`
-            : ` - ${crawledPages} pages`
-          : "";
-
-        if (data.status === "RUNNING") {
-          const phase = typeof data.phase === "string" ? data.phase : "Running";
-          setStatus(`${phase}${percent !== null ? ` (${percent}%)` : ""}${pagesText}`);
-          return;
-        }
-
-        if (data.status === "COMPLETE") {
-          setStatus(`Complete${pagesText}`);
-        } else if (data.status === "PARTIAL") {
-          setStatus(`Partial results saved${pagesText}`);
-        } else {
-          setError(data.errorMessage ?? "Report failed");
-        }
-
-        setTracking(false);
-        router.refresh();
-      } catch {
-        // Keep polling; transient network failures should not clear state.
-      }
-    };
-
-    void poll();
-    pollRef.current = window.setInterval(() => {
-      void poll();
-    }, 4000);
-
-    return () => {
-      if (pollRef.current !== null) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-  }, [projectId, router, tracking]);
 
   async function handleRun() {
     setLoading(true);
@@ -97,8 +34,8 @@ export default function RunReportButton({ projectId, projectName, lastRunAt }: P
         return;
       }
 
-      setStatus("Report started in background (0%)");
-      setTracking(true);
+      setStatus(data.status === "COMPLETE" ? "Complete!" : data.status === "PARTIAL" ? "Partial results saved" : "Done");
+      // Refresh page to show new snapshot data
       router.refresh();
     } catch {
       setError("Network error — please try again");
@@ -108,13 +45,7 @@ export default function RunReportButton({ projectId, projectName, lastRunAt }: P
   }
 
   const lastRunLabel = lastRunAt
-    ? `Last run: ${new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: "UTC",
-      }).format(new Date(lastRunAt))} UTC`
+    ? `Last run: ${new Date(lastRunAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
     : "No reports run yet";
 
   return (
@@ -128,23 +59,23 @@ export default function RunReportButton({ projectId, projectName, lastRunAt }: P
         )}
         <button
           onClick={handleRun}
-          disabled={loading || tracking}
+          disabled={loading}
           style={{
-            background: loading || tracking ? "#374151" : "#1a56db",
+            background: loading ? "#374151" : "#1a56db",
             color: "#ffffff",
             border: "none",
             padding: "12px 22px",
             borderRadius: 10,
             fontWeight: 700,
             fontSize: 14,
-            cursor: loading || tracking ? "default" : "pointer",
+            cursor: loading ? "default" : "pointer",
             display: "flex",
             alignItems: "center",
             gap: 8,
             transition: "background 0.2s",
           }}
         >
-          {loading || tracking ? (
+          {loading ? (
             <>
               <svg
                 width="14"

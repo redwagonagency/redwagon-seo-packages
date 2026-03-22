@@ -83,7 +83,7 @@ export default function DomainSearch() {
   return (
     <>
       {/* Search Bar */}
-      <form suppressHydrationWarning onSubmit={handleSubmit} style={{ display: "flex", gap: 0, maxWidth: 600, width: "100%", boxShadow: "0 4px 32px rgba(0,0,0,0.3)", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.15)" }}>
+      <form onSubmit={handleSubmit} style={{ display: "flex", gap: 0, maxWidth: 600, width: "100%", boxShadow: "0 4px 32px rgba(0,0,0,0.3)", borderRadius: 12, overflow: "hidden", border: "1px solid rgba(255,255,255,0.15)" }}>
         <div style={{ flex: 1, position: "relative" }}>
           <span style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", fontSize: 18, pointerEvents: "none" }}>🌐</span>
           <input

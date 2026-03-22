@@ -1,32 +1,13 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
-import {
-  parsePages,
-  parseOnPageErrors,
-  parseOnPageDuplicateTags,
-  parseOnPageBrokenLinks,
-  type PageAuditResult,
-  type OnPageErrorItem,
-  type DuplicateTagItem,
-  type OnPageLinkItem,
-} from "@/lib/reports/types";
+import { parsePages, type PageAuditResult } from "@/lib/reports/types";
 import OnPageAnalyzer from "@/components/dashboard/OnPageAnalyzer";
 import RunReportButton from "@/components/dashboard/RunReportButton";
 
 const PLAN_PAGE_LIMITS: Record<string, number> = {
   STARTER: 10, PRO: 50, ENTERPRISE: 100, AGENCY: 500, ADMIN: 9999,
 };
-const CORE_AUDIT_DOMAIN = "redwagon.agency";
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-const CORE_AUDIT_PAGE_LIMIT = parsePositiveInt(process.env.REPORT_CORE_AUDIT_MAX_PAGES, 500);
-const GLOBAL_MAX_CRAWL_PAGES = parsePositiveInt(process.env.REPORT_GLOBAL_MAX_PAGES, 500);
 
 export default async function OnPageOptPage() {
   const session = await auth();
@@ -48,22 +29,10 @@ export default async function OnPageOptPage() {
   });
 
   const plan = (member?.tenant as { plan?: string } | undefined)?.plan ?? "STARTER";
+  const pageLimit = PLAN_PAGE_LIMITS[plan] ?? 10;
   const project = member?.tenant?.projects?.[0] ?? null;
-  const projectDomain = (project?.domain ?? "")
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .toLowerCase();
-  const planLimit = PLAN_PAGE_LIMITS[plan] ?? 10;
-  const requestedPages = projectDomain === CORE_AUDIT_DOMAIN
-    ? Math.max(planLimit, CORE_AUDIT_PAGE_LIMIT)
-    : planLimit;
-  const pageLimit = Math.min(requestedPages, GLOBAL_MAX_CRAWL_PAGES);
   const snapshot = project?.reportSnapshots?.[0] ?? null;
   const pages: PageAuditResult[] = parsePages(snapshot?.onPagePagesJson ?? null);
-  const onPageErrors: OnPageErrorItem[] = parseOnPageErrors((snapshot as Record<string, unknown> | null)?.onPageErrorsJson as string ?? null);
-  const duplicateTags: DuplicateTagItem[] = parseOnPageDuplicateTags((snapshot as Record<string, unknown> | null)?.onPageDuplicateTagsJson as string ?? null);
-  const brokenLinks: OnPageLinkItem[] = parseOnPageBrokenLinks((snapshot as Record<string, unknown> | null)?.onPageBrokenLinksJson as string ?? null);
 
   return (
     <div style={{ padding: "32px 36px" }}>
@@ -116,7 +85,7 @@ export default async function OnPageOptPage() {
           </Link>
         </div>
       ) : (
-        <OnPageAnalyzer pages={pages} projectId={project.id} plan={plan} onPageErrors={onPageErrors} duplicateTags={duplicateTags} brokenLinks={brokenLinks} />
+        <OnPageAnalyzer pages={pages} projectId={project.id} plan={plan} />
       )}
     </div>
   );

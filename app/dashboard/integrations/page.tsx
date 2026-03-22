@@ -1,168 +1,21 @@
 import { auth } from "@/lib/auth";
-import { isPrismaMissingTableError, prisma } from "@/lib/prisma";
-import { getGscSearchAnalytics } from "@/lib/integrations/google-search-console";
-import { getGa4Properties, getGa4Report } from "@/lib/integrations/google-analytics";
-import { headers } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
 export default async function IntegrationsPage() {
   const session = await auth();
   const userId = (session!.user as { id: string }).id;
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "";
-  const proto = headerStore.get("x-forwarded-proto") ?? "https";
-  const callbackUri = host ? `${proto}://${host}/api/auth/callback/google` : null;
 
-  let member: any = null;
-  try {
-    member = await prisma.tenantMember.findFirst({
-      where: { userId },
-      include: {
-        tenant: {
-          include: { integrations: true },
-        },
-      },
-    });
-  } catch (error) {
-    if (isPrismaMissingTableError(error, "Integration")) {
-      member = await prisma.tenantMember.findFirst({
-        where: { userId },
-        include: {
-          tenant: true,
-        },
-      });
-    } else {
-      throw error;
-    }
-  }
-
-  const project = await prisma.project.findFirst({
-    where: {
+  const member = await prisma.tenantMember.findFirst({
+    where: { userId },
+    include: {
       tenant: {
-        members: { some: { userId } },
+        include: { integrations: true },
       },
     },
-    select: { id: true, domain: true },
   });
 
-  const googleAccount = await prisma.account.findFirst({
-    where: { userId, provider: "google" },
-    select: { access_token: true },
-  });
-
-  const googleAccessToken = googleAccount?.access_token ?? null;
-
-  const integrations = (member?.tenant as { integrations?: Array<{ provider: string; metadata: string | null }> } | null)?.integrations ?? [];
-  const hasGoogleOAuth = !!googleAccessToken;
-  const connected = (provider: string) => {
-    if (provider === "google") return hasGoogleOAuth;
-    if (provider === "google-search-console") return hasGoogleOAuth;
-    if (provider === "google-analytics") return hasGoogleOAuth;
-    if (provider === "facebook") return integrations.some((i) => i.provider === provider);
-    return integrations.some((i) => i.provider === provider);
-  };
-
-  let gscPreview: Array<{ query: string; clicks: number; impressions: number; ctr: number; position: number }> = [];
-  let gscError: string | null = null;
-
-  if (googleAccessToken && project?.domain) {
-    const today = new Date();
-    const endDate = today.toISOString().split("T")[0];
-    const startDate = new Date(today.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    const siteUrls = [
-      `https://${project.domain}/`,
-      `sc-domain:${project.domain}`,
-      `https://www.${project.domain}/`,
-    ];
-
-    for (const siteUrl of siteUrls) {
-      try {
-        const gscData = await getGscSearchAnalytics(googleAccessToken, siteUrl, startDate, endDate, ["query"]);
-        if (gscData?.error) continue;
-        const rows = (gscData?.rows ?? []) as Record<string, unknown>[];
-        gscPreview = rows.slice(0, 10).map((row) => ({
-          query: (row.keys as string[])?.[0] ?? "",
-          clicks: Number(row.clicks ?? 0),
-          impressions: Number(row.impressions ?? 0),
-          ctr: Number(row.ctr ?? 0),
-          position: Number(row.position ?? 0),
-        })).filter((r) => r.query.length > 0);
-        break;
-      } catch {
-        continue;
-      }
-    }
-
-    if (gscPreview.length === 0) {
-      gscError = "No Search Console rows found for this project domain.";
-    }
-  }
-
-  const gaIntegration = integrations.find((i) => i.provider === "google-analytics");
-  let gaPropertyId: string | null = null;
-  if (gaIntegration?.metadata) {
-    try {
-      const parsed = JSON.parse(gaIntegration.metadata) as { propertyId?: string };
-      gaPropertyId = parsed.propertyId ?? null;
-    } catch {
-      gaPropertyId = null;
-    }
-  }
-
-  // Auto-discover a GA4 property if metadata wasn't configured yet.
-  if (googleAccessToken && !gaPropertyId) {
-    try {
-      const propertiesData = await getGa4Properties(googleAccessToken) as {
-        properties?: Array<{ name?: string; displayName?: string }>;
-      };
-      const firstProperty = propertiesData.properties?.[0]?.name ?? null;
-      if (firstProperty) {
-        gaPropertyId = firstProperty.replace("properties/", "");
-      }
-    } catch {
-      // Keep GA disabled when property discovery fails.
-    }
-  }
-
-  let gaSummary: { sessions: number; activeUsers: number; avgBounceRate: number | null } | null = null;
-  let gaError: string | null = null;
-
-  if (googleAccessToken && gaPropertyId) {
-    try {
-      const today = new Date();
-      const endDate = today.toISOString().split("T")[0];
-      const startDate = new Date(today.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-      const report = await getGa4Report(googleAccessToken, gaPropertyId, startDate, endDate) as {
-        rows?: Array<{ metricValues?: Array<{ value?: string }> }>;
-      };
-
-      const rows = report.rows ?? [];
-      let sessions = 0;
-      let activeUsers = 0;
-      let bounceTotal = 0;
-      let bounceRows = 0;
-
-      for (const row of rows) {
-        const metrics = row.metricValues ?? [];
-        sessions += Number(metrics[0]?.value ?? 0);
-        activeUsers += Number(metrics[1]?.value ?? 0);
-        const bounce = Number(metrics[2]?.value ?? 0);
-        if (!Number.isNaN(bounce) && bounce > 0) {
-          bounceTotal += bounce;
-          bounceRows += 1;
-        }
-      }
-
-      gaSummary = {
-        sessions,
-        activeUsers,
-        avgBounceRate: bounceRows > 0 ? Math.round((bounceTotal / bounceRows) * 1000) / 10 : null,
-      };
-    } catch {
-      gaError = "Unable to fetch GA4 report with the configured property ID.";
-    }
-  } else if (googleAccessToken && !gaPropertyId) {
-    gaError = "GA4 property not configured. Save provider metadata with a propertyId to enable GA4 dashboards.";
-  }
+  const integrations = member?.tenant?.integrations ?? [];
+  const connected = (provider: string) => integrations.some(i => i.provider === provider);
 
   const availableIntegrations = [
     {
@@ -221,83 +74,10 @@ export default async function IntegrationsPage() {
         </div>
       </div>
 
-      {callbackUri && (
-        <div style={{ background: "#fff7ed", border: "1px solid #fdba74", borderRadius: 12, padding: "14px 18px", marginBottom: 24 }}>
-          <p style={{ margin: 0, fontSize: 13, color: "#9a3412", fontWeight: 700 }}>Google OAuth setup note</p>
-          <p style={{ margin: "6px 0 0", fontSize: 13, color: "#7c2d12" }}>
-            If you see <strong>redirect_uri_mismatch</strong>, add this exact Authorized redirect URI in Google Cloud OAuth client settings:
-          </p>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: "#9a3412", fontFamily: "monospace" }}>{callbackUri}</p>
-        </div>
-      )}
-
-      {/* Live data previews */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 28 }}>
-        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9", fontWeight: 700, color: "#0f172a" }}>GSC Top Queries (Last 28 Days)</div>
-          {!googleAccessToken ? (
-            <div style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>Connect a Google account to load Search Console query data.</div>
-          ) : gscPreview.length === 0 ? (
-            <div style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>{gscError ?? "No GSC data available."}</div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ background: "#f8fafc" }}>
-                  {["Query", "Clicks", "Impr.", "Pos"].map((h) => (
-                    <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontSize: 11, color: "#64748b", borderBottom: "1px solid #e2e8f0" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {gscPreview.map((row, idx) => (
-                  <tr key={idx} style={{ borderBottom: "1px solid #f8fafc" }}>
-                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#0f172a" }}>{row.query}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151" }}>{row.clicks.toLocaleString()}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151" }}>{row.impressions.toLocaleString()}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151" }}>{row.position.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden" }}>
-          <div style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9", fontWeight: 700, color: "#0f172a" }}>GA4 Snapshot (Last 28 Days)</div>
-          {!googleAccessToken ? (
-            <div style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>Connect a Google account to load GA4 metrics.</div>
-          ) : gaSummary ? (
-            <div style={{ padding: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 10px" }}>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>Sessions</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{gaSummary.sessions.toLocaleString()}</div>
-                </div>
-                <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 10px" }}>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>Active Users</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{gaSummary.activeUsers.toLocaleString()}</div>
-                </div>
-                <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 10px" }}>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>Avg Bounce</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>{gaSummary.avgBounceRate !== null ? `${gaSummary.avgBounceRate}%` : "—"}</div>
-                </div>
-              </div>
-              {gaPropertyId && <p style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>Property: {gaPropertyId}</p>}
-            </div>
-          ) : (
-            <div style={{ padding: 16, fontSize: 13, color: "#94a3b8" }}>{gaError ?? "No GA4 data available."}</div>
-          )}
-        </div>
-      </div>
-
       {/* Integration cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 24 }}>
         {availableIntegrations.map(integration => {
           const isConnected = connected(integration.id);
-          const connectHref = integration.id === "facebook"
-            ? "/api/auth/signin/facebook?callbackUrl=%2Fdashboard%2Fintegrations"
-            : "/api/auth/signin/google?callbackUrl=%2Fdashboard%2Fintegrations";
-
           return (
             <div key={integration.id} style={{ background: "#ffffff", border: `1px solid ${isConnected ? "#10b981" : "#e2e8f0"}`, borderRadius: 16, padding: 28, position: "relative" }}>
               {isConnected && (
@@ -324,9 +104,7 @@ export default async function IntegrationsPage() {
                   </li>
                 ))}
               </ul>
-              <a href={connectHref} style={{
-                display: "block",
-                textAlign: "center",
+              <button style={{
                 width: "100%",
                 background: isConnected ? "#f8fafc" : integration.color,
                 color: isConnected ? "#64748b" : "#ffffff",
@@ -336,10 +114,9 @@ export default async function IntegrationsPage() {
                 fontWeight: 700,
                 fontSize: 14,
                 cursor: "pointer",
-                textDecoration: "none",
               }}>
                 {isConnected ? "Manage Connection" : `Connect ${integration.name}`}
-              </a>
+              </button>
             </div>
           );
         })}

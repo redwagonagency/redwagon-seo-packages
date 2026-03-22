@@ -23,33 +23,11 @@ export async function POST(req: NextRequest) {
   });
   if (!member) return Response.json({ error: "Forbidden" }, { status: 403 });
 
-  const existing = await prisma.savedKeyword.findFirst({
-    where: { projectId, keyword: keyword.keyword },
-    select: { id: true },
+  const saved = await prisma.savedKeyword.upsert({
+    where: { projectId_keyword: { projectId, keyword: keyword.keyword } } as Parameters<typeof prisma.savedKeyword.upsert>[0]["where"],
+    update: { volume: keyword.volume, difficulty: keyword.difficulty, cpc: keyword.cpc, intent: keyword.intent, source },
+    create: { projectId, keyword: keyword.keyword, volume: keyword.volume, difficulty: keyword.difficulty, cpc: keyword.cpc, intent: keyword.intent, source },
   });
-
-  const saved = existing
-    ? await prisma.savedKeyword.update({
-        where: { id: existing.id },
-        data: {
-          volume: keyword.volume,
-          difficulty: keyword.difficulty,
-          cpc: keyword.cpc,
-          intent: keyword.intent,
-          source,
-        },
-      })
-    : await prisma.savedKeyword.create({
-        data: {
-          projectId,
-          keyword: keyword.keyword,
-          volume: keyword.volume,
-          difficulty: keyword.difficulty,
-          cpc: keyword.cpc,
-          intent: keyword.intent,
-          source,
-        },
-      });
 
   return Response.json({ keyword: { ...saved, savedAt: saved.savedAt.toISOString() } });
 }

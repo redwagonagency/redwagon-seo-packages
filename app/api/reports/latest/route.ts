@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getReportProgress } from "@/lib/reports/progress";
 
 // GET /api/reports/latest?projectId=xxx
 // Returns the most recent ReportSnapshot for the given project.
@@ -37,16 +36,6 @@ export async function GET(req: NextRequest) {
 
   if (!snapshot) {
     return NextResponse.json(null);
-  }
-
-  // If the latest row is RUNNING but there is no active in-memory job,
-  // return the newest non-running snapshot so dashboards stay useful.
-  if (snapshot.status === "RUNNING" && !getReportProgress(projectId)) {
-    const stable = await prisma.reportSnapshot.findFirst({
-      where: { projectId, status: { not: "RUNNING" } },
-      orderBy: { createdAt: "desc" },
-    });
-    if (stable) return NextResponse.json(stable);
   }
 
   return NextResponse.json(snapshot);

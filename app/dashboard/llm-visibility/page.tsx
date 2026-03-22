@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import RunReportButton from "@/components/dashboard/RunReportButton";
-import { parseLlmSnapshot } from "@/lib/reports/types";
+import { parseLlm } from "@/lib/reports/types";
 
 export default async function LlmVisibilityPage() {
   const session = await auth();
@@ -26,10 +26,7 @@ export default async function LlmVisibilityPage() {
   const projects = member?.tenant?.projects ?? [];
   const project = projects[0] ?? null;
   const snapshot = project?.reportSnapshots?.[0] ?? null;
-  const llm = parseLlmSnapshot(snapshot?.llmJson ?? null);
-  const mentions = llm.mentions;
-  const topPages = llm.topPages ?? [];
-  const topDomains = llm.topDomains ?? [];
+  const mentions = parseLlm(snapshot?.llmJson ?? null);
   const mentionRate = snapshot?.llmMentionRate ?? 0;
 
   return (
@@ -133,60 +130,6 @@ export default async function LlmVisibilityPage() {
                 </tbody>
               </table>
             )}
-          </div>
-
-          <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Top LLM Pages</h3>
-              </div>
-              {topPages.length === 0 ? (
-                <div style={{ padding: "18px 20px", fontSize: 13, color: "#94a3b8" }}>No page-level LLM mention data yet.</div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc" }}>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "#64748b" }}>Page</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "#64748b" }}>Mentions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topPages.slice(0, 8).map((p, i) => (
-                      <tr key={`${p.page}-${i}`} style={{ borderBottom: "1px solid #f8fafc" }}>
-                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#0f172a", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.page || "—"}</td>
-                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>{p.mentions}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>Top LLM Domains</h3>
-              </div>
-              {topDomains.length === 0 ? (
-                <div style={{ padding: "18px 20px", fontSize: 13, color: "#94a3b8" }}>No domain-level LLM mention data yet.</div>
-              ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc" }}>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "#64748b" }}>Domain</th>
-                      <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, color: "#64748b" }}>Mentions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topDomains.slice(0, 8).map((d, i) => (
-                      <tr key={`${d.domain}-${i}`} style={{ borderBottom: "1px solid #f8fafc" }}>
-                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#0f172a" }}>{d.domain || "—"}</td>
-                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#0f172a", fontWeight: 700 }}>{d.mentions}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
         </>
       )}

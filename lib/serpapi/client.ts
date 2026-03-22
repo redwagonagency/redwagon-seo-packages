@@ -26,7 +26,7 @@ async function dfsPost(endpoint: string, body: unknown) {
 }
 
 /** Map a human-readable location string to a DataForSEO location_code. */
-export function locationNameToCode(location: string | undefined): number {
+function locationNameToCode(location: string | undefined): number {
   if (!location) return 2840;
   const l = location.toLowerCase();
   if (l.includes("united kingdom") || l === "uk" || l === "england" || l === "gb") return 2826;
@@ -62,27 +62,26 @@ export async function getRankForDomain(
       location_code: locationCode,
       language_code: "en",
       device: options.device ?? "desktop",
-      depth: 100,
       calculate_rectangles: false,
     },
   ]);
 
   const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
 
-  const cleanDomain = normalizeDomainHost(domain);
-  const organic = items.filter((item) => item.type === "organic");
+  const cleanDomain = domain
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .split("/")[0]
+    .toLowerCase();
 
-  const match = organic
-    .filter((item) => {
-      const host = extractHost(String(item.url ?? ""));
-      if (!host) return false;
-      return host === cleanDomain || host.endsWith(`.${cleanDomain}`);
-    })
-    .sort((a, b) => {
-      const ar = typeof a.rank_absolute === "number" ? a.rank_absolute : Number.MAX_SAFE_INTEGER;
-      const br = typeof b.rank_absolute === "number" ? b.rank_absolute : Number.MAX_SAFE_INTEGER;
-      return ar - br;
-    })[0];
+  const match = items.find((item) => {
+    if (item.type !== "organic") return false;
+    const url = String(item.url ?? "")
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .toLowerCase();
+    return url.startsWith(cleanDomain) || url.includes(cleanDomain);
+  });
 
   if (!match) return { position: null, url: null, title: null };
   return {
@@ -90,26 +89,6 @@ export async function getRankForDomain(
     url: typeof match.url === "string" ? match.url : null,
     title: typeof match.title === "string" ? match.title : null,
   };
-}
-
-function normalizeDomainHost(value: string): string {
-  return value
-    .replace(/^https?:\/\//i, "")
-    .replace(/^www\./i, "")
-    .split("/")[0]
-    .trim()
-    .toLowerCase();
-}
-
-function extractHost(value: string): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    return normalizeDomainHost(parsed.hostname);
-  } catch {
-    const fallback = normalizeDomainHost(value);
-    return fallback || null;
-  }
 }
 
 // --- LLM / AI Overview Visibility --------------------------------------------
@@ -188,10 +167,6 @@ export interface LocalResult {
   found: boolean;
 }
 
-export interface LocalKeywordResult extends LocalResult {
-  keyword: string;
-}
-
 export async function getLocalPackResult(
   businessName: string,
   location: string,
@@ -232,63 +207,6 @@ export async function getLocalPackResult(
   const reviews = ratingObj ? (typeof ratingObj.votes_count === "number" ? ratingObj.votes_count : null) : null;
 
   return {
-    position: typeof match.rank_absolute === "number" ? match.rank_absolute : null,
-    rating,
-    reviews,
-    address: typeof match.address === "string" ? match.address : null,
-    phone: typeof match.phone === "string" ? match.phone : null,
-    found: true,
-  };
-}
-
-export async function getLocalPackRankForKeyword(
-  keyword: string,
-  businessName: string,
-  location: string,
-  domain: string
-): Promise<LocalKeywordResult> {
-  const query = location ? `${keyword} ${location}` : keyword;
-  const locationCode = locationNameToCode(location);
-
-  const data = await dfsPost("/serp/google/maps/live/advanced", [
-    {
-      keyword: query,
-      location_code: locationCode,
-      language_code: "en",
-      device: "desktop",
-    },
-  ]);
-
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  const cleanDomain = normalizeDomainHost(domain);
-  const bizToken = businessName.toLowerCase().split(" ").filter(Boolean)[0] ?? "";
-
-  const match = items.find((r) => {
-    const websiteHost = extractHost(String(r.domain ?? r.website ?? r.url ?? ""));
-    const title = String(r.title ?? "").toLowerCase();
-    const domainMatch = websiteHost ? (websiteHost === cleanDomain || websiteHost.endsWith(`.${cleanDomain}`)) : false;
-    const titleMatch = bizToken.length > 2 && title.includes(bizToken);
-    return domainMatch || titleMatch;
-  });
-
-  if (!match) {
-    return {
-      keyword,
-      position: null,
-      rating: null,
-      reviews: null,
-      address: null,
-      phone: null,
-      found: false,
-    };
-  }
-
-  const ratingObj = match.rating as Record<string, unknown> | null | undefined;
-  const rating = ratingObj ? (typeof ratingObj.value === "number" ? ratingObj.value : null) : null;
-  const reviews = ratingObj ? (typeof ratingObj.votes_count === "number" ? ratingObj.votes_count : null) : null;
-
-  return {
-    keyword,
     position: typeof match.rank_absolute === "number" ? match.rank_absolute : null,
     rating,
     reviews,

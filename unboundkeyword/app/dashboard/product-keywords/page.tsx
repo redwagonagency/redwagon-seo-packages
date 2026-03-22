@@ -3,32 +3,30 @@
 import { useState } from "react";
 import { formatNumber } from "@/lib/utils";
 
-type ProductRow = {
-  keyword: string;
-  volume: number;
-  cpc: number | null;
-  difficulty: number;
-  intent: string | null;
-};
+interface ProductListing {
+  position: number | null;
+  title: string | null;
+  price: string | null;
+  seller: string | null;
+  rating: number | null;
+  reviews: number | null;
+  url: string | null;
+  imageUrl: string | null;
+}
 
-function getProductVariants(keyword: string): string[] {
-  const root = keyword.trim();
-  if (!root) return [];
-  return [
-    `${root} price`,
-    `best ${root}`,
-    `${root} near me`,
-    `${root} reviews`,
-    `${root} online`,
-    `${root} for sale`,
-  ];
+interface ProductKeywordResult {
+  keyword: string;
+  productCount: number;
+  avgPrice: string | null;
+  products: ProductListing[];
 }
 
 export default function ProductKeywordsPage() {
-  const [query, setQuery] = useState("dog food");
+  const [query, setQuery] = useState("laptop");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [rows, setRows] = useState<ProductRow[]>([]);
+  const [results, setResults] = useState<ProductKeywordResult[]>([]);
+  const [expandedKeyword, setExpandedKeyword] = useState<string | null>(null);
 
   async function runSearch(nextQuery?: string) {
     const keyword = (nextQuery ?? query).trim();
@@ -37,46 +35,30 @@ export default function ProductKeywordsPage() {
     setLoading(true);
     setError("");
     try {
-      const terms = getProductVariants(keyword);
-      const allRows: ProductRow[] = [];
+      const res = await fetch("/api/product-keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, location: 2840 }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        results?: ProductKeywordResult[];
+      };
+      if (!res.ok) throw new Error(data.error || "Search failed");
 
-      for (const term of terms) {
-        const res = await fetch("/api/keywords/research", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyword: term, mode: "overview", location: 2840, language: "en" }),
-        });
-        const data = (await res.json()) as {
-          error?: string;
-          keywords?: Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent?: string | null }>;
-        };
-
-        if (!res.ok) throw new Error(data.error || "Search failed");
-
-        allRows.push(
-          ...(data.keywords ?? []).map((row) => ({
-            keyword: row.keyword,
-            volume: row.volume ?? 0,
-            cpc: row.cpc ?? null,
-            difficulty: row.difficulty ?? 40,
-            intent: row.intent ?? null,
-          }))
-        );
-      }
-
-      const deduped = Array.from(new Map(allRows.map((row) => [row.keyword.toLowerCase(), row])).values())
-        .sort((a, b) => b.volume - a.volume)
-        .slice(0, 100);
-
-      setRows(deduped);
+      setResults(data.results ?? []);
       setQuery(keyword);
+      setExpandedKeyword((data.results ?? [])[0]?.keyword ?? null);
     } catch (e) {
-      setRows([]);
+      setResults([]);
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
       setLoading(false);
     }
   }
+
+  const totalProducts = results.reduce((sum, r) => sum + r.productCount, 0);
+  const expanded = results.find((r) => r.keyword === expandedKeyword);
 
   return (
     <div className="p-8 max-w-7xl">
@@ -105,41 +87,74 @@ export default function ProductKeywordsPage() {
 
       {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h1 className="text-2xl font-black text-slate-900">Product Keywords</h1>
-          <span className="text-sm font-semibold text-slate-500">{rows.length.toLocaleString()} results</span>
+      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
+        {/* Keywords list */}
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-500">Product Keyword Variants</p>
+            <span className="text-xs font-semibold text-slate-500">{results.length} found</span>
+          </div>
+          <div className="space-y-1 max-h-[550px] overflow-y-auto">
+            {results.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-slate-400">Search to discover product keywords and shopping results.</div>
+            ) : (
+              results.map((result) => (
+                <button
+                  key={result.keyword}
+                  onClick={() => setExpandedKeyword(result.keyword)}
+                  className={`w-full text-left px-6 py-3 border-b border-slate-100 transition-colors ${
+                    expandedKeyword === result.keyword
+                      ? "bg-[#fff3ee] border-l-4 border-l-[#f15b27]"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-800">{result.keyword}</p>
+                      <p className="text-xs text-slate-500">{result.productCount} products · {result.avgPrice || "—"}</p>
+                    </div>
+                    <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Difficulty</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">Intent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">Search to load product-focused keyword opportunities.</td>
-                </tr>
-              ) : rows.map((row) => (
-                <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{row.keyword}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-slate-700">{row.difficulty}</td>
-                  <td className="px-4 py-2.5 text-center text-xs capitalize text-slate-600">{row.intent ?? "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* Products detail */}
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden h-fit sticky top-8">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h2 className="text-lg font-black text-slate-900">{expanded?.keyword || "Select a keyword"}</h2>
+            <p className="text-xs text-slate-500 mt-1">{expanded?.productCount ?? 0} products</p>
+          </div>
+          <div className="max-h-[600px] overflow-y-auto space-y-3 p-4">
+            {expanded?.products.slice(0, 8).map((product, idx) => (
+              <div key={`${expanded.keyword}-${idx}`} className="pb-3 border-b border-slate-100 last:border-0">
+                <p className="text-xs font-semibold text-slate-500">#{(product.position ?? idx) + 1}</p>
+                <p className="text-sm font-medium text-slate-800 line-clamp-2 mt-0.5">{product.title || "Untitled"}</p>
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <span className="text-sm font-bold text-[#f15b27]">{product.price || "—"}</span>
+                  {product.rating ? (
+                    <span className="text-xs text-slate-500">⭐ {product.rating.toFixed(1)}</span>
+                  ) : null}
+                </div>
+                {product.seller ? <p className="text-xs text-slate-500 mt-1">{product.seller}</p> : null}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      {totalProducts > 0 && (
+        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs text-slate-600">
+            <span className="font-semibold">{totalProducts.toLocaleString()}</span> total products found across{" "}
+            <span className="font-semibold">{results.length}</span> keyword variants. Click any keyword to see live Google Shopping results.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState, useMemo } from "react";
 import RunReportButton from "@/components/dashboard/RunReportButton";
-import { parsePages, parseSiteIssues, type SiteIssue, type PageAuditResult } from "@/lib/reports/types";
+import type { SiteIssue, PageAuditResult } from "@/lib/reports/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,28 +23,6 @@ interface SnapshotSummary {
   status: string;
   siteScore: number | null;
   onPageCrawledCount: number | null;
-}
-
-interface ProgressPayload {
-  status: string;
-  phase: string;
-  message: string;
-  percent: number;
-  crawledPages: number;
-  targetPages: number;
-}
-
-interface LatestSnapshotPayload {
-  id: string;
-  createdAt: string;
-  status: string;
-  siteScore: number | null;
-  siteCrawledPages: number | null;
-  onPageCrawledCount: number | null;
-  onPageAvgScore: number | null;
-  errorMessage: string | null;
-  siteIssuesJson?: string | null;
-  onPagePagesJson?: string | null;
 }
 
 interface Props {
@@ -137,112 +115,17 @@ export default function SiteAuditClient({
   projectName,
   plan,
   pageLimit,
-  snapshot: initialSnapshot,
+  snapshot,
   snapshots,
-  issues: initialIssues,
-  pages: initialPages,
+  issues,
+  pages,
 }: Props) {
   const [tab, setTab] = useState<TabId>("overview");
   const [issueFilter, setIssueFilter] = useState<"all" | "critical" | "warning" | "info">("all");
   const [pageSort, setPageSort] = useState<"issues" | "score" | "url">("issues");
-  const [snapshot, setSnapshot] = useState<SnapshotData | null>(initialSnapshot);
-  const [issues, setIssues] = useState<SiteIssue[]>(initialIssues);
-  const [pages, setPages] = useState<PageAuditResult[]>(initialPages);
-  const [runProgress, setRunProgress] = useState<ProgressPayload | null>(
-    initialSnapshot?.status === "RUNNING"
-      ? {
-          status: "RUNNING",
-          phase: "On-page crawl",
-          message: "Report running",
-          percent: 1,
-          crawledPages: initialSnapshot.onPageCrawledCount ?? 0,
-          targetPages: pageLimit,
-        }
-      : null
-  );
-
-  useEffect(() => {
-    setSnapshot(initialSnapshot);
-    setIssues(initialIssues);
-    setPages(initialPages);
-    if (initialSnapshot?.status === "RUNNING") {
-      setRunProgress((prev) =>
-        prev ?? {
-          status: "RUNNING",
-          phase: "On-page crawl",
-          message: "Report running",
-          percent: 1,
-          crawledPages: initialSnapshot.onPageCrawledCount ?? 0,
-          targetPages: pageLimit,
-        }
-      );
-    }
-  }, [initialSnapshot, initialIssues, initialPages, pageLimit]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const applyLatestSnapshot = (latest: LatestSnapshotPayload) => {
-      if (cancelled) return;
-      setSnapshot({
-        id: latest.id,
-        createdAt: latest.createdAt,
-        status: latest.status,
-        siteScore: latest.siteScore,
-        siteCrawledPages: latest.siteCrawledPages,
-        onPageCrawledCount: latest.onPageCrawledCount,
-        onPageAvgScore: latest.onPageAvgScore,
-        errorMessage: latest.errorMessage,
-      });
-      setIssues(parseSiteIssues(latest.siteIssuesJson ?? null));
-      setPages(parsePages(latest.onPagePagesJson ?? null));
-    };
-
-    const fetchLatest = async () => {
-      const latestRes = await fetch(`/api/reports/latest?projectId=${encodeURIComponent(projectId)}`, {
-        cache: "no-store",
-      });
-      if (!latestRes.ok) return;
-      const latest = (await latestRes.json()) as LatestSnapshotPayload | null;
-      if (latest) applyLatestSnapshot(latest);
-    };
-
-    const poll = async () => {
-      try {
-        const progressRes = await fetch(`/api/reports/progress?projectId=${encodeURIComponent(projectId)}`, {
-          cache: "no-store",
-        });
-        if (!progressRes.ok) return;
-
-        const progress = (await progressRes.json()) as ProgressPayload | null;
-        if (!progress || cancelled) return;
-
-        if (progress.status === "RUNNING") {
-          setRunProgress(progress);
-          await fetchLatest();
-          return;
-        }
-
-        setRunProgress(null);
-        await fetchLatest();
-      } catch {
-        // Keep previous UI state for transient polling failures.
-      }
-    };
-
-    void poll();
-    const timer = window.setInterval(() => {
-      void poll();
-    }, 4000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [projectId]);
 
   const siteScore = snapshot?.siteScore ?? 0;
-  const totalCrawled = pages.length || snapshot?.onPageCrawledCount || runProgress?.crawledPages || 0;
+  const totalCrawled = pages.length || snapshot?.onPageCrawledCount || 0;
 
   // Page health breakdown
   const healthy = pages.filter((p) => (p.score ?? 0) >= 80).length;
@@ -451,26 +334,13 @@ export default function SiteAuditClient({
               {totalCrawled >= pageLimit && pageLimit !== 9999 && "⚠️"} Pages
               crawled: {totalCrawled}/{pageLimit === 9999 ? "∞" : pageLimit}
             </span>
-            {runProgress && (
-              <span style={{ color: "#1a56db", fontWeight: 600 }}>
-                {runProgress.phase} {runProgress.percent}% · {runProgress.crawledPages}/{runProgress.targetPages || pageLimit} pages
-              </span>
-            )}
             <span
               style={{
                 fontSize: 11,
                 background:
-                  snapshot.status === "COMPLETE"
-                    ? "#dcfce7"
-                    : snapshot.status === "RUNNING"
-                    ? "#dbeafe"
-                    : "#fef3c7",
+                  snapshot.status === "COMPLETE" ? "#dcfce7" : "#fef3c7",
                 color:
-                  snapshot.status === "COMPLETE"
-                    ? "#16a34a"
-                    : snapshot.status === "RUNNING"
-                    ? "#1d4ed8"
-                    : "#b45309",
+                  snapshot.status === "COMPLETE" ? "#16a34a" : "#b45309",
                 padding: "2px 8px",
                 borderRadius: 4,
                 fontWeight: 600,
