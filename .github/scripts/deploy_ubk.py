@@ -3,7 +3,7 @@
 Deploy unboundkeyword.com to VPS.
 Uploads source from $GITHUB_WORKSPACE/unboundkeyword/ via SFTP tarball.
 """
-import os, sys, tarfile, io, textwrap, zlib, base64
+import os, sys, tarfile, io, textwrap
 import paramiko
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -186,23 +186,6 @@ def build_archive():
 
 # ── Connect ───────────────────────────────────────────────────────────────────
 def connect():
-    import subprocess
-    subprocess.run(["apt-get", "install", "-y", "-q", "openssh-client", "sshpass"],
-                   capture_output=True)
-
-    probe = subprocess.run(
-        ["sshpass", "-p", PASSWORD, "ssh", "-v",
-         "-o", "StrictHostKeyChecking=no", "-o", "BatchMode=no",
-         "-o", "PasswordAuthentication=yes", "-o", "PubkeyAuthentication=no",
-         "-o", "ConnectTimeout=15",
-         f"{USER}@{HOST}", "echo AUTH_OK"],
-        capture_output=True, text=True, timeout=30
-    )
-    print("sshpass probe:", probe.stdout.strip(), "exit:", probe.returncode)
-    for line in probe.stderr.splitlines():
-        if any(k in line for k in ["AUTH", "auth", "password", "accept", "method", "denied"]):
-            print("SSH:", line)
-
     def ki_handler(title, instructions, prompts):
         return [PASSWORD for _ in prompts]
 

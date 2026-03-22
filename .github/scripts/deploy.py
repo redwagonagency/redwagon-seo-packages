@@ -135,37 +135,6 @@ def sftp_write(client, remote_path, content):
     sftp.close()
     print(f"  Wrote {remote_path}")
 
-# ── Probe with sshpass for detailed error output ─────────────────────────────
-import subprocess
-print("Installing openssh-client and sshpass for diagnostics...")
-subprocess.run(['apt-get', 'install', '-y', '-q', 'openssh-client', 'sshpass'],
-               capture_output=True)
-
-print(f"\nProbing SSH with sshpass (verbose)...")
-probe = subprocess.run(
-    ['sshpass', '-p', PASSWORD,
-     'ssh', '-v',
-     '-o', 'StrictHostKeyChecking=no',
-     '-o', 'BatchMode=no',
-     '-o', 'PasswordAuthentication=yes',
-     '-o', 'PubkeyAuthentication=no',
-     '-o', 'ConnectTimeout=15',
-     f'{USER}@{HOST}', 'echo AUTH_OK'],
-    capture_output=True, text=True, timeout=30
-)
-print("STDOUT:", probe.stdout.strip())
-# Show only relevant debug lines
-for line in probe.stderr.splitlines():
-    if any(k in line for k in ['debug1', 'AUTH', 'auth', 'password', 'Permission', 'denied', 'accept', 'offer', 'method', 'Authentications']):
-        print("SSH:", line)
-print(f"sshpass exit code: {probe.returncode}")
-if probe.returncode == 0 or 'AUTH_OK' in probe.stdout:
-    print("\nsshpass auth SUCCEEDED! Proceeding with deployment via subprocess SSH...")
-    USE_SSHPASS = True
-else:
-    print("\nsshpass auth failed, trying Paramiko...")
-    USE_SSHPASS = False
-
 # ── Connect ───────────────────────────────────────────────────────────────────
 print(f"\nConnecting to {USER}@{HOST}:22 ...")
 
