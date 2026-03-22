@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "UnBoundKeyword — Keyword List Builder",
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Google Tag Manager (noscript) */}
         <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-WFRFTCCD" height="0" width="0" style={{ display: 'none', visibility: 'hidden' }}></iframe></noscript>
         {/* End Google Tag Manager (noscript) */}
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
