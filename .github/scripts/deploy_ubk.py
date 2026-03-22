@@ -271,24 +271,26 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx && echo "nginx HTTP OK"
 """, "Enabling nginx vhost for unboundkeyword.com (HTTP)")
 
-    # SSL via Let's Encrypt
+    # SSL via Let's Encrypt + conditional nginx SSL config
     run(client, f"""
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y -q certbot python3-certbot-nginx 2>&1 | tail -3
 certbot certonly --nginx \
-  -d unboundkeyword.com -d www.unboundkeyword.com \
+  -d {DOMAIN} \
   --non-interactive --agree-tos --email {EMAIL} \
-  --keep-until-expiring \
-  2>&1 | tail -20
+  --keep-until-expiring 2>&1 | tail -20 || echo "certbot failed or cert already valid"
 echo "Certbot exit: $?"
-""", "Obtaining SSL certificate via Let's Encrypt")
 
-    # Write full SSL nginx config
-    sftp2 = client.open_sftp()
-    sftp_write(sftp2, "/etc/nginx/sites-available/unboundkeyword", NGINX_SSL)
-    sftp2.close()
-    run(client, "nginx -t && systemctl reload nginx && echo 'nginx SSL OK'",
-        "Activating SSL nginx config")
+if [ -f "/etc/letsencrypt/live/{DOMAIN}/fullchain.pem" ]; then
+  echo "Cert obtained - writing SSL nginx config..."
+  cat > /etc/nginx/sites-available/{APP_NAME} << 'NGINX_EOF'
+{NGINX_SSL}NGINX_EOF
+  nginx -t && systemctl reload nginx && echo "nginx SSL OK"
+else
+  echo "WARNING: No SSL cert - site will run on HTTP only"
+  nginx -t && systemctl reload nginx && echo "nginx HTTP OK"
+fi
+""", "SSL certificate + conditional nginx SSL config")
 
     # Install npm deps
     run(client, f"cd {APP_DIR} && npm ci", "npm ci", timeout=300)
