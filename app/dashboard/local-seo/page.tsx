@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import RunReportButton from "@/components/dashboard/RunReportButton";
 import { parseLocal } from "@/lib/reports/types";
+import type { LocalSeoData } from "@/lib/reports/types";
 
 export default async function LocalSeoPage() {
   const session = await auth();
@@ -27,6 +28,7 @@ export default async function LocalSeoPage() {
   const project = projects[0] ?? null;
   const snapshot = project?.reportSnapshots?.[0] ?? null;
   const local = parseLocal(snapshot?.localJson ?? null);
+const local: LocalSeoData | null = parseLocal(snapshot?.localJson ?? null);
 
   return (
     <div style={{ padding: "32px 36px" }}>
