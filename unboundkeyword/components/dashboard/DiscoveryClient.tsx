@@ -130,7 +130,7 @@ function KeywordWheel({
   onToggleKeyword: (keyword: string) => void;
 }) {
   const cfg = GROUP_CONFIG[group.type];
-  const items = group.keywords.slice(0, 24);
+  const items = group.keywords;
   const centerX = 340;
   const centerY = 340;
   const innerRadius = 74;
@@ -144,7 +144,7 @@ function KeywordWheel({
           <h2 className="text-lg font-semibold text-slate-900">{group.label} Wheel</h2>
           <p className="text-sm text-slate-500">AnswerThePublic-style circular view for {group.label.toLowerCase()} keywords.</p>
         </div>
-        <Badge variant={cfg.badge}>{items.length} visible</Badge>
+        <Badge variant={cfg.badge}>{items.length} clickable</Badge>
       </div>
 
       <div className="overflow-x-auto">
@@ -173,7 +173,19 @@ function KeywordWheel({
             const isSelected = selected.has(keyword.keyword);
 
             return (
-              <g key={keyword.keyword} onClick={() => onToggleKeyword(keyword.keyword)} className="cursor-pointer">
+              <g
+                key={`${keyword.keyword}-${index}`}
+                onClick={() => onToggleKeyword(keyword.keyword)}
+                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onToggleKeyword(keyword.keyword);
+                  }
+                }}
+              >
                 <line
                   x1={innerX}
                   y1={innerY}
@@ -535,25 +547,27 @@ export default function DiscoveryClient() {
           </div>
 
           {(() => {
-            const wheelType = (activeGroup && WHEEL_GROUPS.includes(activeGroup as WheelGroupType)
-              ? activeGroup
-              : WHEEL_GROUPS.find((type) => allGroups.some((group) => group.type === type))) as WheelGroupType | undefined;
-            const wheelGroup = wheelType ? allGroups.find((group) => group.type === wheelType) : undefined;
+            const wheelGroups = WHEEL_GROUPS
+              .map((type) => allGroups.find((group) => group.type === type))
+              .filter((group): group is DiscoveryGroup => Boolean(group && group.keywords.length));
 
-            if (!wheelGroup) {
+            if (wheelGroups.length === 0) {
               return null;
             }
 
             return (
-              <div className="mb-8">
-                <KeywordWheel
-                  seed={result.seed}
-                  group={wheelGroup}
-                  selected={selected}
-                  onToggleKeyword={toggleKeyword}
-                />
+              <div className="mb-8 space-y-6">
+                {wheelGroups.map((wheelGroup) => (
+                  <KeywordWheel
+                    key={wheelGroup.type}
+                    seed={result.seed}
+                    group={wheelGroup}
+                    selected={selected}
+                    onToggleKeyword={toggleKeyword}
+                  />
+                ))}
                 <p className="mt-3 text-xs text-slate-500">
-                  The circle stays visible as the visual layer for discovery. The master table below merges every keyword source into one place.
+                  All discovery circles stay visible by default so users can click through every questions, prepositions, comparisons, and related keyword item.
                 </p>
               </div>
             );
