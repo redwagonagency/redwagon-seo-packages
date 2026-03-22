@@ -39,7 +39,7 @@ ENV_CONTENT = textwrap.dedent(f"""\
 NGINX_CONFIG_HTTP = textwrap.dedent("""\
     server {
         listen 80;
-        server_name searchauditpro.com www.searchauditpro.com;
+        server_name searchauditpro.com;
         client_max_body_size 50M;
         location / {
             proxy_pass http://localhost:3000;
@@ -60,13 +60,13 @@ NGINX_CONFIG_HTTP = textwrap.dedent("""\
 NGINX_CONFIG = textwrap.dedent("""\
     server {
         listen 80;
-        server_name searchauditpro.com www.searchauditpro.com;
+        server_name searchauditpro.com;
         return 301 https://$host$request_uri;
     }
 
     server {
         listen 443 ssl;
-        server_name searchauditpro.com www.searchauditpro.com;
+        server_name searchauditpro.com;
 
         ssl_certificate     /etc/letsencrypt/live/searchauditpro.com/fullchain.pem;
         ssl_certificate_key /etc/letsencrypt/live/searchauditpro.com/privkey.pem;
@@ -259,23 +259,27 @@ nginx -t && systemctl restart nginx && echo "nginx HTTP OK"
 # ── SSL via Let's Encrypt ──────────────────────────────────────────────────────
 run(client, f"""
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y -q certbot python3-certbot-nginx
-
-# Obtain or renew cert (non-interactive)
+apt-get install -y -q certbot python3-certbot-nginx 2>&1 | tail -3
 certbot certonly --nginx \\
-  -d searchauditpro.com -d www.searchauditpro.com \\
+  -d searchauditpro.com \\
   --non-interactive --agree-tos --email {EMAIL} \\
-  --keep-until-expiring \\
-  2>&1 | tail -20
-
+  --keep-until-expiring 2>&1 | tail -20 || echo "certbot failed or cert already valid"
 echo "Certbot exit: $?"
+
+if [ -f "/etc/letsencrypt/live/searchauditpro.com/fullchain.pem" ]; then
+  echo "Cert obtained - writing SSL nginx config..."
+fi
 """, "Obtaining SSL certificate via Let's Encrypt")
 
-# Write full HTTPS nginx config
-sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG)
-run(client, """
-nginx -t && systemctl reload nginx && echo "nginx SSL OK"
-""", "Activating SSL nginx config")
+# Conditionally write SSL nginx config
+run(client, f"""
+if [ -f "/etc/letsencrypt/live/searchauditpro.com/fullchain.pem" ]; then
+  cat > /etc/nginx/sites-available/searchauditpro << 'NGINX_EOF'
+{NGINX_CONFIG}NGINX_EOF
+  echo "SSL nginx config written"
+fi
+nginx -t && systemctl reload nginx && echo "nginx OK"
+""", "Activating nginx config")
 
 # ── Install dependencies ──────────────────────────────────────────────────────
 run(client, f"cd {APP_DIR} && npm ci", "Installing npm dependencies", timeout=300)
