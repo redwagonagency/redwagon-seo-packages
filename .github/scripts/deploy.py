@@ -95,24 +95,76 @@ def sftp_write(client, remote_path, content):
 
 # ── Connect ───────────────────────────────────────────────────────────────────
 print(f"Connecting to {USER}@{HOST}:22 ...")
+
+# First: probe what auth methods the server supports
+transport = paramiko.Transport((HOST, 22))
+transport.start_client(timeout=30)
+try:
+    transport.auth_none(USER)
+except paramiko.BadAuthenticationType as e:
+    allowed = e.allowed_types
+    print(f"Server supported auth methods: {allowed}")
+except Exception as e:
+    print(f"Probe failed: {e} — continuing anyway")
+    allowed = ["password", "keyboard-interactive"]
+
+# Try keyboard-interactive auth explicitly
+def ki_handler(title, instructions, prompts):
+    print(f"  KI challenge: {repr(title)}, prompts={len(prompts)}")
+    return [PASSWORD for _ in prompts]
+
+connected = False
+
+# Method 1: keyboard-interactive
+if not connected and "keyboard-interactive" in allowed:
+    try:
+        if transport.is_authenticated():
+            transport.close()
+            transport = paramiko.Transport((HOST, 22))
+            transport.start_client(timeout=30)
+        transport.auth_interactive(USER, ki_handler)
+        print("Connected via keyboard-interactive!")
+        connected = True
+    except paramiko.AuthenticationException as e:
+        print(f"keyboard-interactive failed: {e}")
+        transport.close()
+
+# Method 2: password
+if not connected and "password" in allowed:
+    try:
+        transport = paramiko.Transport((HOST, 22))
+        transport.start_client(timeout=30)
+        transport.auth_password(USER, PASSWORD)
+        print("Connected via password!")
+        connected = True
+    except paramiko.AuthenticationException as e:
+        print(f"password auth failed: {e}")
+        transport.close()
+
+# Method 3: fallback with paramiko SSHClient (tries all methods)
+if not connected:
+    try:
+        transport = paramiko.Transport((HOST, 22))
+        transport.start_client(timeout=30)
+        transport.auth_interactive_dumb(USER, handler=ki_handler)
+        print("Connected via interactive-dumb!")
+        connected = True
+    except Exception as e:
+        print(f"interactive-dumb failed: {e}")
+        transport.close()
+
+if not connected:
+    print(f"\nERROR: Could not authenticate to {USER}@{HOST}", file=sys.stderr)
+    print("Please verify:", file=sys.stderr)
+    print("  1. SSH password is correct in SERVER_PASSWORD secret", file=sys.stderr)
+    print("  2. PasswordAuthentication or KbdInteractiveAuthentication is enabled on server", file=sys.stderr)
+    sys.exit(1)
+
+# Attach transport to SSHClient
 client = paramiko.SSHClient()
 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-try:
-    client.connect(
-        HOST, 22,
-        username=USER,
-        password=PASSWORD,
-        allow_agent=False,
-        look_for_keys=False,
-        timeout=30,
-        auth_timeout=30,
-        banner_timeout=30,
-    )
-    print("Connected!")
-except Exception as e:
-    print(f"Connection failed: {e}", file=sys.stderr)
-    sys.exit(1)
+client._transport = transport
+print("SSH session established!")
 
 # ── Bootstrap: install Node 20, PM2, git, nginx ───────────────────────────────
 run(client, r"""
