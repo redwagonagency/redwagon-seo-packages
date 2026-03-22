@@ -209,9 +209,6 @@ model ReportSnapshot {
   onPagePagesJson   String?   // JSON: PageAuditResult[]
   onPageCrawledCount Int?
   onPageAvgScore   Int?
-  onPageErrorsJson        String?  // JSON: OnPageErrorItem[] — site-wide error type counts
-  onPageDuplicateTagsJson String?  // JSON: DuplicateTagItem[] — duplicate title/description
-  onPageBrokenLinksJson   String?  // JSON: OnPageLinkItem[] — broken links (4xx/5xx targets)
 
   // Rank Tracking (SerpAPI)
   rankingsJson     String?   // JSON: RankingEntry[]
@@ -237,21 +234,6 @@ model ReportSnapshot {
 
   // Competitor Research (DataForSEO)
   competitorJson   String?   // JSON: CompetitorResult[]
-
-  // User Domain Positioning (Labs APIs)
-  userKeywordCountJson   String?   // JSON: { total: number }
-  userTopPagesJson       String?   // JSON: { url, traffic }[]
-  growthOpportunitiesJson String?  // JSON: growth opportunities for user domain
-
-  // Keyword Research (Labs APIs - Ideas, Intent, Trending)
-  keywordIdeaJson       String?   // JSON: { ideas, suggestions, relatedByKeyword }
-  keywordSearchIntentJson String? // JSON: SearchIntentItem[]
-  topSearchesJson       String?   // JSON: TopSearchItem[]
-  siteKeywordsJson      String?   // JSON: KeywordForSiteItem[]
-
-  // Category Analysis (Labs APIs - Domain Categories & Metrics)
-  domainCategoriesJson  String?   // JSON: { id, name, relevance, keywords }[]
-  categoryMetricsJson   String?   // JSON: { id, name, keywords, traffic, rank }[]
 
   errorMessage     String?
   createdAt        DateTime  @default(now())
@@ -331,4 +313,19 @@ model DomainAnalysis {
   competitorsJson String?  // JSON: {domain,intersections,rank}[]
   analyzedAt      DateTime @default(now())
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model IndustryStat {
+  id          String   @id @default(cuid())
+  industry    String   @default("general")
+  metricKey   String
+  metricValue Float
+  unit        String?
+  note        String?
+  source      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([industry, metricKey])
+  @@index([industry])
 }

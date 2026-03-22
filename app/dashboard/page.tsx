@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import Image from "next/image";
+import { buildJoeInsight } from "@/lib/joe-insights";
+import { isPrismaMissingTableError } from "@/lib/prisma";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -20,6 +23,41 @@ export default async function DashboardPage() {
 
   const tenant = member?.tenant;
   const projects = tenant?.projects ?? [];
+
+  const [trackedKeywords, averageCpc, industryStats] = await Promise.all([
+    prisma.savedKeyword.count({ where: { project: { tenantId: tenant?.id ?? "" } } }),
+    prisma.savedKeyword.aggregate({
+      where: { project: { tenantId: tenant?.id ?? "" } },
+      _avg: { cpc: true },
+    }),
+    (async () => {
+      try {
+        const rows = await (prisma as unknown as {
+          industryStat: {
+            findMany: (args: unknown) => Promise<Array<{ metricKey: string; metricValue: number; unit: string | null; note: string | null }>>;
+          };
+        }).industryStat.findMany({
+          where: { industry: "general" },
+          select: { metricKey: true, metricValue: true, unit: true, note: true },
+          take: 20,
+        });
+        return rows;
+      } catch (error) {
+        if (isPrismaMissingTableError(error, "IndustryStat")) return [];
+        throw error;
+      }
+    })(),
+  ]);
+
+  const joeInsight = buildJoeInsight({
+    userName: user.name?.split(" ")[0] ?? "Team",
+    tenantName: tenant?.name ?? "Workspace",
+    projectCount: projects.length,
+    topProjectDomain: projects[0]?.domain ?? null,
+    trackedKeywords,
+    avgKeywordCpc: averageCpc._avg.cpc ?? 0,
+    industryStats,
+  });
 
   const statCards = [
     { label: "Projects", value: projects.length, icon: "📁", color: "#1a56db", href: "/dashboard/projects" },
@@ -120,6 +158,24 @@ export default async function DashboardPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 28, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 14, padding: "18px 20px" }}>
+        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <Image
+            src="/joe-headshot.png"
+            alt="Joe from SearchAuditPro"
+            width={54}
+            height={54}
+            style={{ borderRadius: 999, objectFit: "cover", border: "2px solid rgba(26,86,219,0.2)" }}
+          />
+          <div>
+            <p style={{ fontSize: 11, fontWeight: 800, color: "#1a56db", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+              Joe's Industry Insight
+            </p>
+            <p style={{ fontSize: 14, color: "#334155", lineHeight: 1.7 }}>{joeInsight}</p>
           </div>
         </div>
       </div>

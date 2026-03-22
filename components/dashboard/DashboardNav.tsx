@@ -37,7 +37,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Keyword Research",
         children: [
           { href: "/dashboard/keyword-research", label: "Keyword Overview" },
-          { href: "/dashboard/keyword-research/magic", label: "Keyword Magic Tool" },
+          { href: "/dashboard/keyword-research/magic", label: "Keyword Discovery" },
           { href: "/dashboard/keyword-research/gap", label: "Keyword Gap" },
         ],
       },
@@ -90,6 +90,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Local SEO",
         children: [
           { href: "/dashboard/local-seo", label: "Map Rankings" },
+          { href: "/dashboard/local-seo/product-keywords", label: "Product Keywords" },
           { href: "/dashboard/citations", label: "Citations / NAP" },
         ],
       },
@@ -110,28 +111,21 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+// Flat list of all items for expanded-state initialization
+const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
+
 interface Props {
   userName: string;
   userEmail: string;
-  userRole: string;
 }
 
-export default function DashboardNav({ userName, userEmail, userRole }: Props) {
+export default function DashboardNav({ userName, userEmail }: Props) {
   const pathname = usePathname();
-
-  const navSections = NAV_SECTIONS.map((section) => {
-    if (section.sectionLabel !== "ACCOUNT") return section;
-    const accountItems = [...section.items];
-    if (userRole === "SUPERADMIN") {
-      accountItems.push({ href: "/superadmin", icon: "🛡", label: "SuperAdmin" });
-    }
-    return { ...section, items: accountItems };
-  });
+  const isJoeSuperAdmin = userEmail.toLowerCase() === "joe@redwagon.agency";
 
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
-    const allItems = navSections.flatMap((s) => s.items);
-    for (const item of allItems) {
+    for (const item of ALL_ITEMS) {
       if (item.children && pathname.startsWith(item.href)) {
         init[item.href] = true;
       }
@@ -196,7 +190,7 @@ export default function DashboardNav({ userName, userEmail, userRole }: Props) {
 
       {/* Nav */}
       <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
-        {navSections.map((section, si) => (
+        {NAV_SECTIONS.map((section, si) => (
           <div key={si}>
             {section.sectionLabel && (
               <p
@@ -309,6 +303,16 @@ export default function DashboardNav({ userName, userEmail, userRole }: Props) {
                 </div>
               );
             })}
+
+            {section.sectionLabel === "ACCOUNT" && isJoeSuperAdmin ? (
+              <Link
+                href="/superadmin"
+                style={linkStyle(pathname === "/superadmin")}
+              >
+                <span style={{ fontSize: 14 }}>🛡️</span>
+                Superadmin
+              </Link>
+            ) : null}
           </div>
         ))}
       </nav>

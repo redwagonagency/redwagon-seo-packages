@@ -1,12 +1,16 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { isJoeSuperAdmin } from "@/lib/superadmin";
+import IndustryStatsManager from "@/components/dashboard/IndustryStatsManager";
+import { isPrismaMissingTableError } from "@/lib/prisma";
 
 export default async function SuperAdminPage() {
   const session = await auth();
-  const user = session?.user as { id: string; role: string } | undefined;
+  const user = session?.user as { id: string; role: string; email?: string | null } | undefined;
 
-  if (!user || user.role !== "SUPERADMIN") {
+  const canAccess = !!user && (user.role === "SUPERADMIN" || isJoeSuperAdmin(user.email));
+  if (!canAccess) {
     redirect("/dashboard");
   }
 
@@ -26,6 +30,23 @@ export default async function SuperAdminPage() {
     },
     take: 20,
   });
+
+  const industryStats = await (async () => {
+    try {
+      const rows = await (prisma as unknown as {
+        industryStat: {
+          findMany: (args: unknown) => Promise<Array<{ industry: string; metricKey: string; metricValue: number; unit: string | null; note: string | null }>>;
+        };
+      }).industryStat.findMany({
+        orderBy: [{ industry: "asc" }, { metricKey: "asc" }],
+        take: 60,
+      });
+      return rows;
+    } catch (error) {
+      if (isPrismaMissingTableError(error, "IndustryStat")) return [];
+      throw error;
+    }
+  })();
 
   const planColors: Record<string, string> = {
     STARTER: "#3b82f6",
@@ -78,43 +99,50 @@ export default async function SuperAdminPage() {
           ))}
         </div>
 
-        {/* Tenants table */}
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden" }}>
-          <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: "#ffffff" }}>All Workspaces</h2>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ background: "rgba(255,255,255,0.02)" }}>
-                {["Workspace", "Slug", "Plan", "Members", "Projects", "Trial Ends", "Created"].map(col => (
-                  <th key={col} style={{ padding: "12px 20px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#64748b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {allTenants.map((t, i) => (
-                <tr key={t.id} style={{ borderBottom: i < allTenants.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                  <td style={{ padding: "14px 20px", fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{t.name}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "#64748b", fontFamily: "monospace" }}>{t.slug}</td>
-                  <td style={{ padding: "14px 20px" }}>
-                    <span style={{
-                      background: `${planColors[t.plan] ?? "#64748b"}20`,
-                      color: planColors[t.plan] ?? "#64748b",
-                      padding: "3px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700,
-                    }}>
-                      {t.plan}
-                    </span>
-                  </td>
-                  <td style={{ padding: "14px 20px", fontSize: 14, color: "#94a3b8" }}>{t._count.members}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 14, color: "#94a3b8" }}>{t._count.projects}</td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "#94a3b8" }}>
-                    {t.trialEndsAt ? new Date(t.trialEndsAt).toLocaleDateString() : "—"}
-                  </td>
-                  <td style={{ padding: "14px 20px", fontSize: 13, color: "#64748b" }}>{new Date(t.createdAt).toLocaleDateString()}</td>
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 18 }}>
+          {/* Tenants table */}
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden" }}>
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: "#ffffff" }}>All Workspaces</h2>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: "rgba(255,255,255,0.02)" }}>
+                  {["Workspace", "Slug", "Plan", "Members", "Projects", "Trial Ends", "Created"].map(col => (
+                    <th key={col} style={{ padding: "12px 20px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#64748b", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>{col}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {allTenants.map((t, i) => (
+                  <tr key={t.id} style={{ borderBottom: i < allTenants.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                    <td style={{ padding: "14px 20px", fontSize: 14, fontWeight: 600, color: "#e2e8f0" }}>{t.name}</td>
+                    <td style={{ padding: "14px 20px", fontSize: 13, color: "#64748b", fontFamily: "monospace" }}>{t.slug}</td>
+                    <td style={{ padding: "14px 20px" }}>
+                      <span style={{
+                        background: `${planColors[t.plan] ?? "#64748b"}20`,
+                        color: planColors[t.plan] ?? "#64748b",
+                        padding: "3px 10px", borderRadius: 10, fontSize: 12, fontWeight: 700,
+                      }}>
+                        {t.plan}
+                      </span>
+                    </td>
+                    <td style={{ padding: "14px 20px", fontSize: 14, color: "#94a3b8" }}>{t._count.members}</td>
+                    <td style={{ padding: "14px 20px", fontSize: 14, color: "#94a3b8" }}>{t._count.projects}</td>
+                    <td style={{ padding: "14px 20px", fontSize: 13, color: "#94a3b8" }}>
+                      {t.trialEndsAt ? new Date(t.trialEndsAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td style={{ padding: "14px 20px", fontSize: 13, color: "#64748b" }}>{new Date(t.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "18px 20px" }}>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#ffffff", marginBottom: 12 }}>Industry Stats</h2>
+            <IndustryStatsManager initialStats={industryStats} />
+          </div>
         </div>
       </div>
     </div>
