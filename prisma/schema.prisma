@@ -1,0 +1,334 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          String    @default("USER")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts          Account[]
+  sessions          Session[]
+  tenantMemberships TenantMember[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Tenant {
+  id                   String    @id @default(cuid())
+  name                 String
+  slug                 String    @unique
+  plan                 String    @default("STARTER")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  trialEndsAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  members      TenantMember[]
+  projects     Project[]
+  integrations Integration[]
+}
+
+model TenantMember {
+  id       String   @id @default(cuid())
+  tenantId String
+  userId   String
+  role     String   @default("VIEWER")
+  joinedAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, userId])
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  tenantId        String
+  name            String
+  domain          String
+  location        String   @default("United States")
+  keywordsJson    String?  // JSON: string[] of target keywords
+  competitorsJson String?  // JSON: string[] of up to 5 competitor domains
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  siteAudits       SiteAudit[]
+  backlinkAudits   BacklinkAudit[]
+  rankTrackers     RankTracker[]
+  llmMentions      LlmMention[]
+  localCitations   LocalCitation[]
+  reportSnapshots  ReportSnapshot[]
+  savedKeywords    SavedKeyword[]
+  backlinkOutreach BacklinkOutreach[]
+  domainAnalyses   DomainAnalysis[]
+  merchantRankings MerchantRanking[]
+}
+
+model SiteAudit {
+  id           String    @id @default(cuid())
+  projectId    String
+  status       String    @default("PENDING")
+  crawledPages Int?
+  issuesCount  String?
+  score        Int?
+  rawData      String?
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model BacklinkAudit {
+  id               String    @id @default(cuid())
+  projectId        String
+  status           String    @default("PENDING")
+  totalBacklinks   Int?
+  referringDomains Int?
+  domainRating     Float?
+  rawData          String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model RankTracker {
+  id        String   @id @default(cuid())
+  projectId String
+  keyword   String
+  device    String   @default("desktop")
+  location  String   @default("United States")
+  createdAt DateTime @default(now())
+  rankings KeywordRanking[]
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model KeywordRanking {
+  id            String   @id @default(cuid())
+  rankTrackerId String
+  position      Int?
+  url           String?
+  searchVolume  Int?
+  cpc           Float?
+  checkedAt     DateTime @default(now())
+  rankTracker RankTracker @relation(fields: [rankTrackerId], references: [id], onDelete: Cascade)
+}
+
+model LlmMention {
+  id        String   @id @default(cuid())
+  projectId String
+  query     String
+  model     String
+  mentioned Boolean  @default(false)
+  position  Int?
+  context   String?
+  checkedAt DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model LocalCitation {
+  id           String   @id @default(cuid())
+  projectId    String
+  directory    String
+  name         String
+  address      String?
+  phone        String?
+  website      String?
+  status       String   @default("FOUND")
+  naConsistent Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Integration {
+  id           String    @id @default(cuid())
+  tenantId     String
+  provider     String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  metadata     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, provider])
+}
+
+// ─── Unified Report Snapshot ─────────────────────────────────────────────────
+// One record per report run per project. Dashboard always shows the latest.
+model ReportSnapshot {
+  id               String    @id @default(cuid())
+  projectId        String
+  status           String    @default("RUNNING") // RUNNING | COMPLETE | PARTIAL | FAILED
+
+  // Site Audit – homepage (instant)
+  siteScore        Int?
+  siteCrawledPages Int?
+  siteIssuesJson   String?   // JSON: SiteIssue[]
+
+  // Site Audit – multi-page crawl (plan-gated)
+  onPagePagesJson   String?   // JSON: PageAuditResult[]
+  onPageCrawledCount Int?
+  onPageAvgScore   Int?
+  onPageErrorsJson        String?  // JSON: OnPageErrorItem[] — site-wide error type counts
+  onPageDuplicateTagsJson String?  // JSON: DuplicateTagItem[] — duplicate title/description
+  onPageBrokenLinksJson   String?  // JSON: OnPageLinkItem[] — broken links (4xx/5xx targets)
+
+  // Rank Tracking (SerpAPI)
+  rankingsJson     String?   // JSON: RankingEntry[]
+  avgPosition      Float?
+  top3Count        Int?
+  top10Count       Int?
+
+  // LLM / AI Visibility (SerpAPI)
+  llmJson          String?   // JSON: LlmEntry[]
+  llmMentionRate   Int?      // 0-100
+
+  // Local SEO (SerpAPI)
+  localJson        String?   // JSON: LocalSeoData
+  localFound       Boolean?
+
+  // Backlinks + Toxic Links (DataForSEO)
+  backlinksJson    String?   // JSON: BacklinkEntry[]
+  toxicLinksJson   String?   // JSON: BacklinkEntry[] where spamScore > 60
+  domainRank       Int?      // DataForSEO domain_rank (0-100, equiv. to DA)
+  backlinksTotal   Int?
+  referringDomains Int?
+  backlinksSpamScore Int?    // average backlink spam score (0-100)
+
+  // Competitor Research (DataForSEO)
+  competitorJson   String?   // JSON: CompetitorResult[]
+
+  // User Domain Positioning (Labs APIs)
+  userKeywordCountJson   String?   // JSON: { total: number }
+  userTopPagesJson       String?   // JSON: { url, traffic }[]
+  growthOpportunitiesJson String?  // JSON: growth opportunities for user domain
+
+  // Keyword Research (Labs APIs - Ideas, Intent, Trending)
+  keywordIdeaJson       String?   // JSON: { ideas, suggestions, relatedByKeyword }
+  keywordSearchIntentJson String? // JSON: SearchIntentItem[]
+  topSearchesJson       String?   // JSON: TopSearchItem[]
+  siteKeywordsJson      String?   // JSON: KeywordForSiteItem[]
+
+  // Category Analysis (Labs APIs - Domain Categories & Metrics)
+  domainCategoriesJson  String?   // JSON: { id, name, relevance, keywords }[]
+  categoryMetricsJson   String?   // JSON: { id, name, keywords, traffic, rank }[]
+
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ─── Keyword Research ─────────────────────────────────────────────────────────
+
+model SavedKeyword {
+  id           String   @id @default(cuid())
+  projectId    String
+  keyword      String
+  volume       Int?
+  difficulty   Int?
+  cpc          Float?
+  intent       String?  // informational|transactional|navigational|commercial
+  competition  Float?
+  source       String   @default("manual") // manual|magic|gap|gsc
+  savedAt      DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, keyword])
+}
+
+// ─── Backlink Outreach CRM ─────────────────────────────────────────────────────
+
+model BacklinkOutreach {
+  id           String   @id @default(cuid())
+  projectId    String
+  domain       String   // target linking domain
+  url          String?  // specific target URL
+  contactEmail String?
+  contactName  String?
+  // PROSPECT → CONTACTED → REPLIED → PLACED | REJECTED
+  status       String   @default("PROSPECT")
+  notes        String?
+  domainRank   Int?     // cached domain authority
+  anchorText   String?  // desired anchor
+  followUpAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ─── Merchant / Shopping Rankings ────────────────────────────────────────────
+
+model MerchantRanking {
+  id         String   @id @default(cuid())
+  projectId  String
+  keyword    String
+  position   Int
+  title      String
+  price      String?
+  currency   String?
+  seller     String?
+  rating     Float?
+  reviews    Int?
+  url        String?
+  imageUrl   String?
+  checkedAt  DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+// ─── Domain Analysis Cache ─────────────────────────────────────────────────────
+
+model DomainAnalysis {
+  id              String   @id @default(cuid())
+  projectId       String
+  domain          String
+  organicKeywords Int?
+  organicTraffic  Int?
+  domainRank      Int?
+  etv             Int?     // estimated traffic value ($)
+  topKeywordsJson String?  // JSON: {keyword,position,traffic}[]
+  competitorsJson String?  // JSON: {domain,intersections,rank}[]
+  analyzedAt      DateTime @default(now())
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
