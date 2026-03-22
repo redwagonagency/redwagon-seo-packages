@@ -1,5 +1,7 @@
 const DFS_BASE = "https://api.dataforseo.com/v3";
 
+type DfsRecord = Record<string, unknown>;
+
 function getAuthHeaders() {
   const login = process.env.DATAFORSEO_LOGIN ?? "";
   const password = process.env.DATAFORSEO_PASSWORD ?? "";
@@ -10,17 +12,50 @@ function getAuthHeaders() {
   };
 }
 
-async function dfsPost(endpoint: string, body: unknown) {
+async function dfsRequest(method: "GET" | "POST", endpoint: string, body?: unknown) {
   const res = await fetch(`${DFS_BASE}${endpoint}`, {
-    method: "POST",
+    method,
     headers: getAuthHeaders(),
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(45000),
   });
   if (!res.ok) {
-    throw new Error(`DataForSEO ${endpoint} failed: ${res.status}`);
+    const errorText = await res.text().catch(() => "");
+    throw new Error(`DataForSEO ${endpoint} failed: ${res.status}${errorText ? ` ${errorText}` : ""}`);
   }
   return res.json();
+}
+
+async function dfsPost(endpoint: string, body: unknown) {
+  return dfsRequest("POST", endpoint, body);
+}
+
+async function dfsGet(endpoint: string) {
+  return dfsRequest("GET", endpoint);
+}
+
+function getDfsTasks(response: unknown): DfsRecord[] {
+  return Array.isArray((response as { tasks?: unknown })?.tasks)
+    ? ((response as { tasks: DfsRecord[] }).tasks ?? [])
+    : [];
+}
+
+function getDfsTaskIds(response: unknown): string[] {
+  return getDfsTasks(response)
+    .map((task) => (typeof task.id === "string" ? task.id : null))
+    .filter((taskId): taskId is string => Boolean(taskId));
+}
+
+function getFirstTaskResult(response: unknown): DfsRecord | null {
+  const firstTask = getDfsTasks(response)[0];
+  if (!firstTask || !Array.isArray(firstTask.result)) return null;
+  const firstResult = firstTask.result[0];
+  return firstResult && typeof firstResult === "object" ? (firstResult as DfsRecord) : null;
+}
+
+function getFirstTaskItems(response: unknown): DfsRecord[] {
+  const firstResult = getFirstTaskResult(response);
+  return Array.isArray(firstResult?.items) ? (firstResult.items as DfsRecord[]) : [];
 }
 
 // ─── On-Page / Site Audit ────────────────────────────────────────────────────
@@ -2034,13 +2069,35 @@ export async function getRelatedKeywords(
   const data = await dfsPost("/dataforseo_labs/google/related_keywords/live", [
     { keyword, location_code: locationCode, language_code: languageCode, limit },
   ]);
-  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    cpc: typeof i.cpc === "number" ? i.cpc : null,
-    competition: typeof i.competition === "number" ? i.competition : null,
-  }));
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Array<Record<string, unknown>>;
+  return items
+    .map((item) => {
+      const keywordData = (item.keyword_data ?? {}) as Record<string, unknown>;
+      const keywordInfo = (keywordData.keyword_info ?? {}) as Record<string, unknown>;
+
+      return {
+        keyword: String(keywordData.keyword ?? item.keyword ?? "").trim(),
+        searchVolume:
+          typeof keywordInfo.search_volume === "number"
+            ? keywordInfo.search_volume
+            : typeof item.search_volume === "number"
+              ? item.search_volume
+              : 0,
+        cpc:
+          typeof keywordInfo.cpc === "number"
+            ? keywordInfo.cpc
+            : typeof item.cpc === "number"
+              ? item.cpc
+              : null,
+        competition:
+          typeof keywordInfo.competition === "number"
+            ? keywordInfo.competition
+            : typeof item.competition === "number"
+              ? item.competition
+              : null,
+      };
+    })
+    .filter((item) => item.keyword.length > 0);
 }
 
 export interface KeywordSuggestionItem {
@@ -2615,6 +2672,649 @@ export async function getKeywordsForKeywords(
     volume: typeof i.search_volume === "number" ? i.search_volume : 0,
     competition: String(i.competition ?? ""),
     cpc: typeof i.cpc === "number" ? i.cpc : null,
+  }));
+}
+
+// ─── Amazon DataForSEO Labs ───────────────────────────────────────────────────
+
+/** Bulk search volume for up to 1000 Amazon keywords */
+export async function getAmazonBulkSearchVolume(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/dataforseo_labs/amazon/bulk_search_volume/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode, language_code: languageCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+  }));
+}
+
+/** Related keywords for a seed keyword on Amazon */
+export async function getAmazonRelatedKeywords(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en",
+  depth = 1,
+  limit = 100
+) {
+  const data = await dfsPost("/dataforseo_labs/amazon/related_keywords/live", [
+    { keyword, location_code: locationCode, language_code: languageCode, depth, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const kd = (i.keyword_data ?? {}) as Record<string, unknown>;
+    const ki = (kd.keyword_info ?? {}) as Record<string, unknown>;
+    return {
+      keyword: String(kd.keyword ?? i.keyword ?? ""),
+      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
+      cpc: typeof ki.cpc === "number" ? ki.cpc : null,
+      depth: typeof i.depth === "number" ? i.depth : 0,
+    };
+  });
+}
+
+/** Keywords that an Amazon product (by ASIN) ranks for */
+export async function getAmazonRankedKeywords(
+  asin: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+) {
+  const data = await dfsPost("/dataforseo_labs/amazon/ranked_keywords/live", [
+    { asin, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const kd = (i.keyword_data ?? {}) as Record<string, unknown>;
+    const ki = (kd.keyword_info ?? {}) as Record<string, unknown>;
+    const se = (i.ranked_serp_element ?? {}) as Record<string, unknown>;
+    const si = (se.serp_item ?? {}) as Record<string, unknown>;
+    return {
+      keyword: String(kd.keyword ?? ""),
+      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
+      rankAbsolute: typeof si.rank_absolute === "number" ? si.rank_absolute : null,
+    };
+  });
+}
+
+/** Competitor ASINs for a product on Amazon */
+export async function getAmazonProductCompetitors(
+  asin: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 50
+) {
+  const data = await dfsPost("/dataforseo_labs/amazon/product_competitors/live", [
+    { asin, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    asin: String(i.asin ?? ""),
+    avgPosition: typeof i.avg_position === "number" ? i.avg_position : null,
+    intersections: typeof i.intersections === "number" ? i.intersections : 0,
+    metrics: (i.competitor_metrics ?? null) as Record<string, unknown> | null,
+  }));
+}
+
+/** Rank overview metrics for an Amazon product (by ASIN) */
+export async function getAmazonProductRankOverview(
+  asin: string,
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  return dfsPost("/dataforseo_labs/amazon/product_rank_overview/live", [
+    { asin, location_code: locationCode, language_code: languageCode },
+  ]);
+}
+
+/** Shared keywords between multiple Amazon products */
+export async function getAmazonProductKeywordIntersections(
+  asins: string[],
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+) {
+  return dfsPost("/dataforseo_labs/amazon/product_keyword_intersections/live", [
+    { asins, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+}
+
+// ─── Bing Keywords Data ───────────────────────────────────────────────────────
+
+/** Bing search volume for up to 1000 keywords */
+export async function getBingSearchVolume(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/keywords_data/bing/search_volume/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode, language_code: languageCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    cpc: typeof i.cpc === "number" ? i.cpc : null,
+    competition: typeof i.competition === "number" ? i.competition : null,
+  }));
+}
+
+/** Bing keywords suggestions for seed keywords (up to 200) */
+export async function getBingKeywordsForKeywords(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/keywords_data/bing/keywords_for_keywords/live", [
+    { keywords: keywords.slice(0, 200), location_code: locationCode, language_code: languageCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    cpc: typeof i.cpc === "number" ? i.cpc : null,
+    competition: typeof i.competition === "number" ? i.competition : null,
+  }));
+}
+
+/** Bing keywords for a website URL */
+export async function getBingKeywordsForSite(
+  target: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+) {
+  return dfsPost("/keywords_data/bing/keywords_for_site/live", [
+    { target, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+}
+
+/** Bing keyword performance metrics */
+export async function getBingKeywordPerformance(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  return dfsPost("/keywords_data/bing/keyword_performance/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode, language_code: languageCode },
+  ]);
+}
+
+/** Bing audience estimation for targeting parameters */
+export async function getBingAudienceEstimation(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  return dfsPost("/keywords_data/bing/audience_estimation/live", [
+    { keywords: keywords.slice(0, 200), location_code: locationCode, language_code: languageCode },
+  ]);
+}
+
+// ─── Clickstream Data ─────────────────────────────────────────────────────────
+
+/** Clickstream-based bulk search volume for up to 1000 keywords */
+export async function getClickstreamBulkSearchVolume(
+  keywords: string[],
+  locationCode = 2840
+) {
+  const data = await dfsPost("/keywords_data/clickstream_data/bulk_search_volume/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    monthlySearches: Array.isArray(i.monthly_searches) ? i.monthly_searches : [],
+  }));
+}
+
+/** Global (all-country) clickstream search volume */
+export async function getClickstreamGlobalSearchVolume(keywords: string[]) {
+  return dfsPost("/keywords_data/clickstream_data/global_search_volume/live", [
+    { keywords: keywords.slice(0, 1000) },
+  ]);
+}
+
+/** DataForSEO clickstream search volume (proprietary panel) */
+export async function getClickstreamDataForSEOSearchVolume(
+  keywords: string[],
+  locationCode = 2840
+) {
+  return dfsPost("/keywords_data/clickstream_data/dataforseo_search_volume/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode },
+  ]);
+}
+
+// ─── SERP Toolkit Endpoints ──────────────────────────────────────────────────
+
+export interface DfsTaskSubmissionResult {
+  taskIds: string[];
+  raw: unknown;
+}
+
+export interface DfsTaskFetchResult {
+  taskId: string;
+  items: DfsRecord[];
+  result: DfsRecord | null;
+  raw: unknown;
+}
+
+export interface SerpToolkitRequestOptions {
+  locationCode?: number;
+  languageCode?: string;
+  seDomain?: string;
+  device?: string;
+  os?: string;
+  depth?: number;
+  limit?: number;
+  priority?: number;
+  postbackUrl?: string;
+  pingbackUrl?: string;
+  advancedOptions?: Record<string, unknown>;
+}
+
+function buildSerpRequestPayload(
+  keyword: string | undefined,
+  options: SerpToolkitRequestOptions = {}
+): DfsRecord {
+  const payload: DfsRecord = {
+    location_code: options.locationCode ?? 2840,
+    language_code: options.languageCode ?? "en",
+  };
+
+  if (keyword) payload.keyword = keyword;
+  if (options.seDomain) payload.se_domain = options.seDomain;
+  if (options.device) payload.device = options.device;
+  if (options.os) payload.os = options.os;
+  if (typeof options.depth === "number") payload.depth = options.depth;
+  if (typeof options.limit === "number") payload.limit = options.limit;
+  if (typeof options.priority === "number") payload.priority = options.priority;
+  if (options.postbackUrl) payload.postback_url = options.postbackUrl;
+  if (options.pingbackUrl) payload.pingback_url = options.pingbackUrl;
+
+  return {
+    ...payload,
+    ...(options.advancedOptions ?? {}),
+  };
+}
+
+function buildImageSearchPayload(
+  imageUrl: string | undefined,
+  imageBase64: string | undefined,
+  options: SerpToolkitRequestOptions = {}
+): DfsRecord {
+  if (!imageUrl && !imageBase64) {
+    throw new Error("An image URL or base64 image payload is required.");
+  }
+
+  const payload = buildSerpRequestPayload(undefined, options);
+  if (imageUrl) payload.image_url = imageUrl;
+  if (imageBase64) payload.image_base64 = imageBase64;
+  return payload;
+}
+
+function toTaskSubmissionResult(response: unknown): DfsTaskSubmissionResult {
+  return {
+    taskIds: getDfsTaskIds(response),
+    raw: response,
+  };
+}
+
+function toTaskFetchResult(taskId: string, response: unknown): DfsTaskFetchResult {
+  return {
+    taskId,
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function createGoogleAutocompleteTask(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+): Promise<DfsTaskSubmissionResult> {
+  const response = await dfsPost("/serp/google/autocomplete/task_post", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return toTaskSubmissionResult(response);
+}
+
+export async function getGoogleAutocompleteLiveAdvanced(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/serp/google/autocomplete/live/advanced", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getGoogleAutocompleteTaskAdvanced(taskId: string): Promise<DfsTaskFetchResult> {
+  const response = await dfsGet(`/serp/google/autocomplete/task_get/advanced/${taskId}`);
+  return toTaskFetchResult(taskId, response);
+}
+
+export async function createGoogleAiModeTask(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+): Promise<DfsTaskSubmissionResult> {
+  const response = await dfsPost("/serp/google/ai_mode/task_post", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return toTaskSubmissionResult(response);
+}
+
+export async function getGoogleAiModeLiveAdvanced(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/serp/google/ai_mode/live/advanced", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getGoogleLocalFinderLiveAdvanced(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/serp/google/local_finder/live/advanced", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getGoogleDatasetSearchLiveAdvanced(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/serp/google/dataset_search/live/advanced", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getGoogleAdsSearchLiveAdvanced(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/serp/google/ads_search/live/advanced", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function createGoogleSearchByImageTask(
+  imageUrl: string | undefined,
+  imageBase64: string | undefined,
+  options: SerpToolkitRequestOptions = {}
+): Promise<DfsTaskSubmissionResult> {
+  const response = await dfsPost("/serp/google/search_by_image/task_post", [
+    buildImageSearchPayload(imageUrl, imageBase64, options),
+  ]);
+  return toTaskSubmissionResult(response);
+}
+
+export async function getYahooOrganicTaskAdvanced(taskId: string): Promise<DfsTaskFetchResult> {
+  const response = await dfsGet(`/serp/yahoo/organic/task_get/advanced/${taskId}`);
+  return toTaskFetchResult(taskId, response);
+}
+
+export interface ClickstreamSearchVolumeItem {
+  keyword: string;
+  searchVolume: number;
+  monthlySearches: unknown[];
+}
+
+function mapClickstreamVolumeItems(response: unknown): ClickstreamSearchVolumeItem[] {
+  return getFirstTaskItems(response).map((item) => ({
+    keyword: String(item.keyword ?? ""),
+    searchVolume: typeof item.search_volume === "number" ? item.search_volume : 0,
+    monthlySearches: Array.isArray(item.monthly_searches) ? item.monthly_searches : [],
+  }));
+}
+
+export async function getClickstreamGlobalSearchVolumeAdvanced(keywords: string[]) {
+  const response = await dfsPost("/keywords_data/clickstream_data/global_search_volume/live", [
+    { keywords: keywords.slice(0, 1000) },
+  ]);
+  return {
+    items: mapClickstreamVolumeItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getClickstreamBulkSearchVolumeAdvanced(
+  keywords: string[],
+  locationCode = 2840
+) {
+  const response = await dfsPost("/keywords_data/clickstream_data/bulk_search_volume/live", [
+    { keywords: keywords.slice(0, 1000), location_code: locationCode },
+  ]);
+  return {
+    items: mapClickstreamVolumeItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getContentAnalysisSearchLive(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/content_analysis/search/live", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getContentAnalysisPhraseTrendsLive(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/content_analysis/phrase_trends/live", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+export async function getContentAnalysisCategoryTrendsLive(
+  keyword: string,
+  options: SerpToolkitRequestOptions = {}
+) {
+  const response = await dfsPost("/content_analysis/category_trends/live", [
+    buildSerpRequestPayload(keyword, options),
+  ]);
+  return {
+    items: getFirstTaskItems(response),
+    result: getFirstTaskResult(response),
+    raw: response,
+  };
+}
+
+// ─── DataForSEO Trends ────────────────────────────────────────────────────────
+
+/** Trend data for up to 5 keywords (popularity over time) */
+export async function getDFSTrendsExplore(
+  keywords: string[],
+  locationCode = 2840,
+  type: "web" | "news" | "ecommerce" = "web",
+  timeRange?: string,
+  dateFrom?: string,
+  dateTo?: string
+) {
+  const body: Record<string, unknown> = {
+    keywords: keywords.slice(0, 5),
+    location_code: locationCode,
+    type,
+  };
+  if (timeRange) body.time_range = timeRange;
+  if (dateFrom) body.date_from = dateFrom;
+  if (dateTo) body.date_to = dateTo;
+  const data = await dfsPost("/keywords_data/dataforseo_trends/explore/live", [body]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items;
+}
+
+/** Subregion popularity breakdown for keywords */
+export async function getDFSTrendsSubregionInterests(
+  keywords: string[],
+  locationCode = 2840,
+  type: "web" | "news" | "ecommerce" = "web"
+) {
+  return dfsPost("/keywords_data/dataforseo_trends/subregion_interests/live", [
+    { keywords: keywords.slice(0, 5), location_code: locationCode, type },
+  ]);
+}
+
+/** Demographic breakdown of searchers for keywords */
+export async function getDFSTrendsDemography(
+  keywords: string[],
+  locationCode = 2840,
+  type: "web" | "news" | "ecommerce" = "web"
+) {
+  return dfsPost("/keywords_data/dataforseo_trends/demography/live", [
+    { keywords: keywords.slice(0, 5), location_code: locationCode, type },
+  ]);
+}
+
+/** Merged trends data combining multiple signals */
+export async function getDFSTrendsMergedData(
+  keywords: string[],
+  locationCode = 2840
+) {
+  return dfsPost("/keywords_data/dataforseo_trends/merged_data/live", [
+    { keywords: keywords.slice(0, 5), location_code: locationCode },
+  ]);
+}
+
+// ─── Apple App Store Keywords ─────────────────────────────────────────────────
+
+/**
+ * Keywords an Apple App Store app ranks for.
+ * @param appId  Numeric App Store app ID (e.g. "835599320" for TikTok)
+ */
+export async function getAppleKeywordsForApp(
+  appId: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+) {
+  const data = await dfsPost("/dataforseo_labs/apple/keywords_for_app/live", [
+    { app_id: appId, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const kd = (i.keyword_data ?? {}) as Record<string, unknown>;
+    const ki = (kd.keyword_info ?? {}) as Record<string, unknown>;
+    const se = (i.ranked_serp_element ?? {}) as Record<string, unknown>;
+    const si = (se.serp_item ?? {}) as Record<string, unknown>;
+    return {
+      keyword: String(kd.keyword ?? ""),
+      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
+      rankAbsolute: typeof si.rank_absolute === "number" ? si.rank_absolute : null,
+    };
+  });
+}
+
+// ─── YouTube SERP ─────────────────────────────────────────────────────────────
+
+/** Live YouTube organic SERP results for a keyword */
+export async function getYoutubeOrganicSerpLive(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en"
+) {
+  const data = await dfsPost("/serp/youtube/organic/live/advanced", [
+    { keyword, location_code: locationCode, language_code: languageCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    type: String(i.type ?? ""),
+    rankAbsolute: typeof i.rank_absolute === "number" ? i.rank_absolute : null,
+    title: typeof i.title === "string" ? i.title : null,
+    url: typeof i.url === "string" ? i.url : null,
+    videoId: typeof i.video_id === "string" ? i.video_id : null,
+    channelName: typeof i.channel_name === "string" ? i.channel_name : null,
+    viewsCount: typeof i.views_count === "number" ? i.views_count : null,
+    description: typeof i.description === "string" ? i.description : null,
+    durationSeconds: typeof i.duration_time_seconds === "number" ? i.duration_time_seconds : null,
+  }));
+}
+
+// ─── Pinterest Social Media ───────────────────────────────────────────────────
+
+/**
+ * Pinterest pin counts for target URLs.
+ * @param targets  Array of absolute page URLs (max 10)
+ */
+export async function getPinterestPinCounts(targets: string[]) {
+  const data = await dfsPost("/business_data/social_media/pinterest/live", [
+    { targets: targets.slice(0, 10) },
+  ]);
+  const results = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return results.map((r) => ({
+    pageUrl: typeof r.page_url === "string" ? r.page_url : null,
+    pinsCount: typeof r.pins_count === "number" ? r.pins_count : 0,
+  }));
+}
+
+// ─── Reddit Social Media ──────────────────────────────────────────────────────
+
+/**
+ * Reddit posts/shares for target URLs.
+ * @param targets  Array of absolute page URLs (max 10)
+ */
+export async function getRedditPostsForUrls(targets: string[]) {
+  const data = await dfsPost("/business_data/social_media/reddit/live", [
+    { targets: targets.slice(0, 10) },
+  ]);
+  const results = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return results.map((r) => ({
+    pageUrl: typeof r.page_url === "string" ? r.page_url : null,
+    reviews: Array.isArray(r.reddit_reviews)
+      ? (r.reddit_reviews as Record<string, unknown>[]).map((rev) => ({
+          subreddit: typeof rev.subreddit === "string" ? rev.subreddit : null,
+          authorName: typeof rev.author_name === "string" ? rev.author_name : null,
+          title: typeof rev.title === "string" ? rev.title : null,
+          permalink: typeof rev.permalink === "string" ? rev.permalink : null,
+          subredditMembers: typeof rev.subreddit_members === "number" ? rev.subreddit_members : 0,
+        }))
+      : [],
   }));
 }
 

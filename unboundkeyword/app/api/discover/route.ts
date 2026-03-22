@@ -118,17 +118,30 @@ export async function POST(req: NextRequest) {
       getKeywordIdeasLabs(seedClean, location, language, 200),
     ]);
 
-    const suggestions: KeywordSuggestionItem[] =
+    const suggestionsRaw: KeywordSuggestionItem[] =
       suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
-    const related: RelatedKeywordItem[] =
+    const relatedRaw: RelatedKeywordItem[] =
       relatedResult.status === "fulfilled" ? relatedResult.value : [];
-    // Ideas used only for A-Z fallback; not directly used right now
-    void ideasResult;
+    const ideasRaw = ideasResult.status === "fulfilled" ? ideasResult.value : [];
+
+    const suggestions = suggestionsRaw.filter((item) => item.keyword?.trim().length > 0);
+    const related = relatedRaw.filter((item) => item.keyword?.trim().length > 0);
+
+    // Use ideas as additional fallback supply so broad keywords still return usable results.
+    const ideaFallback = ideasRaw
+      .filter((item) => item.keyword?.trim().length > 0)
+      .map((item) => ({
+        keyword: item.keyword,
+        searchVolume: item.searchVolume ?? 0,
+        cpc: item.cpc ?? null,
+        competition: null,
+      })) as RelatedKeywordItem[];
 
     // Collect keywords for intent enrichment
     const allKeywords = [
       ...suggestions.map((s) => s.keyword),
       ...related.map((r) => r.keyword),
+      ...ideaFallback.map((i) => i.keyword),
     ].filter(Boolean).slice(0, 50);
 
     const intentMap: Record<string, string> = {};
@@ -181,7 +194,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Related
-    const relatedKeywords = related
+    const relatedPool = [...related, ...ideaFallback]
+      .filter((item, index, self) => self.findIndex((compare) => compare.keyword.toLowerCase() === item.keyword.toLowerCase()) === index);
+
+    const relatedKeywords = relatedPool
       .slice(0, 50)
       .map((r) => relToDiscovery(r, intentMap));
 
