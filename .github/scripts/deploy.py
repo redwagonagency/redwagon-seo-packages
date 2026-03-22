@@ -13,10 +13,13 @@ PASSWORD = os.environ["SERVER_PASSWORD"]
 APP_DIR  = "/root/searchauditpro"
 REPO_URL = "https://github.com/redwagonagency/redwagon-seo-packages.git"
 
+DOMAIN = "searchauditpro.com"
+EMAIL  = "joe@redwagon.agency"
+
 ENV_CONTENT = textwrap.dedent(f"""\
     DATABASE_URL="file:{APP_DIR}/data/prod.db"
-    AUTH_URL="http://{HOST}"
-    NEXTAUTH_URL="http://{HOST}"
+    AUTH_URL="https://{DOMAIN}"
+    NEXTAUTH_URL="https://{DOMAIN}"
     NEXTAUTH_SECRET="{os.environ['NEXTAUTH_SECRET']}"
     AUTH_SECRET="{os.environ['NEXTAUTH_SECRET']}"
     GOOGLE_CLIENT_ID="{os.environ['GOOGLE_CLIENT_ID']}"
@@ -32,11 +35,50 @@ ENV_CONTENT = textwrap.dedent(f"""\
     SUPERADMIN_PASSWORD="{os.environ['SUPERADMIN_PASSWORD']}"
 """)
 
+# HTTP-only config used initially so certbot can complete HTTP-01 challenge
+NGINX_CONFIG_HTTP = textwrap.dedent("""\
+    server {
+        listen 80;
+        server_name searchauditpro.com www.searchauditpro.com;
+        client_max_body_size 50M;
+        location / {
+            proxy_pass http://localhost:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+            proxy_read_timeout 120s;
+        }
+    }
+""")
+
+# Full config with SSL + HTTP redirect (written after cert is obtained)
 NGINX_CONFIG = textwrap.dedent("""\
     server {
-        listen 80 default_server;
-        server_name _;
+        listen 80;
+        server_name searchauditpro.com www.searchauditpro.com;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen 443 ssl;
+        server_name searchauditpro.com www.searchauditpro.com;
+
+        ssl_certificate     /etc/letsencrypt/live/searchauditpro.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/searchauditpro.com/privkey.pem;
+        ssl_protocols       TLSv1.2 TLSv1.3;
+        ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+        ssl_prefer_server_ciphers off;
+        ssl_session_cache   shared:SSL:10m;
+        ssl_session_timeout 1d;
+        add_header Strict-Transport-Security "max-age=63072000" always;
+
         client_max_body_size 50M;
+
         location / {
             proxy_pass http://localhost:3000;
             proxy_http_version 1.1;
@@ -93,8 +135,39 @@ def sftp_write(client, remote_path, content):
     sftp.close()
     print(f"  Wrote {remote_path}")
 
+# ── Probe with sshpass for detailed error output ─────────────────────────────
+import subprocess
+print("Installing openssh-client and sshpass for diagnostics...")
+subprocess.run(['apt-get', 'install', '-y', '-q', 'openssh-client', 'sshpass'],
+               capture_output=True)
+
+print(f"\nProbing SSH with sshpass (verbose)...")
+probe = subprocess.run(
+    ['sshpass', '-p', PASSWORD,
+     'ssh', '-v',
+     '-o', 'StrictHostKeyChecking=no',
+     '-o', 'BatchMode=no',
+     '-o', 'PasswordAuthentication=yes',
+     '-o', 'PubkeyAuthentication=no',
+     '-o', 'ConnectTimeout=15',
+     f'{USER}@{HOST}', 'echo AUTH_OK'],
+    capture_output=True, text=True, timeout=30
+)
+print("STDOUT:", probe.stdout.strip())
+# Show only relevant debug lines
+for line in probe.stderr.splitlines():
+    if any(k in line for k in ['debug1', 'AUTH', 'auth', 'password', 'Permission', 'denied', 'accept', 'offer', 'method', 'Authentications']):
+        print("SSH:", line)
+print(f"sshpass exit code: {probe.returncode}")
+if probe.returncode == 0 or 'AUTH_OK' in probe.stdout:
+    print("\nsshpass auth SUCCEEDED! Proceeding with deployment via subprocess SSH...")
+    USE_SSHPASS = True
+else:
+    print("\nsshpass auth failed, trying Paramiko...")
+    USE_SSHPASS = False
+
 # ── Connect ───────────────────────────────────────────────────────────────────
-print(f"Connecting to {USER}@{HOST}:22 ...")
+print(f"\nConnecting to {USER}@{HOST}:22 ...")
 
 # First: probe what auth methods the server supports
 transport = paramiko.Transport((HOST, 22))
@@ -206,12 +279,34 @@ print("\n>>> Writing config files via SFTP")
 sftp_write(client, f"{APP_DIR}/.env.production", ENV_CONTENT)
 sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG)
 
-# ── Enable nginx site ─────────────────────────────────────────────────────────
+# ── Enable nginx site (HTTP first, for certbot challenge) ─────────────────────
+sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG_HTTP)
 run(client, """
 ln -sf /etc/nginx/sites-available/searchauditpro /etc/nginx/sites-enabled/searchauditpro
 rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl restart nginx && echo "nginx OK"
-""", "Configuring nginx")
+nginx -t && systemctl restart nginx && echo "nginx HTTP OK"
+""", "Configuring nginx (HTTP for certbot)")
+
+# ── SSL via Let's Encrypt ──────────────────────────────────────────────────────
+run(client, f"""
+export DEBIAN_FRONTEND=noninteractive
+apt-get install -y -q certbot python3-certbot-nginx
+
+# Obtain or renew cert (non-interactive)
+certbot certonly --nginx \\
+  -d searchauditpro.com -d www.searchauditpro.com \\
+  --non-interactive --agree-tos --email {EMAIL} \\
+  --keep-until-expiring \\
+  2>&1 | tail -20
+
+echo "Certbot exit: $?"
+""", "Obtaining SSL certificate via Let's Encrypt")
+
+# Write full HTTPS nginx config
+sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG)
+run(client, """
+nginx -t && systemctl reload nginx && echo "nginx SSL OK"
+""", "Activating SSL nginx config")
 
 # ── Install dependencies ──────────────────────────────────────────────────────
 run(client, f"cd {APP_DIR} && npm ci", "Installing npm dependencies", timeout=300)
@@ -250,6 +345,6 @@ echo "PM2 OK"
 # ── Done ──────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
 print(f"  Deployment complete!")
-print(f"  App live at: http://{HOST}")
+print(f"  App live at: https://searchauditpro.com")
 print("=" * 60)
 client.close()
