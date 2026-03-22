@@ -1,0 +1,36 @@
+name: Deploy UnBoundKeyword to Production
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'unboundkeyword/**'
+      - '.github/scripts/deploy_ubk.py'
+      - '.github/scripts/run-deploy-ubk.sh'
+      - '.github/workflows/deploy-ubk.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy unboundkeyword.com to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH (Docker + Paramiko)
+        uses: docker://python:3.11-slim
+        env:
+          SERVER_HOST:          ${{ secrets.SERVER_HOST }}
+          SERVER_USER:          ${{ secrets.SERVER_USER }}
+          SERVER_PASSWORD:      ${{ secrets.SERVER_PASSWORD }}
+          DATAFORSEO_LOGIN:     ${{ secrets.DATAFORSEO_LOGIN }}
+          DATAFORSEO_PASSWORD:  ${{ secrets.DATAFORSEO_PASSWORD }}
+          UBK_GOOGLE_CLIENT_ID: ${{ secrets.UBK_GOOGLE_CLIENT_ID }}
+          UBK_GOOGLE_CLIENT_SECRET: ${{ secrets.UBK_GOOGLE_CLIENT_SECRET }}
+        with:
+          entrypoint: /bin/bash
+          args: /github/workspace/.github/scripts/run-deploy-ubk.sh
