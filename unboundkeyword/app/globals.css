@@ -148,6 +148,24 @@ body {
   box-shadow: 0 0 0 4px rgba(124,58,237,0.12);
 }
 
+/* ── Platform tabs ───────────────────────────────── */
+.ubk-tab {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ubk-tab:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.8);
+}
+.ubk-tab-active {
+  background: rgba(124,58,237,0.25) !important;
+  border-color: rgba(124,58,237,0.55) !important;
+  color: #c084fc !important;
+}
+
 /* ── Chart stat badge ────────────────────────────── */
 .ubk-chart-badge {
   background: rgba(255,255,255,0.04);
