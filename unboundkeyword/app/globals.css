@@ -290,8 +290,8 @@ body {
   background-clip: text;
 }
 .ubk-below-fold .ubk-vis-strip {
-  background: #f5f5f5;
-  border: 1px solid rgba(0,0,0,0.1);
+  background: #0f0f1e;
+  border: 1px solid rgba(255,255,255,0.07);
 }
 .ubk-below-fold .ubk-mock-search {
   background: rgba(0,0,0,0.04);
