@@ -1,22 +1,147 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  --ubk-bg:        #0b0b18;
+  --ubk-surface:   #12121f;
+  --ubk-border:    rgba(255,255,255,0.07);
+  --ubk-accent:    #7c3aed;
+  --ubk-accent2:   #a855f7;
+  --ubk-glow:      rgba(124,58,237,0.35);
 }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--ubk-bg);
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Dark page background ───────────────────────── */
+.ubk-bg {
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 70%),
+              var(--ubk-bg);
+}
+
+/* ── Logo ───────────────────────────────────────── */
+.ubk-logo {
+  background: linear-gradient(135deg, #c084fc, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Buttons ────────────────────────────────────── */
+.ubk-btn-primary {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 0 32px rgba(124,58,237,0.4);
+}
+.ubk-btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+
+.ubk-btn-ghost {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.ubk-btn-ghost:hover { background: rgba(255,255,255,0.10); }
+
+/* ── Badge ──────────────────────────────────────── */
+.ubk-badge {
+  background: rgba(124,58,237,0.15);
+  border: 1px solid rgba(124,58,237,0.35);
+  color: #c084fc;
+}
+.ubk-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #a855f7;
+  display: inline-block;
+  box-shadow: 0 0 6px #a855f7;
+}
+
+/* ── Headline accent ────────────────────────────── */
+.ubk-headline-accent {
+  background: linear-gradient(135deg, #c084fc 0%, #818cf8 60%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Stats ──────────────────────────────────────── */
+.ubk-stat-val {
+  background: linear-gradient(135deg, #c084fc, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Visualisation strip ────────────────────────── */
+.ubk-vis-strip {
+  background: var(--ubk-surface);
+  border: 1px solid var(--ubk-border);
+}
+
+/* ── Mock search ────────────────────────────────── */
+.ubk-mock-search {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ── Keyword chips ──────────────────────────────── */
+.ubk-kw-chip {
+  background: rgba(124,58,237,0.12);
+  border: 1px solid rgba(124,58,237,0.25);
+  color: #c4b5fd;
+  transition: opacity 0.2s;
+}
+
+/* ── Feature cards ──────────────────────────────── */
+.ubk-feature-card {
+  background: var(--ubk-surface);
+  border: 1px solid var(--ubk-border);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.ubk-feature-card:hover {
+  border-color: rgba(124,58,237,0.35);
+  transform: translateY(-2px);
+}
+
+/* ── Feature icon ───────────────────────────────── */
+.ubk-icon-wrap {
+  background: rgba(124,58,237,0.15);
+  color: #a78bfa;
+}
+
+/* ── CTA banner ─────────────────────────────────── */
+.ubk-cta-banner {
+  background: linear-gradient(135deg, rgba(124,58,237,0.18) 0%, rgba(167,139,250,0.08) 100%);
+  border: 1px solid rgba(124,58,237,0.3);
+}
+
+/* ── Scrollbar hide ─────────────────────────────── */
 @layer utilities {
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 }

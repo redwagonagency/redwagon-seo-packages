@@ -304,6 +304,32 @@ DATABASE_URL="file:{APP_DIR}/data/prod.db" npx prisma generate 2>&1
 echo "Prisma OK"
 """, "Prisma DB setup", timeout=120)
 
+    # Seed admin user
+    run(client, f"""
+cd {APP_DIR}
+DATABASE_URL="file:{APP_DIR}/data/prod.db" node -e "
+const {{PrismaClient}} = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+async function seed() {{
+  const prisma = new PrismaClient({{datasources:{{db:{{url:'file:{APP_DIR}/data/prod.db'}}}}}});
+  const hash = await bcrypt.hash('Jojo123\$', 10);
+  await prisma.user.upsert({{
+    where:{{email:'joe@redwagon.agency'}},
+    update:{{}},
+    create:{{
+      email:'joe@redwagon.agency',
+      name:'Joe',
+      password:hash,
+      role:'ADMIN'
+    }}
+  }});
+  await prisma.\$disconnect();
+  console.log('Admin user seeded OK');
+}}
+seed().catch(e=>{{console.error(e);process.exit(1)}});
+"
+""", "Seed admin user", timeout=60)
+
     # Build
     run(client, f"cd {APP_DIR} && NODE_ENV=production npm run build",
         "Next.js build", timeout=900)
