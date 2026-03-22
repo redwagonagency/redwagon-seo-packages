@@ -397,6 +397,117 @@ function KeywordWheel({
   );
 }
 
+function KeywordOverviewPanel({
+  keyword,
+  row,
+}: {
+  keyword: string;
+  row: MasterKeywordRow | null;
+}) {
+  const difficulty = row?.difficulty ?? null;
+  const volume = row?.volume ?? null;
+  const cpc = row?.cpc ?? null;
+  const intent = row?.intent ?? null;
+
+  let competitiveLevel = "unrated";
+  let chancePercent = 0;
+  if (difficulty != null) {
+    if (difficulty < 20) { competitiveLevel = "low competition"; chancePercent = 82; }
+    else if (difficulty < 40) { competitiveLevel = "moderately competitive"; chancePercent = 58 + Math.round((40 - difficulty) * 0.6); }
+    else if (difficulty < 60) { competitiveLevel = "competitive"; chancePercent = 34 + Math.round((60 - difficulty) * 0.8); }
+    else { competitiveLevel = "highly competitive"; chancePercent = Math.max(8, 34 - Math.round((difficulty - 60) * 0.65)); }
+  }
+
+  return (
+    <div className="sticky top-4 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[420px]">
+      <div className="px-6 py-5 border-b border-slate-100">
+        <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-1">Keyword Overview</div>
+        <h2 className="text-xl font-bold text-slate-900 leading-tight">{keyword}</h2>
+      </div>
+
+      {difficulty != null && (
+        <div className="px-6 py-5 border-b border-slate-100 flex gap-3 items-start">
+          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center mt-0.5">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-orange-500">
+              <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm1 10H11v-6h2v6z" />
+            </svg>
+          </div>
+          <p className="text-sm text-slate-700 leading-relaxed">
+            This keyword is{" "}
+            <strong
+              className={
+                difficulty < 20
+                  ? "text-green-600"
+                  : difficulty < 40
+                  ? "text-yellow-600"
+                  : difficulty < 60
+                  ? "text-orange-600"
+                  : "text-red-600"
+              }
+            >
+              {competitiveLevel}
+            </strong>. There is a{" "}
+            <strong className="text-orange-500">{chancePercent}% chance</strong> you will be
+            able to rank for it.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-b border-slate-100">
+        <div className="px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Volume</div>
+          <div className="text-2xl font-black text-slate-900">{volume != null ? formatNumber(volume) : "\u2014"}</div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">CPC</div>
+          <div className="text-2xl font-black text-slate-900">{cpc != null ? `$${cpc.toFixed(2)}` : "\u2014"}</div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Difficulty</div>
+          <div className="text-2xl font-black text-slate-900">{difficulty != null ? difficulty : "\u2014"}</div>
+        </div>
+        <div className="px-5 py-4">
+          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Intent</div>
+          <div className="mt-1 text-sm font-bold">
+            {intent ? <Badge variant={intentBadgeVariant(intent)}>{intent}</Badge> : <span className="text-slate-900">\u2014</span>}
+          </div>
+        </div>
+      </div>
+
+      {row ? (
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-2">Found In</div>
+          <div className="flex flex-wrap gap-1.5">
+            {row.sources.map((source) => (
+              <Badge key={source} variant={GROUP_CONFIG[source].badge}>
+                {source === "alphabetical" ? "A-Z" : source}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="px-6 py-8 text-center text-sm text-slate-400">
+          Click any keyword in the table to see its overview.
+        </div>
+      )}
+
+      <div className="px-6 py-4 mt-auto">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              window.open(`https://www.google.com/search?q=${encodeURIComponent(keyword)}`, "_blank", "noopener,noreferrer");
+            }
+          }}
+          className="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition text-center"
+        >
+          SERP Analysis
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DiscoveryClient() {
   const searchParams = useSearchParams();
   const [seed, setSeed] = useState(() => searchParams?.get("q") ?? "");
@@ -425,6 +536,7 @@ export default function DiscoveryClient() {
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [visibleTableRows, setVisibleTableRows] = useState(INITIAL_TABLE_ROWS);
   const [showAllQuestionChips, setShowAllQuestionChips] = useState(false);
+  const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
 
   const autoSearched = useRef(false);
 
@@ -1128,186 +1240,232 @@ export default function DiscoveryClient() {
             </div>
           )}
 
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Master Results</div>
-                <h2 className="text-2xl font-bold text-slate-900">One keyword table across every discovery source</h2>
-                <p className="text-sm text-slate-500 mt-1">
-                  Questions, prepositions, comparisons, A-Z, and related suggestions are merged and deduplicated here.
-                </p>
-              </div>
-              <div className="w-full lg:w-[520px] grid gap-3 sm:grid-cols-2">
-                <Input
-                  label="Filter results"
-                  placeholder="Search within the master table"
-                  value={tableQuery}
-                  onChange={(e) => setTableQuery(e.target.value)}
-                />
-                <Input
-                  label="Output excludes"
-                  placeholder="jobs, salary, near me"
-                  value={outputExcludeTerms}
-                  onChange={(e) => setOutputExcludeTerms(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-wrap gap-2">
-              <button
-                onClick={() => setActiveGroup(null)}
-                className={cn(
-                  "px-3 py-1.5 rounded-full border text-xs font-semibold transition",
-                  activeGroup === null
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                )}
-              >
-                All sources ({masterRows.length})
-              </button>
-              {MASTER_SOURCE_ORDER.map((type) => {
-                const total = groupTotals[type];
-                if (!total) return null;
-                const cfg = GROUP_CONFIG[type];
-                return (
-                  <button
-                    key={type}
-                    onClick={() => setActiveGroup(type)}
-                    className={cn(
-                      "px-3 py-1.5 rounded-full border text-xs font-semibold transition",
-                      activeGroup === type ? cfg.color : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-                    )}
-                  >
-                    {type === "alphabetical" ? "A-Z" : type.charAt(0).toUpperCase() + type.slice(1)} ({total})
-                  </button>
-                );
-              })}
-            </div>
-
-            <div id="keyword-ideas" className="px-6 py-4 border-b border-slate-100 bg-indigo-50/40">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">Keyword Ideas</h3>
-                  <p className="text-sm text-slate-600">Top opportunities from your discovery output. Click to add/remove from selection.</p>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_364px] items-start">
+            {/* Left: keyword ideas table */}
+            <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">
+                      {filteredMasterRows.length.toLocaleString()} Keyword Ideas
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">for &quot;{result.seed}&quot;</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="text"
+                      placeholder="Filter keywords..."
+                      value={tableQuery}
+                      onChange={(e) => setTableQuery(e.target.value)}
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-44"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Exclude terms..."
+                      value={outputExcludeTerms}
+                      onChange={(e) => setOutputExcludeTerms(e.target.value)}
+                      className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-44"
+                    />
+                  </div>
                 </div>
-                <Badge variant="purple">{Math.min(filteredMasterRows.length, 120)} showing</Badge>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredMasterRows.slice(0, 120).map((row) => (
+                <div className="flex gap-2 flex-wrap">
                   <button
-                    key={`idea-${row.keyword}`}
-                    type="button"
-                    onClick={() => toggleKeyword(row.keyword)}
+                    onClick={() => setActiveGroup(null)}
                     className={cn(
-                      "text-left rounded-xl border px-3 py-2.5 transition",
-                      selected.has(row.keyword)
-                        ? "border-indigo-300 bg-indigo-50"
-                        : "border-slate-200 bg-white hover:border-indigo-200"
+                      "px-3 py-1 rounded-full border text-xs font-semibold transition",
+                      activeGroup === null
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
                     )}
                   >
-                    <div className="font-semibold text-slate-900 text-sm">{row.keyword}</div>
-                    <div className="mt-1 text-xs text-slate-500 flex items-center gap-2 flex-wrap">
-                      <span>{row.volume ? `${formatNumber(row.volume)} vol` : "no volume"}</span>
-                      {row.intent ? <Badge variant={intentBadgeVariant(row.intent)}>{row.intent}</Badge> : null}
-                    </div>
+                    All ({masterRows.length})
                   </button>
-                ))}
+                  {MASTER_SOURCE_ORDER.map((type) => {
+                    const total = groupTotals[type];
+                    if (!total) return null;
+                    const cfg = GROUP_CONFIG[type];
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setActiveGroup(type)}
+                        className={cn(
+                          "px-3 py-1 rounded-full border text-xs font-semibold transition",
+                          activeGroup === type ? cfg.color : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                        )}
+                      >
+                        {type === "alphabetical" ? "A-Z" : type.charAt(0).toUpperCase() + type.slice(1)} ({total})
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[520px] text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 w-8"></th>
+                      <th className="px-4 py-3 text-left font-semibold text-slate-500 text-xs uppercase tracking-wider">Keyword</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">Vol</th>
+                      <th className="px-4 py-3 text-right font-semibold text-slate-500 text-xs uppercase tracking-wider">CPC</th>
+                      <th className="px-4 py-3 text-center font-semibold text-slate-500 text-xs uppercase tracking-wider">KD</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMasterRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-500">
+                          No keywords match the current filters.
+                        </td>
+                      </tr>
+                    ) : displayedMasterRows.map((row) => {
+                      const isActive = row.keyword === (activeKeyword ?? result.seed);
+                      const isSeed = row.keyword.toLowerCase() === result.seed.toLowerCase();
+                      return (
+                        <tr
+                          key={row.keyword}
+                          onClick={() => setActiveKeyword(row.keyword)}
+                          className={cn(
+                            "border-b border-slate-100 cursor-pointer transition",
+                            isActive
+                              ? "bg-orange-50 border-orange-100"
+                              : isSeed
+                              ? "bg-orange-50/40"
+                              : "hover:bg-slate-50/80"
+                          )}
+                        >
+                          <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selected.has(row.keyword)}
+                              onChange={() => toggleKeyword(row.keyword)}
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("font-medium text-slate-900 text-sm", isActive && "text-orange-700")}>
+                                {row.keyword}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelected(new Set([row.keyword]));
+                                  openAddModal();
+                                }}
+                                className="text-slate-300 hover:text-indigo-500 transition flex-shrink-0"
+                                title="Add to list"
+                              >
+                                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                                  <path d="M2 2h12v10l-6-3-6 3V2z" />
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="flex gap-1 mt-0.5 flex-wrap">
+                              {row.sources.map((source) => (
+                                <span key={source} className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium border", GROUP_CONFIG[source].color)}>
+                                  {source === "alphabetical" ? "A-Z" : source}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-slate-700 font-medium tabular-nums">
+                            {row.volume ? formatNumber(row.volume) : "\u2014"}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-slate-700 tabular-nums">
+                            {row.cpc != null ? `$${row.cpc.toFixed(2)}` : "\u2014"}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            {row.difficulty != null ? (
+                              <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", difficultyColor(row.difficulty))}>
+                                {row.difficulty}
+                              </span>
+                            ) : "\u2014"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredMasterRows.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const header = "Keyword,Volume,CPC,Difficulty,Intent\n";
+                        const lines = filteredMasterRows.map((r) =>
+                          [
+                            `"${r.keyword.replace(/"/g, '""')}"`,
+                            r.volume ?? "",
+                            r.cpc != null ? r.cpc.toFixed(2) : "",
+                            r.difficulty ?? "",
+                            r.intent ?? "",
+                          ].join(",")
+                        );
+                        const blob = new Blob([header + lines.join("\n")], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `${result.seed.replace(/\s+/g, "-")}-keywords.csv`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Export to CSV
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const text = filteredMasterRows.map((r) => r.keyword).join("\n");
+                        navigator.clipboard.writeText(text);
+                        setSuccessMsg("Keywords copied to clipboard");
+                        setTimeout(() => setSuccessMsg(""), 2000);
+                      }}
+                    >
+                      Copy to Clipboard
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-slate-500">
+                      Showing {displayedMasterRows.length} of {filteredMasterRows.length}
+                    </p>
+                    {canLoadMoreTableRows ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setVisibleTableRows((prev) => prev + TABLE_ROWS_STEP)}
+                      >
+                        Load more
+                      </Button>
+                    ) : displayedMasterRows.length > INITIAL_TABLE_ROWS ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setVisibleTableRows(INITIAL_TABLE_ROWS)}
+                      >
+                        Reset view
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[980px] text-sm">
-                <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr>
-                    <th className="px-6 py-3 text-left font-semibold text-slate-500">Select</th>
-                    <th className="px-6 py-3 text-left font-semibold text-slate-500">Keyword</th>
-                    <th className="px-6 py-3 text-left font-semibold text-slate-500">Sources</th>
-                    <th className="px-6 py-3 text-right font-semibold text-slate-500">Volume</th>
-                    <th className="px-6 py-3 text-center font-semibold text-slate-500">KD</th>
-                    <th className="px-6 py-3 text-right font-semibold text-slate-500">CPC</th>
-                    <th className="px-6 py-3 text-left font-semibold text-slate-500">Intent</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMasterRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-slate-500">
-                        No keywords match the current source filter or table search.
-                      </td>
-                    </tr>
-                  ) : displayedMasterRows.map((row) => (
-                    <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50/80">
-                      <td className="px-6 py-3 align-top">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(row.keyword)}
-                          onChange={() => toggleKeyword(row.keyword)}
-                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-6 py-3 align-top">
-                        <div className="font-semibold text-slate-900">{row.keyword}</div>
-                        <div className="text-xs text-slate-400 mt-1">
-                          Primary source: {row.primaryGroup === "alphabetical" ? "A-Z" : row.primaryGroup}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3 align-top">
-                        <div className="flex flex-wrap gap-1.5">
-                          {row.sources.map((source) => (
-                            <Badge key={`${row.keyword}-${source}`} variant={GROUP_CONFIG[source].badge}>
-                              {source === "alphabetical" ? "A-Z" : source}
-                            </Badge>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-3 align-top text-right text-slate-700 font-medium">
-                        {row.volume ? formatNumber(row.volume) : "-"}
-                      </td>
-                      <td className="px-6 py-3 align-top text-center">
-                        {row.difficulty != null ? (
-                          <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded", difficultyColor(row.difficulty))}>
-                            {row.difficulty}
-                          </span>
-                        ) : "-"}
-                      </td>
-                      <td className="px-6 py-3 align-top text-right text-slate-700">
-                        {row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}
-                      </td>
-                      <td className="px-6 py-3 align-top">
-                        {row.intent ? <Badge variant={intentBadgeVariant(row.intent)}>{row.intent}</Badge> : <span className="text-slate-400">-</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredMasterRows.length > 0 && (
-              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                <p className="text-xs text-slate-500">
-                  Showing {displayedMasterRows.length} of {filteredMasterRows.length} rows
-                </p>
-                {canLoadMoreTableRows ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVisibleTableRows((prev) => prev + TABLE_ROWS_STEP)}
-                  >
-                    Load {Math.min(TABLE_ROWS_STEP, filteredMasterRows.length - displayedMasterRows.length)} more
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setVisibleTableRows(INITIAL_TABLE_ROWS)}
-                    disabled={displayedMasterRows.length <= INITIAL_TABLE_ROWS}
-                  >
-                    Reset view
-                  </Button>
-                )}
-              </div>
-            )}
+            {/* Right: keyword overview */}
+            <KeywordOverviewPanel
+              keyword={activeKeyword ?? result.seed}
+              row={filteredMasterRows.find((r) => r.keyword === (activeKeyword ?? result.seed)) ?? null}
+            />
           </div>
 
           <div className="mt-8 grid gap-6 xl:grid-cols-2">
