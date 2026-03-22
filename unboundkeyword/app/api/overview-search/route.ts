@@ -6,6 +6,7 @@ import {
   getBingKeywordsForKeywords,
   getBingSearchVolume,
   getGoogleAutocompleteLiveAdvanced,
+  getGoogleShoppingRankings,
   getKeywordIdeasLabs,
   getKeywordOverview,
   getKeywordSuggestions,
@@ -22,6 +23,17 @@ type OverviewRow = {
   source: string;
 };
 
+type AiPlaybookRow = {
+  phrase: string;
+  category: string;
+  volume: number | null;
+  cpc: number | null;
+  difficulty: number | null;
+  intent: string | null;
+  opportunityScore: number;
+  recommendation: string;
+};
+
 const AI_PHRASE_PREFIXES = [
   "is",
   "tell me",
@@ -35,7 +47,27 @@ const AI_PHRASE_PREFIXES = [
   "why should i",
   "what's best",
   "how to",
+  "what is",
+  "why is",
+  "can you",
+  "where can i",
+  "when should i",
+  "is it worth",
+  "show me how to",
+  "what are the best",
+  "compare",
+  "which should i choose",
+  "i need",
+  "help me",
 ];
+
+const SOCIAL_AUTOCOMPLETE_MAP: Record<string, string> = {
+  instagram: "site:instagram.com",
+  tiktok: "site:tiktok.com",
+  facebook: "site:facebook.com",
+  pinterest: "site:pinterest.com",
+  chatgpt: "chatgpt prompt",
+};
 
 function dedupeRows(rows: OverviewRow[]): OverviewRow[] {
   const seen = new Set<string>();
@@ -55,6 +87,17 @@ function deriveIntent(keyword: string): string {
   if (/\b(vs|versus|alternative|compare|better than|best)\b/.test(k)) return "commercial";
   if (/\b(how|what|why|is|tell me|give me|show me)\b/.test(k)) return "informational";
   return "informational";
+}
+
+function keywordToHashtag(keyword: string): string {
+  const cleaned = keyword
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join("");
+  return `#${cleaned || "topic"}`;
 }
 
 function collectAutocompleteKeywords(items: unknown): string[] {
@@ -197,8 +240,23 @@ async function buildYoutubeRows(keyword: string, location: number, language: str
   return dedupeRows([...fromSerp, ...fromAutocomplete]);
 }
 
+async function buildShoppingRows(keyword: string, location: number, _language: string): Promise<OverviewRow[]> {
+  const shopping = await getGoogleShoppingRankings(keyword, "example.com", location);
+  return dedupeRows(
+    shopping.items.map((row) => ({
+      keyword: row.title ?? keyword,
+      volume: row.reviews ?? null,
+      cpc: row.price ? Number(String(row.price).replace(/[^\d.]/g, "")) || null : null,
+      difficulty: row.position != null ? Math.min(100, row.position * 3) : null,
+      intent: "transactional",
+      source: "google_shopping",
+    }))
+  );
+}
+
 async function buildAutocompleteRows(seed: string, platform: string, location: number, language: string): Promise<OverviewRow[]> {
-  const autocomplete = await getGoogleAutocompleteLiveAdvanced(`${seed} ${platform}`, {
+  const platformHint = SOCIAL_AUTOCOMPLETE_MAP[platform] ?? platform;
+  const autocomplete = await getGoogleAutocompleteLiveAdvanced(`${seed} ${platformHint}`, {
     locationCode: location,
     languageCode: language,
     limit: 140,
@@ -224,6 +282,28 @@ async function buildAutocompleteRows(seed: string, platform: string, location: n
       source: `${platform}_ideas`,
     })),
   ]);
+}
+
+function scoreAiOpportunity(volume: number | null, cpc: number | null, difficulty: number | null): number {
+  const v = volume ?? 0;
+  const c = cpc ?? 0;
+  const d = difficulty ?? 50;
+  return Math.round((Math.min(v / 120, 50)) + (Math.min(c * 6, 25)) + ((100 - d) * 0.25));
+}
+
+function aiCategory(phrase: string): string {
+  const p = phrase.toLowerCase();
+  if (/\b(compare|better|best|versus|vs|choose)\b/.test(p)) return "comparison";
+  if (/\b(buy|price|cost|worth|should i)\b/.test(p)) return "decision";
+  if (/\b(how to|show me|tell me|give me|what is|why is)\b/.test(p)) return "education";
+  return "research";
+}
+
+function aiRecommendation(category: string): string {
+  if (category === "comparison") return "Create a vs/comparison page with clear winner criteria and schema.";
+  if (category === "decision") return "Build pricing and ROI pages with proof, objections, and FAQ snippets.";
+  if (category === "education") return "Publish how-to and explainer content with direct answer blocks.";
+  return "Cover this term in your topical hub and internal links.";
 }
 
 export async function POST(req: NextRequest) {
@@ -258,12 +338,43 @@ export async function POST(req: NextRequest) {
       rows = await buildAmazonRows(keyword, location, language);
     } else if (platform === "youtube") {
       rows = await buildYoutubeRows(keyword, location, language);
+    } else if (platform === "shopping") {
+      rows = await buildShoppingRows(keyword, location, language);
     } else {
       rows = await buildAutocompleteRows(keyword, platform, location, language);
     }
 
-    const aiQueries = AI_PHRASE_PREFIXES.map((prefix) => `${prefix} ${keyword}`).slice(0, 12);
+    const aiQueries = AI_PHRASE_PREFIXES.map((prefix) => `${prefix} ${keyword}`).slice(0, 40);
     const aiPhraseMetrics = await getKeywordOverview(aiQueries, location, language).catch(() => []);
+
+    const aiPlaybook: AiPlaybookRow[] = aiPhraseMetrics
+      .map((row) => {
+        const category = aiCategory(row.keyword);
+        const opportunityScore = scoreAiOpportunity(row.volume, row.cpc, row.difficulty);
+        return {
+          phrase: row.keyword,
+          category,
+          volume: row.volume,
+          cpc: row.cpc,
+          difficulty: row.difficulty,
+          intent: row.intent,
+          opportunityScore,
+          recommendation: aiRecommendation(category),
+        };
+      })
+      .sort((a, b) => b.opportunityScore - a.opportunityScore);
+
+    const hashtagSuggestions = dedupeRows(rows)
+      .slice(0, 80)
+      .map((row) => ({
+        keyword: row.keyword,
+        hashtag: keywordToHashtag(row.keyword),
+        platform,
+        estPosts: Math.max(50, Math.round((row.volume ?? 500) * 17)),
+        intent: row.intent,
+      }))
+      .filter((row, index, arr) => index === arr.findIndex((x) => x.hashtag === row.hashtag))
+      .slice(0, 50);
 
     return Response.json({
       keyword,
@@ -271,15 +382,8 @@ export async function POST(req: NextRequest) {
       results: dedupeRows(rows)
         .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0))
         .slice(0, 120),
-      aiPhraseAnalysis: aiPhraseMetrics
-        .map((row) => ({
-          keyword: row.keyword,
-          volume: row.volume,
-          cpc: row.cpc,
-          difficulty: row.difficulty,
-          intent: row.intent,
-        }))
-        .sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0)),
+      aiPhraseAnalysis: aiPlaybook,
+      hashtagSuggestions,
     });
   } catch (error) {
     return Response.json(

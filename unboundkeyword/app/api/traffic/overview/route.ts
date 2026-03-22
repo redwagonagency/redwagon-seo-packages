@@ -36,7 +36,21 @@ export async function POST(req: NextRequest) {
   const language = body.language ?? "en";
   const competitorDomain = normalizeDomain(body.competitorDomain);
 
-  if (!domain) return Response.json({ error: "domain is required" }, { status: 400 });
+  if (!domain) {
+    return Response.json({
+      domain: "",
+      competitorDomain: null,
+      overview: null,
+      competitors: [],
+      history: [],
+      keywords: [],
+      pages: [],
+      competitorOverview: null,
+      gapKeywords: [],
+      requiresDomain: true,
+      message: "Add a domain or select a site to run traffic analysis.",
+    });
+  }
 
   const [overviewResult, competitorsResult, historyResult, keywordsResult, pagesResult] = await Promise.allSettled([
     getDomainRankOverview(domain, location, language),

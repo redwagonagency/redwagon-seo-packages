@@ -11,6 +11,7 @@ import { getSelectedSiteForUser } from "@/lib/site-context";
 type RequestBody = {
   domain?: string;
   competitorDomain?: string;
+  competitorDomains?: string[];
   location?: number;
   language?: string;
 };
@@ -36,6 +37,9 @@ export async function POST(req: NextRequest) {
     const selectedSite = await getSelectedSiteForUser(userId);
     const domain = normalizeDomain(body.domain || selectedSite?.domain);
     const competitorDomain = normalizeDomain(body.competitorDomain);
+    const customCompetitors = Array.isArray(body.competitorDomains)
+      ? body.competitorDomains.map((d) => normalizeDomain(d)).filter(Boolean)
+      : [];
     const location = body.location ?? 2840;
     const language = body.language ?? "en";
 
@@ -51,52 +55,46 @@ export async function POST(req: NextRequest) {
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
     const suggestedCompetitors = suggestedCompetitorsResult.status === "fulfilled" ? suggestedCompetitorsResult.value : [];
 
-    const chosenCompetitor = competitorDomain || suggestedCompetitors[0]?.domain || "";
+    const chosenCompetitors = Array.from(new Set([
+      ...customCompetitors,
+      ...(competitorDomain ? [competitorDomain] : []),
+    ])).slice(0, 5);
 
-    let competitorOverview = null;
-    let gapKeywords: Array<{
-      keyword: string;
-      volume: number | null;
-      yourPosition: number | null;
-      competitorPosition: number | null;
-      opportunity: string;
-    }> = [];
-    let competitorTargetKeywords: Array<{
-      keyword: string;
-      url: string | null;
-      position: number;
-      searchVolume: number;
-      traffic: number;
-    }> = [];
+    const competitorsData = await Promise.all(
+      chosenCompetitors.map(async (compDomain) => {
+        const [competitorOverviewResult, gapKeywordsResult, competitorKeywordsResult] = await Promise.allSettled([
+          getDomainRankOverview(compDomain, location, language),
+          getKeywordGap(domain, [compDomain], location, language, 80),
+          getKeywordsForSite(compDomain, location, language, 50),
+        ]);
 
-    if (chosenCompetitor) {
-      const [competitorOverviewResult, gapKeywordsResult, competitorKeywordsResult] = await Promise.allSettled([
-        getDomainRankOverview(chosenCompetitor, location, language),
-        getKeywordGap(domain, [chosenCompetitor], location, language, 60),
-        getKeywordsForSite(chosenCompetitor, location, language, 40),
-      ]);
+        const competitorOverview = competitorOverviewResult.status === "fulfilled" ? competitorOverviewResult.value : null;
+        const gapKeywords = gapKeywordsResult.status === "fulfilled"
+          ? gapKeywordsResult.value.map((item) => ({
+              keyword: item.keyword,
+              volume: item.volume,
+              yourPosition: item.yourPosition,
+              competitorPosition: item.competitorPositions[0]?.position ?? null,
+              opportunity: item.opportunity,
+            }))
+          : [];
+        const competitorTargetKeywords = competitorKeywordsResult.status === "fulfilled" ? competitorKeywordsResult.value : [];
 
-      competitorOverview = competitorOverviewResult.status === "fulfilled" ? competitorOverviewResult.value : null;
-      gapKeywords = gapKeywordsResult.status === "fulfilled"
-        ? gapKeywordsResult.value.map((item) => ({
-            keyword: item.keyword,
-            volume: item.volume,
-            yourPosition: item.yourPosition,
-            competitorPosition: item.competitorPositions[0]?.position ?? null,
-            opportunity: item.opportunity,
-          }))
-        : [];
-      competitorTargetKeywords = competitorKeywordsResult.status === "fulfilled" ? competitorKeywordsResult.value : [];
-    }
+        return {
+          domain: compDomain,
+          competitorOverview,
+          gapKeywords,
+          competitorTargetKeywords,
+        };
+      })
+    );
 
     return Response.json({
       domain,
-      competitorDomain: chosenCompetitor || null,
+      competitorDomains: chosenCompetitors,
       yourOverview,
       suggestedCompetitors,
-      competitorOverview,
-      gapKeywords,
-      competitorTargetKeywords,
+      competitorsData,
     });
   } catch (error) {
     return Response.json(

@@ -365,7 +365,7 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedPlatform = String(platform).toLowerCase();
-  const supportedPlatforms = new Set(["google", "youtube", "amazon", "bing", "instagram", "tiktok", "chatgpt", "pinterest"]);
+  const supportedPlatforms = new Set(["google", "shopping", "youtube", "amazon", "bing", "facebook", "instagram", "tiktok", "chatgpt", "pinterest"]);
   if (!supportedPlatforms.has(normalizedPlatform)) {
     return Response.json({ error: `Unsupported platform: ${platform}` }, { status: 400 });
   }

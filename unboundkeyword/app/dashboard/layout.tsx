@@ -84,6 +84,7 @@ function NavIcon({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  const [currentView, setCurrentView] = useState("");
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
   const userEmail = session?.user?.email ?? "";
@@ -114,6 +115,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setCurrentView(params.get("view") ?? "");
+  }, [path]);
+
   return (
     <div className="flex min-h-screen bg-[#f4f6f8]">
       {/* Sidebar */}
@@ -135,7 +142,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               {group.items.map((item) => {
                 const normalizedHref = item.href.split("#")[0].split("?")[0];
-                const active = normalizedHref === "/dashboard"
+                const query = item.href.includes("?") ? item.href.split("?")[1] : "";
+                const itemView = query.startsWith("view=") ? query.slice(5) : "";
+                const active = itemView
+                  ? path === normalizedHref && currentView === itemView
+                  : normalizedHref === "/dashboard"
                   ? path === "/dashboard"
                   : path.startsWith(normalizedHref);
                 return (

@@ -4,9 +4,12 @@ import { useMemo, useState, type FormEvent } from "react";
 
 const PLATFORM_TABS = [
   { id: "google",    label: "Google",    color: "#EA4335", icon: "G"  },
+  { id: "shopping",  label: "Shopping",  color: "#0F9D58", icon: "S"  },
   { id: "youtube",   label: "YouTube",   color: "#FF0000", icon: "▶"  },
   { id: "amazon",    label: "Amazon",    color: "#FF9900", icon: "A"  },
   { id: "bing",      label: "Bing",      color: "#008373", icon: "B"  },
+  { id: "facebook",  label: "Facebook",  color: "#1877F2", icon: "F"  },
+  { id: "pinterest", label: "Pinterest", color: "#E60023", icon: "P"  },
   { id: "instagram", label: "Instagram", color: "#C13584", icon: "IG" },
   { id: "tiktok",    label: "TikTok",    color: "#555555", icon: "TT" },
   { id: "chatgpt",   label: "ChatGPT",   color: "#10A37F", icon: "AI" },
@@ -18,12 +21,14 @@ export default function DashboardSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; source: string }>>([]);
-  const [aiPhrases, setAiPhrases] = useState<Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null }>>([]);
+  const [aiPhrases, setAiPhrases] = useState<Array<{ phrase: string; category: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; opportunityScore: number; recommendation: string }>>([]);
+  const [hashtags, setHashtags] = useState<Array<{ keyword: string; hashtag: string; platform: string; estPosts: number; intent: string | null }>>([]);
 
-  const hasResults = results.length > 0 || aiPhrases.length > 0;
+  const hasResults = results.length > 0 || aiPhrases.length > 0 || hashtags.length > 0;
 
   const topResults = useMemo(() => results.slice(0, 30), [results]);
   const topAiPhrases = useMemo(() => aiPhrases.slice(0, 20), [aiPhrases]);
+  const topHashtags = useMemo(() => hashtags.slice(0, 24), [hashtags]);
 
   async function runInlineSearch(term: string) {
     const q = term.trim();
@@ -41,16 +46,19 @@ export default function DashboardSearch() {
       const data = (await res.json()) as {
         error?: string;
         results?: Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; source: string }>;
-        aiPhraseAnalysis?: Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null }>;
+        aiPhraseAnalysis?: Array<{ phrase: string; category: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; opportunityScore: number; recommendation: string }>;
+        hashtagSuggestions?: Array<{ keyword: string; hashtag: string; platform: string; estPosts: number; intent: string | null }>;
       };
 
       if (!res.ok) throw new Error(data.error || "Search failed");
 
       setResults(data.results ?? []);
       setAiPhrases(data.aiPhraseAnalysis ?? []);
+      setHashtags(data.hashtagSuggestions ?? []);
     } catch (e) {
       setResults([]);
       setAiPhrases([]);
+      setHashtags([]);
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
       setLoading(false);
@@ -182,7 +190,7 @@ export default function DashboardSearch() {
       ) : null}
 
       {hasResults ? (
-        <div className="px-6 pb-6 grid gap-4 xl:grid-cols-2">
+        <div className="px-6 pb-6 grid gap-4 xl:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
               <h3 className="text-sm font-black text-slate-900">Platform Results ({topResults.length})</h3>
@@ -212,24 +220,55 @@ export default function DashboardSearch() {
 
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-900">AI Phrase Analysis</h3>
-              <p className="text-xs text-slate-500 mt-1">Question-style prompts for AI engines and conversational search.</p>
+              <h3 className="text-sm font-black text-slate-900">AI Query Playbook</h3>
+              <p className="text-xs text-slate-500 mt-1">Ranked conversational prompts with priority score and next-step recommendation.</p>
             </div>
             <div className="max-h-[360px] overflow-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Phrase</th>
-                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Volume</th>
-                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Intent</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Score</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Category</th>
                   </tr>
                 </thead>
                 <tbody>
                   {topAiPhrases.map((row) => (
-                    <tr key={row.keyword} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-900 font-medium">{row.keyword}</td>
-                      <td className="px-3 py-2 text-right text-slate-700">{row.volume != null ? row.volume.toLocaleString() : "-"}</td>
-                      <td className="px-3 py-2 text-right text-slate-700 capitalize">{row.intent ?? "-"}</td>
+                    <tr key={row.phrase} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-900 font-medium">
+                        <div>{row.phrase}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{row.recommendation}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700 font-bold">{row.opportunityScore}</td>
+                      <td className="px-3 py-2 text-right text-slate-700 capitalize">{row.category}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">Hashtag Search By Platform</h3>
+              <p className="text-xs text-slate-500 mt-1">Hashtag ideas generated from platform keyword outputs.</p>
+            </div>
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Hashtag</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Est Posts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topHashtags.map((row) => (
+                    <tr key={`${row.platform}-${row.hashtag}`} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-900 font-medium">
+                        <div>{row.hashtag}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">{row.keyword}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.estPosts.toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

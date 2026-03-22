@@ -106,13 +106,15 @@ const LANGUAGE_OPTIONS = [
 
 const PLATFORM_OPTIONS = [
   { value: "google", label: "Google" },
-  { value: "youtube", label: "YouTube (soon)" },
-  { value: "amazon", label: "Amazon (soon)" },
-  { value: "bing", label: "Bing (soon)" },
-  { value: "instagram", label: "Instagram (soon)" },
-  { value: "tiktok", label: "TikTok (soon)" },
-  { value: "pinterest", label: "Pinterest (soon)" },
-  { value: "chatgpt", label: "ChatGPT (soon)" },
+  { value: "shopping", label: "Google Shopping" },
+  { value: "youtube", label: "YouTube" },
+  { value: "amazon", label: "Amazon" },
+  { value: "bing", label: "Bing" },
+  { value: "facebook", label: "Facebook" },
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "pinterest", label: "Pinterest" },
+  { value: "chatgpt", label: "ChatGPT" },
 ];
 
 const STATE_OPTIONS = [
@@ -993,8 +995,7 @@ export default function DiscoveryClient() {
   });
   const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
   const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
-  const isSocialPlatform = platform === "instagram" || platform === "tiktok";
-  const unsupportedPlatform = platform !== "google";
+  const isSocialPlatform = platform === "instagram" || platform === "tiktok" || platform === "facebook" || platform === "pinterest";
   const socialSeedRows = buildSocialHashtagRows(filteredMasterRows).slice(0, 366);
   const socialRowsWithTab = socialModeTab === "hashtags"
     ? socialSeedRows
@@ -1108,11 +1109,6 @@ export default function DiscoveryClient() {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                {unsupportedPlatform ? (
-                  <p className="text-[11px] text-amber-600 mt-1">
-                    Platform-specific discovery APIs are not enabled yet for this platform. Use Google for production results.
-                  </p>
-                ) : null}
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1">Market</label>
