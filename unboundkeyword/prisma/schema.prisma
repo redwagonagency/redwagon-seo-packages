@@ -27,6 +27,8 @@ model User {
   keywordDemographics KeywordDemographic[]
   sites SiteProject[]
   preferences UserPreference?
+  decisionRuns DecisionRun[]
+  dailyIntelDigests DailyIntelDigest[]
 }
 
 model SiteProject {
@@ -46,6 +48,8 @@ model SiteProject {
   discoverySessions DiscoverySession[]
   discoveryKeywords DiscoveryKeyword[]
   selectedByPreferences UserPreference[] @relation("SelectedSite")
+  decisionRuns DecisionRun[]
+  dailyIntelDigests DailyIntelDigest[]
 
   @@index([userId, updatedAt])
   @@unique([userId, domain])
@@ -227,4 +231,41 @@ model KeywordDemographic {
 
   @@index([userId, keyword, platform])
   @@unique([userId, keyword, platform, ageRange])
+}
+
+// ─── AI Decision Engine ──────────────────────────────────────────────────────
+
+model DecisionRun {
+  id          String   @id @default(cuid())
+  userId      String
+  siteId      String?
+  keyword     String
+  domain      String
+  location    String   @default("United States")
+  language    String   @default("en")
+  score       Int?
+  priority    String?
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site SiteProject? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, siteId, createdAt])
+}
+
+model DailyIntelDigest {
+  id          String   @id @default(cuid())
+  userId      String
+  siteId      String?
+  topic       String
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site SiteProject? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, siteId, createdAt])
 }

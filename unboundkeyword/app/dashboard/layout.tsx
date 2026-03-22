@@ -54,6 +54,14 @@ const NAV_GROUPS = [
     ],
   },
   {
+    group: "AI DECISION ENGINE",
+    items: [
+      { href: "/dashboard/decision-engine", label: "Decision Center", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v18m6-12v12M3 9h18M5 5l14 14" /></svg>
+      ) },
+    ],
+  },
+  {
     group: "TRAFFIC",
     items: [
       { href: "/dashboard/traffic", label: "Website Traffic Checker", icon: (
