@@ -16,14 +16,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const path = usePathname();
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-[radial-gradient(circle_at_top_left,_#e0f2fe,_transparent_30%),radial-gradient(circle_at_bottom_right,_#fde68a,_transparent_35%),linear-gradient(180deg,_#f8fafc,_#eef2ff)]">
       {/* Sidebar */}
-      <aside className="w-60 shrink-0 bg-white border-r border-slate-100 flex flex-col">
-        <div className="px-6 py-5 border-b border-slate-100">
+      <aside className="w-64 shrink-0 bg-white/80 backdrop-blur border-r border-white/70 flex flex-col shadow-[0_0_40px_rgba(15,23,42,0.06)]">
+        <div className="px-6 py-5 border-b border-slate-100/80">
           <Link href="/" className="text-xl font-black">
-            <span className="text-indigo-600">Unbound</span>
-            <span className="text-slate-800">Keyword</span>
+            <span className="text-cyan-600">Unbound</span>
+            <span className="text-slate-900">Keyword</span>
           </Link>
+          <div className="mt-2 text-[11px] uppercase tracking-[0.18em] text-slate-400">Keyword Intelligence OS</div>
         </div>
 
         <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
@@ -39,8 +40,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition",
                   active
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-gradient-to-r from-cyan-50 to-blue-50 text-cyan-700 border border-cyan-100"
+                    : "text-slate-600 hover:bg-white hover:text-slate-900"
                 )}
               >
                 <span>{item.icon}</span>
@@ -61,7 +62,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       {/* Main */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        <div className="min-h-full bg-white/55 backdrop-blur-[1px]">{children}</div>
+      </main>
     </div>
   );
 }

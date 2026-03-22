@@ -34,6 +34,21 @@ interface MasterKeywordRow extends DiscoveryKeyword {
   sources: DiscoveryGroup["type"][];
 }
 
+interface LocalSearchIdea {
+  keyword: string;
+  state: string;
+  dma: string;
+  marketHint: string;
+  volume?: number;
+  intent?: string;
+}
+
+interface ContentIdea {
+  title: string;
+  angle: string;
+  targetKeyword: string;
+}
+
 interface List {
   id: string;
   name: string;
@@ -71,6 +86,36 @@ const LANGUAGE_OPTIONS = [
   { value: "es", label: "Spanish" },
   { value: "fr", label: "French" },
   { value: "de", label: "German" },
+];
+
+const STATE_OPTIONS = [
+  "All States",
+  "California",
+  "Texas",
+  "Florida",
+  "New York",
+  "Illinois",
+  "Georgia",
+  "Washington",
+  "Colorado",
+  "Arizona",
+  "North Carolina",
+  "Pennsylvania",
+];
+
+const DMA_OPTIONS = [
+  "All DMAs",
+  "New York",
+  "Los Angeles",
+  "Chicago",
+  "Dallas-Fort Worth",
+  "San Francisco-Oakland-San Jose",
+  "Houston",
+  "Atlanta",
+  "Miami-Fort Lauderdale",
+  "Phoenix",
+  "Seattle-Tacoma",
+  "Washington, DC (Hagerstown)",
 ];
 
 const MASTER_SOURCE_ORDER: DiscoveryGroup["type"][] = [
@@ -116,6 +161,59 @@ function buildMasterKeywordRows(groups: DiscoveryGroup[]): MasterKeywordRow[] {
     if (volumeDelta !== 0) return volumeDelta;
     return left.keyword.localeCompare(right.keyword);
   });
+}
+
+function buildLocalSearchIdeas(seed: string, rows: MasterKeywordRow[]): LocalSearchIdea[] {
+  const localModifiers = ["near me", "in", "services", "company", "agency", "consultant", "expert", "best"];
+  const topRows = rows.slice(0, 12);
+  const ideas: LocalSearchIdea[] = [];
+
+  for (const state of STATE_OPTIONS.filter((item) => item !== "All States")) {
+    for (const dma of DMA_OPTIONS.filter((item) => item !== "All DMAs").slice(0, 6)) {
+      const index = (ideas.length + state.length + dma.length) % Math.max(topRows.length, 1);
+      const base = topRows[index];
+      const keywordBase = (base?.keyword || seed).trim();
+      const modifier = localModifiers[(ideas.length + state.length + dma.length) % localModifiers.length];
+
+      ideas.push({
+        keyword: modifier === "in" ? `${keywordBase} in ${state}` : `${keywordBase} ${modifier} ${state}`,
+        state,
+        dma,
+        marketHint: `${state} / ${dma}`,
+        volume: base?.volume,
+        intent: base?.intent,
+      });
+    }
+  }
+
+  return ideas.slice(0, 120);
+}
+
+function buildContentIdeas(seed: string, groups: DiscoveryGroup[], rows: MasterKeywordRow[]): ContentIdea[] {
+  const questions = groups.find((group) => group.type === "questions")?.keywords ?? [];
+  const prepositions = groups.find((group) => group.type === "prepositions")?.keywords ?? [];
+  const comparisons = groups.find((group) => group.type === "comparisons")?.keywords ?? [];
+
+  const seeds = [
+    ...(questions.slice(0, 4).map((item) => item.keyword)),
+    ...(prepositions.slice(0, 4).map((item) => item.keyword)),
+    ...(comparisons.slice(0, 4).map((item) => item.keyword)),
+    ...(rows.slice(0, 6).map((item) => item.keyword)),
+  ];
+
+  const uniqueSeeds = Array.from(new Set(seeds.filter(Boolean))).slice(0, 10);
+
+  return uniqueSeeds.map((keyword, index) => ({
+    title: index % 2 === 0
+      ? `Complete Guide: ${keyword}`
+      : `How ${keyword} impacts growth in 2026`,
+    angle: index % 3 === 0
+      ? "Practical framework with examples, tools, and implementation checklist."
+      : index % 3 === 1
+      ? "Data-backed comparison with actionable recommendations by business size."
+      : "Local market playbook with channel-specific execution steps.",
+    targetKeyword: keyword || seed,
+  }));
 }
 
 function KeywordWheel({
@@ -252,6 +350,8 @@ export default function DiscoveryClient() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingToList, setAddingToList] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [stateFilter, setStateFilter] = useState("All States");
+  const [dmaFilter, setDmaFilter] = useState("All DMAs");
 
   const toggleKeyword = useCallback((kw: string) => {
     setSelected((prev) => {
@@ -360,6 +460,13 @@ export default function DiscoveryClient() {
     const matchesQuery = !query || row.keyword.toLowerCase().includes(query);
     return matchesGroup && matchesQuery;
   });
+  const localIdeas = buildLocalSearchIdeas(result?.seed ?? seed, masterRows);
+  const filteredLocalIdeas = localIdeas.filter((item) => {
+    const stateOk = stateFilter === "All States" || item.state === stateFilter;
+    const dmaOk = dmaFilter === "All DMAs" || item.dma === dmaFilter;
+    return stateOk && dmaOk;
+  });
+  const contentIdeas = buildContentIdeas(result?.seed ?? seed, allGroups, masterRows);
 
   return (
     <div className="p-8 max-w-7xl">
@@ -375,15 +482,15 @@ export default function DiscoveryClient() {
           </p>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl bg-white/8 border border-white/10 p-4">
+            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Circle Graph</div>
               <div className="text-lg font-bold">Questions, modifiers, and related terms in one visual map</div>
             </div>
-            <div className="rounded-2xl bg-white/8 border border-white/10 p-4">
+            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Master Table</div>
               <div className="text-lg font-bold">Every keyword source merged into one results surface</div>
             </div>
-            <div className="rounded-2xl bg-white/8 border border-white/10 p-4">
+            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
               <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Workflow Ready</div>
               <div className="text-lg font-bold">Select from wheel or list and send directly to lists</div>
             </div>
@@ -688,6 +795,84 @@ export default function DiscoveryClient() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="mt-8 grid gap-6 xl:grid-cols-2">
+            <div className="rounded-[2rem] border border-teal-200 bg-[linear-gradient(145deg,#f0fdfa,#ecfeff)] shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-teal-100">
+                <div className="text-xs uppercase tracking-[0.18em] text-teal-700 mb-2">Local Searches</div>
+                <h3 className="text-xl font-bold text-slate-900">Geo-specific keyword exploration</h3>
+                <p className="text-sm text-slate-600 mt-1">Filter by state and major DMA to target local search demand.</p>
+              </div>
+              <div className="px-6 py-4 grid gap-3 sm:grid-cols-2 border-b border-teal-100">
+                <div>
+                  <label className="text-xs uppercase tracking-[0.14em] text-slate-500 block mb-1">State</label>
+                  <select
+                    value={stateFilter}
+                    onChange={(e) => setStateFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {STATE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-[0.14em] text-slate-500 block mb-1">DMA</label>
+                  <select
+                    value={dmaFilter}
+                    onChange={(e) => setDmaFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  >
+                    {DMA_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="px-6 py-4 max-h-[360px] overflow-auto space-y-2">
+                {filteredLocalIdeas.length === 0 ? (
+                  <div className="text-sm text-slate-500">No local ideas match the current filters.</div>
+                ) : filteredLocalIdeas.slice(0, 40).map((idea) => (
+                  <button
+                    key={`${idea.keyword}-${idea.marketHint}`}
+                    onClick={() => toggleKeyword(idea.keyword)}
+                    className="w-full text-left rounded-xl border border-white/70 bg-white/80 px-4 py-3 hover:border-teal-300 transition"
+                  >
+                    <div className="font-semibold text-slate-900">{idea.keyword}</div>
+                    <div className="mt-1 text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+                      <Badge variant="green">{idea.state}</Badge>
+                      <Badge variant="blue">{idea.dma}</Badge>
+                      <span>{idea.volume ? `${formatNumber(idea.volume)} est. volume` : "geo opportunity"}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(145deg,#fffbeb,#fff7ed)] shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-amber-100">
+                <div className="text-xs uppercase tracking-[0.18em] text-amber-700 mb-2">Content Ideas</div>
+                <h3 className="text-xl font-bold text-slate-900">Publish-ready SEO content opportunities</h3>
+                <p className="text-sm text-slate-600 mt-1">Idea briefs generated from your discovery graph and keyword table.</p>
+              </div>
+              <div className="p-6 grid gap-3">
+                {contentIdeas.length === 0 ? (
+                  <div className="text-sm text-slate-500">Run discovery to generate content ideas.</div>
+                ) : contentIdeas.map((idea) => (
+                  <div key={`${idea.targetKeyword}-${idea.title}`} className="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <div className="text-base font-semibold text-slate-900">{idea.title}</div>
+                    <div className="text-sm text-slate-600 mt-1">{idea.angle}</div>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <Badge variant="orange">{idea.targetKeyword}</Badge>
+                      <Button size="sm" variant="ghost" onClick={() => toggleKeyword(idea.targetKeyword)}>
+                        Add keyword
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </>

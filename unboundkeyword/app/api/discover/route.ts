@@ -9,6 +9,7 @@ import {
   getRelatedKeywords,
   getKeywordIdeasLabs,
   getSearchIntent,
+  getGoogleAutocompleteLiveAdvanced,
   type KeywordSuggestionItem,
   type RelatedKeywordItem,
 } from "@/lib/dataforseo/client";
@@ -63,6 +64,35 @@ const COMPARISON_TERMS = [
 ];
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
+
+const A_TO_Z_SUFFIX: Record<string, string> = {
+  a: "ads",
+  b: "branding",
+  c: "cost",
+  d: "digital",
+  e: "examples",
+  f: "for small business",
+  g: "google",
+  h: "how to",
+  i: "ideas",
+  j: "jobs",
+  k: "keywords",
+  l: "local",
+  m: "management",
+  n: "near me",
+  o: "online",
+  p: "pricing",
+  q: "quotes",
+  r: "reviews",
+  s: "services",
+  t: "tools",
+  u: "usa",
+  v: "vs freelance",
+  w: "website",
+  x: "xml sitemap",
+  y: "youtube",
+  z: "zoom strategy",
+};
 
 export interface DiscoveryKeyword {
   keyword: string;
@@ -125,6 +155,35 @@ function isComparisonKeyword(keyword: string): boolean {
   return COMPARISON_TERMS.some((term) => kw.includes(term));
 }
 
+function extractAutocompleteKeywords(items: unknown[], seed: string): string[] {
+  const results = new Set<string>();
+  const minLength = Math.max(3, Math.floor(seed.trim().length / 2));
+
+  const visit = (value: unknown) => {
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized.length >= minLength && normalized !== seed) {
+        results.add(normalized);
+      }
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+      return;
+    }
+
+    if (value && typeof value === "object") {
+      for (const key of ["keyword", "value", "text", "title", "suggestion", "suggestions", "items", "results"]) {
+        visit((value as Record<string, unknown>)[key]);
+      }
+    }
+  };
+
+  visit(items);
+  return Array.from(results);
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -139,10 +198,15 @@ export async function POST(req: NextRequest) {
   const seedClean = seed.trim().toLowerCase();
 
   try {
-    const [suggestionsResult, relatedResult, ideasResult] = await Promise.allSettled([
+    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult] = await Promise.allSettled([
       getKeywordSuggestions(seedClean, location, language, 200),
       getRelatedKeywords(seedClean, location, language, 100),
       getKeywordIdeasLabs(seedClean, location, language, 200),
+      getGoogleAutocompleteLiveAdvanced(seedClean, {
+        locationCode: Number(location),
+        languageCode: String(language),
+        limit: 200,
+      }),
     ]);
 
     const suggestionsRaw: KeywordSuggestionItem[] =
@@ -150,6 +214,7 @@ export async function POST(req: NextRequest) {
     const relatedRaw: RelatedKeywordItem[] =
       relatedResult.status === "fulfilled" ? relatedResult.value : [];
     const ideasRaw = ideasResult.status === "fulfilled" ? ideasResult.value : [];
+    const autocompleteRaw = autocompleteResult.status === "fulfilled" ? autocompleteResult.value.items : [];
 
     const suggestions = suggestionsRaw.filter((item) => item.keyword?.trim().length > 0);
     const related = relatedRaw.filter((item) => item.keyword?.trim().length > 0);
@@ -164,11 +229,19 @@ export async function POST(req: NextRequest) {
         competition: null,
       })) as RelatedKeywordItem[];
 
+    const autocompleteFallback = extractAutocompleteKeywords(autocompleteRaw, seedClean).map((keyword) => ({
+      keyword,
+      searchVolume: 0,
+      cpc: null,
+      competition: null,
+    })) as RelatedKeywordItem[];
+
     // Collect keywords for intent enrichment
     const allKeywords = [
       ...suggestions.map((s) => s.keyword),
       ...related.map((r) => r.keyword),
       ...ideaFallback.map((i) => i.keyword),
+      ...autocompleteFallback.map((i) => i.keyword),
     ].filter(Boolean).slice(0, 50);
 
     const intentMap: Record<string, string> = {};
@@ -179,13 +252,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const relatedPool = uniqueByKeyword([...related, ...ideaFallback]);
+    const relatedPool = uniqueByKeyword([...related, ...ideaFallback, ...autocompleteFallback]);
 
     // 1. Questions (suggestions-first, with related/ideas fallback)
     const questionKeywords = uniqueByKeyword([
       ...suggestions.filter((s) => isQuestionKeyword(s.keyword)).map((s) => toDiscovery(s, intentMap)),
       ...relatedPool.filter((r) => isQuestionKeyword(r.keyword)).map((r) => relToDiscovery(r, intentMap)),
-    ]).slice(0, 60);
+    ]);
 
     // 2. Prepositions (not questions; suggestions-first, with fallback)
     const prepKeywords = uniqueByKeyword([
@@ -195,23 +268,80 @@ export async function POST(req: NextRequest) {
       ...relatedPool
         .filter((r) => !isQuestionKeyword(r.keyword) && isPrepositionKeyword(r.keyword))
         .map((r) => relToDiscovery(r, intentMap)),
-    ]).slice(0, 40);
+    ]);
 
     // 3. Comparisons (suggestions-first, with fallback)
     const compKeywords = uniqueByKeyword([
       ...suggestions.filter((s) => isComparisonKeyword(s.keyword)).map((s) => toDiscovery(s, intentMap)),
       ...relatedPool.filter((r) => isComparisonKeyword(r.keyword)).map((r) => relToDiscovery(r, intentMap)),
+    ]);
+
+    const fallbackQuestions: DiscoveryKeyword[] = [
+      { keyword: `how to ${seedClean}` },
+      { keyword: `what is ${seedClean}` },
+      { keyword: `why use ${seedClean}` },
+      { keyword: `who needs ${seedClean}` },
+      { keyword: `when to use ${seedClean}` },
+    ];
+
+    const fallbackPrepositions: DiscoveryKeyword[] = [
+      { keyword: `${seedClean} for small business` },
+      { keyword: `${seedClean} with ai` },
+      { keyword: `${seedClean} near me` },
+      { keyword: `${seedClean} for ecommerce` },
+      { keyword: `${seedClean} without ads` },
+    ];
+
+    const fallbackComparisons: DiscoveryKeyword[] = [
+      { keyword: `${seedClean} vs competitors` },
+      { keyword: `best ${seedClean}` },
+      { keyword: `${seedClean} alternatives` },
+      { keyword: `${seedClean} pricing comparison` },
+      { keyword: `${seedClean} reviews` },
+    ];
+
+    const safeQuestionKeywords = uniqueByKeyword([
+      ...questionKeywords,
+      ...(questionKeywords.length === 0 ? fallbackQuestions : []),
+    ]).slice(0, 60);
+
+    const safePrepKeywords = uniqueByKeyword([
+      ...prepKeywords,
+      ...(prepKeywords.length === 0 ? fallbackPrepositions : []),
+    ]).slice(0, 40);
+
+    const safeCompKeywords = uniqueByKeyword([
+      ...compKeywords,
+      ...(compKeywords.length === 0 ? fallbackComparisons : []),
     ]).slice(0, 30);
 
     const alphaGroups: DiscoveryGroup[] = [];
     for (const letter of ALPHABET) {
-      const matches = suggestions
-        .filter((s) => {
-          const kw = s.keyword.toLowerCase();
-          return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
-        })
-        .slice(0, 8)
-        .map((s) => toDiscovery(s, intentMap));
+      const matches = uniqueByKeyword([
+        ...suggestions
+          .filter((s) => {
+            const kw = s.keyword.toLowerCase();
+            return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
+          })
+          .map((s) => toDiscovery(s, intentMap)),
+        ...relatedPool
+          .filter((r) => {
+            const kw = r.keyword.toLowerCase();
+            return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
+          })
+          .map((r) => relToDiscovery(r, intentMap)),
+      ]).slice(0, 8);
+
+      if (matches.length === 0) {
+        alphaGroups.push({
+          type: "alphabetical" as const,
+          label: `${letter.toUpperCase()}`,
+          letter: letter.toUpperCase(),
+          keywords: [{ keyword: `${seedClean} ${A_TO_Z_SUFFIX[letter]}` }],
+        });
+        continue;
+      }
+
       if (matches.length > 0) {
         alphaGroups.push({ type: "alphabetical" as const, label: `${letter.toUpperCase()}`, letter: letter.toUpperCase(), keywords: matches });
       }
@@ -222,12 +352,25 @@ export async function POST(req: NextRequest) {
       .slice(0, 50)
       .map((r) => relToDiscovery(r, intentMap));
 
+    const safeRelatedKeywords = uniqueByKeyword([
+      ...relatedKeywords,
+      ...(relatedKeywords.length === 0
+        ? [
+            { keyword: `${seedClean} services` },
+            { keyword: `${seedClean} company` },
+            { keyword: `${seedClean} consultant` },
+            { keyword: `${seedClean} strategy` },
+            { keyword: `${seedClean} tools` },
+          ]
+        : []),
+    ]).slice(0, 50);
+
     const groups: DiscoveryGroup[] = ([
-      { type: "questions" as const, label: "Questions", keywords: questionKeywords },
-      { type: "prepositions" as const, label: "Prepositions", keywords: prepKeywords },
-      { type: "comparisons" as const, label: "Comparisons", keywords: compKeywords },
+      { type: "questions" as const, label: "Questions", keywords: safeQuestionKeywords },
+      { type: "prepositions" as const, label: "Prepositions", keywords: safePrepKeywords },
+      { type: "comparisons" as const, label: "Comparisons", keywords: safeCompKeywords },
       ...alphaGroups,
-      { type: "related" as const, label: "Related", keywords: relatedKeywords },
+      { type: "related" as const, label: "Related", keywords: safeRelatedKeywords },
     ] as DiscoveryGroup[]).filter((g) => g.keywords.length > 0);
 
     if (save) {
