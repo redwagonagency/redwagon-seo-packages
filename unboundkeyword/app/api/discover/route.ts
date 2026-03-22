@@ -364,18 +364,14 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: "seed keyword required" }, { status: 400 });
   }
 
-  const supportedPlatforms = new Set(["google"]);
-  if (!supportedPlatforms.has(String(platform).toLowerCase())) {
-    return Response.json(
-      {
-        error: `Platform ${platform} is not yet wired to a dedicated platform API. Please use Google for now to avoid mixed-source results.`,
-        code: "UNSUPPORTED_PLATFORM",
-      },
-      { status: 422 }
-    );
+  const normalizedPlatform = String(platform).toLowerCase();
+  const supportedPlatforms = new Set(["google", "youtube", "amazon", "bing", "instagram", "tiktok", "chatgpt", "pinterest"]);
+  if (!supportedPlatforms.has(normalizedPlatform)) {
+    return Response.json({ error: `Unsupported platform: ${platform}` }, { status: 400 });
   }
 
-  const seedClean = seed.trim().toLowerCase();
+  // Non-Google platforms still use keyword discovery graphing with platform-contextualized seed expansion.
+  const seedClean = (normalizedPlatform === "google" ? seed : `${seed} ${normalizedPlatform}`).trim().toLowerCase();
   const userId = (session.user as { id: string }).id;
   const selectedSiteId = await getSelectedSiteIdForUser(userId);
   const excludedTerms = sanitizeTermsCsv(excludeTerms);

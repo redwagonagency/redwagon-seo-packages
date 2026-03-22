@@ -5,6 +5,8 @@ import { formatNumber } from "@/lib/utils";
 
 type LocalStateRow = {
   state: string;
+  stateCode?: string;
+  localizedKeyword: string;
   volume: number;
   difficulty: number | null;
   cpc: number | null;
@@ -19,7 +21,7 @@ type LocalKeywordResponse = {
 };
 
 const STATE_OPTIONS = [
-  "CA", "TX", "FL", "NY", "IL", "PA", "OH", "GA", "NC", "MI", "WA", "AZ", "CO", "MA", "NJ",
+  "California", "Texas", "Florida", "New York", "Illinois", "Pennsylvania", "Ohio", "Georgia", "North Carolina", "Michigan", "Washington", "Arizona", "Colorado", "Massachusetts", "New Jersey",
 ];
 
 const DMA_OPTIONS = [
@@ -62,7 +64,8 @@ export default function LocalKeywordsPage() {
 
       const dmaExpanded = selectedDmas.map((dma, idx) => {
         const ref = filteredByState[idx % Math.max(filteredByState.length, 1)] ?? {
-          state: "US",
+          state: "United States",
+          localizedKeyword: `${keyword.trim()} in United States`,
           volume: Math.max(40, Math.round((data.keyword.currentVolume || 1000) * 0.04)),
           difficulty: 35,
           cpc: 2.1,
@@ -70,6 +73,7 @@ export default function LocalKeywordsPage() {
 
         return {
           state: `${dma} DMA`,
+          localizedKeyword: `${keyword.trim()} in ${dma}`,
           volume: Math.max(15, Math.round(ref.volume * (0.6 + ((idx % 4) * 0.1)))),
           difficulty: ref.difficulty,
           cpc: ref.cpc,
@@ -101,7 +105,7 @@ export default function LocalKeywordsPage() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="e.g. digital marketing agency"
-            className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#f15b27]"
+            className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-[#f15b27]"
           />
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">
@@ -180,6 +184,7 @@ export default function LocalKeywordsPage() {
           <table className="w-full min-w-[700px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Localized Keyword</th>
                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Location</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
                 <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
@@ -189,12 +194,13 @@ export default function LocalKeywordsPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
+                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-slate-400">
                     Select locations and run a local keyword analysis.
                   </td>
                 </tr>
               ) : rows.map((row) => (
                 <tr key={`${row.state}-${row.volume}`} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="px-6 py-3 font-medium text-slate-900">{row.localizedKeyword}</td>
                   <td className="px-6 py-3 font-medium text-slate-800">{row.state}</td>
                   <td className="px-6 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
                   <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>

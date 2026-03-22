@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, type FormEvent } from "react";
 
 const PLATFORM_TABS = [
   { id: "google",    label: "Google",    color: "#EA4335", icon: "G"  },
@@ -14,15 +13,53 @@ const PLATFORM_TABS = [
 ];
 
 export default function DashboardSearch() {
-  const router = useRouter();
   const [query, setQuery]               = useState("");
   const [activePlatform, setActivePlatform] = useState("google");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState<Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; source: string }>>([]);
+  const [aiPhrases, setAiPhrases] = useState<Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null }>>([]);
+
+  const hasResults = results.length > 0 || aiPhrases.length > 0;
+
+  const topResults = useMemo(() => results.slice(0, 30), [results]);
+  const topAiPhrases = useMemo(() => aiPhrases.slice(0, 20), [aiPhrases]);
+
+  async function runInlineSearch(term: string) {
+    const q = term.trim();
+    if (!q) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/overview-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: q, platform: activePlatform }),
+      });
+
+      const data = (await res.json()) as {
+        error?: string;
+        results?: Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; source: string }>;
+        aiPhraseAnalysis?: Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null }>;
+      };
+
+      if (!res.ok) throw new Error(data.error || "Search failed");
+
+      setResults(data.results ?? []);
+      setAiPhrases(data.aiPhraseAnalysis ?? []);
+    } catch (e) {
+      setResults([]);
+      setAiPhrases([]);
+      setError(e instanceof Error ? e.message : "Search failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function handleSearch(e: FormEvent) {
     e.preventDefault();
-    const q = query.trim();
-    if (!q) return;
-    router.push(`/dashboard/discover?q=${encodeURIComponent(q)}&platform=${encodeURIComponent(activePlatform)}`);
+    void runInlineSearch(query);
   }
 
   const active = PLATFORM_TABS.find(t => t.id === activePlatform)!;
@@ -95,7 +132,7 @@ export default function DashboardSearch() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={`Enter a keyword to explore on ${active.label}…`}
-            className="flex-1 bg-transparent text-sm text-slate-800 placeholder:text-slate-400 outline-none min-w-0"
+            className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-500 outline-none min-w-0"
           />
           {query && (
             <button
@@ -109,13 +146,14 @@ export default function DashboardSearch() {
         </div>
         <button
           type="submit"
+          disabled={loading || !query.trim()}
           className="shrink-0 flex items-center gap-2 rounded-xl bg-[#f15b27] hover:bg-[#d94e1f] text-white text-sm font-bold px-5 py-2.5 transition shadow-md shadow-orange-200"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" strokeWidth="2" />
             <path d="m21 21-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
           </svg>
-          Discover
+          {loading ? "Searching..." : "Discover"}
         </button>
       </form>
 
@@ -128,7 +166,7 @@ export default function DashboardSearch() {
             type="button"
             onClick={() => {
               setQuery(preset);
-              router.push(`/dashboard/discover?q=${encodeURIComponent(preset)}&platform=${encodeURIComponent(activePlatform)}`);
+              void runInlineSearch(preset);
             }}
             className="text-[11px] text-[#f15b27] font-semibold border border-[#f15b27]/25 bg-[#fff3ee] rounded-full px-2.5 py-0.5 hover:bg-[#ffe4d6] transition"
           >
@@ -136,6 +174,70 @@ export default function DashboardSearch() {
           </button>
         ))}
       </div>
+
+      {error ? (
+        <div className="px-6 pb-4">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        </div>
+      ) : null}
+
+      {hasResults ? (
+        <div className="px-6 pb-6 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900">Platform Results ({topResults.length})</h3>
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{active.label}</span>
+            </div>
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Keyword</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Volume</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">CPC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topResults.map((row) => (
+                    <tr key={`${row.keyword}-${row.source}`} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-900 font-medium">{row.keyword}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.volume != null ? row.volume.toLocaleString() : "-"}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h3 className="text-sm font-black text-slate-900">AI Phrase Analysis</h3>
+              <p className="text-xs text-slate-500 mt-1">Question-style prompts for AI engines and conversational search.</p>
+            </div>
+            <div className="max-h-[360px] overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Phrase</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Volume</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Intent</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topAiPhrases.map((row) => (
+                    <tr key={row.keyword} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-900 font-medium">{row.keyword}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.volume != null ? row.volume.toLocaleString() : "-"}</td>
+                      <td className="px-3 py-2 text-right text-slate-700 capitalize">{row.intent ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

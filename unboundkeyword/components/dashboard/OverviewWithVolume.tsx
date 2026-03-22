@@ -100,7 +100,7 @@ export default function OverviewWithVolume() {
         <input
           type="text"
           placeholder="Type to search keywords..."
-          className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#f15b27] text-sm"
+          className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#f15b27] text-sm text-slate-900 placeholder:text-slate-500"
           onKeyDown={(e) => {
             if (e.key === "Enter" && e.currentTarget.value) {
               handleKeywordSelect(e.currentTarget.value);

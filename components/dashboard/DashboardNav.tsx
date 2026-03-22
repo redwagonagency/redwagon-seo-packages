@@ -41,6 +41,7 @@ const NAV_SECTIONS: NavSection[] = [
           { href: "/dashboard/keyword-research/gap", label: "Keyword Gap" },
         ],
       },
+      { href: "/dashboard/local-seo/product-keywords", icon: "🛍️", label: "Product Keywords" },
       { href: "/dashboard/domain-analytics", icon: "🏢", label: "Domain Analytics" },
       { href: "/dashboard/competitors", icon: "🏆", label: "Competitors" },
     ],
