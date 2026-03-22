@@ -10,11 +10,10 @@ async function main() {
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    // Update role to SUPERADMIN and ensure password is correct
-    const hash = await bcrypt.hash(password, 12);
+    // Keep existing password stable; only enforce role/name so logins don't break unexpectedly.
     await prisma.user.update({
       where: { email },
-      data: { role: "SUPERADMIN", password: hash, name },
+      data: { role: "SUPERADMIN", name },
     });
     console.log("✓ Updated existing user to SUPERADMIN:", email);
     return;

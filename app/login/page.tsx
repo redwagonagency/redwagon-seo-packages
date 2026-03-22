@@ -23,7 +23,11 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (result?.error) {
-      setError("Invalid email or password. Please try again.");
+      if (result.error === "OAuthAccountNotLinked") {
+        setError("This email is already registered. Sign in with your password once, then you can use Google/Facebook.");
+      } else {
+        setError("Invalid email or password. Please try again.");
+      }
     } else {
       router.push("/dashboard");
     }
