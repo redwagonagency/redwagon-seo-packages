@@ -98,6 +98,33 @@ function relToDiscovery(item: RelatedKeywordItem, intentMap: Record<string, stri
   };
 }
 
+function uniqueByKeyword<T extends { keyword: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const unique: T[] = [];
+  for (const item of items) {
+    const normalized = item.keyword.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    unique.push(item);
+  }
+  return unique;
+}
+
+function isQuestionKeyword(keyword: string): boolean {
+  const kw = keyword.toLowerCase();
+  return QUESTION_PREFIXES.some((prefix) => kw.startsWith(`${prefix} `));
+}
+
+function isPrepositionKeyword(keyword: string): boolean {
+  const kw = keyword.toLowerCase();
+  return PREPOSITIONS.some((prep) => kw.includes(` ${prep} `));
+}
+
+function isComparisonKeyword(keyword: string): boolean {
+  const kw = keyword.toLowerCase();
+  return COMPARISON_TERMS.some((term) => kw.includes(term));
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -152,32 +179,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 1. Questions
-    const questionKeywords = suggestions
-      .filter((s) => QUESTION_PREFIXES.some((p) => s.keyword.toLowerCase().startsWith(p + " ")))
-      .map((s) => toDiscovery(s, intentMap))
-      .slice(0, 60);
+    const relatedPool = uniqueByKeyword([...related, ...ideaFallback]);
 
-    // 2. Prepositions (not questions)
-    const prepKeywords = suggestions
-      .filter((s) => {
-        const kw = s.keyword.toLowerCase();
-        return (
-          !QUESTION_PREFIXES.some((p) => kw.startsWith(p + " ")) &&
-          PREPOSITIONS.some((p) => kw.includes(` ${p} `))
-        );
-      })
-      .map((s) => toDiscovery(s, intentMap))
-      .slice(0, 40);
+    // 1. Questions (suggestions-first, with related/ideas fallback)
+    const questionKeywords = uniqueByKeyword([
+      ...suggestions.filter((s) => isQuestionKeyword(s.keyword)).map((s) => toDiscovery(s, intentMap)),
+      ...relatedPool.filter((r) => isQuestionKeyword(r.keyword)).map((r) => relToDiscovery(r, intentMap)),
+    ]).slice(0, 60);
 
-    // 3. Comparisons — use the expanded COMPARISON_TERMS list
-    const compKeywords = suggestions
-      .filter((s) => {
-        const kw = s.keyword.toLowerCase();
-        return COMPARISON_TERMS.some((t) => kw.includes(t));
-      })
-      .map((s) => toDiscovery(s, intentMap))
-      .slice(0, 30);
+    // 2. Prepositions (not questions; suggestions-first, with fallback)
+    const prepKeywords = uniqueByKeyword([
+      ...suggestions
+        .filter((s) => !isQuestionKeyword(s.keyword) && isPrepositionKeyword(s.keyword))
+        .map((s) => toDiscovery(s, intentMap)),
+      ...relatedPool
+        .filter((r) => !isQuestionKeyword(r.keyword) && isPrepositionKeyword(r.keyword))
+        .map((r) => relToDiscovery(r, intentMap)),
+    ]).slice(0, 40);
+
+    // 3. Comparisons (suggestions-first, with fallback)
+    const compKeywords = uniqueByKeyword([
+      ...suggestions.filter((s) => isComparisonKeyword(s.keyword)).map((s) => toDiscovery(s, intentMap)),
+      ...relatedPool.filter((r) => isComparisonKeyword(r.keyword)).map((r) => relToDiscovery(r, intentMap)),
+    ]).slice(0, 30);
 
     const alphaGroups: DiscoveryGroup[] = [];
     for (const letter of ALPHABET) {
@@ -194,9 +218,6 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Related
-    const relatedPool = [...related, ...ideaFallback]
-      .filter((item, index, self) => self.findIndex((compare) => compare.keyword.toLowerCase() === item.keyword.toLowerCase()) === index);
-
     const relatedKeywords = relatedPool
       .slice(0, 50)
       .map((r) => relToDiscovery(r, intentMap));
