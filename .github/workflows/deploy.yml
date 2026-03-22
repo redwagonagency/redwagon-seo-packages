@@ -10,81 +10,26 @@ jobs:
   deploy:
     name: Deploy SearchAudit Pro to VPS
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Python SSH library
+        run: pip install paramiko
+
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: 22
-          script_stop: true
-          script: |
-            set -e
-
-            APP_DIR="/root/searchauditpro"
-
-            # ── clone or pull ──────────────────────────────────────────
-            if [ -d "$APP_DIR/.git" ]; then
-              echo ">>> Pulling latest code..."
-              cd "$APP_DIR"
-              git fetch origin main
-              git reset --hard origin/main
-            else
-              echo ">>> Cloning repo..."
-              git clone https://github.com/redwagonagency/redwagon-seo-packages.git "$APP_DIR"
-              cd "$APP_DIR"
-            fi
-
-            # ── write production .env ─────────────────────────────────
-            cat > "$APP_DIR/.env.production" << 'ENVEOF'
-            DATABASE_URL="file:/root/searchauditpro/data/prod.db"
-            AUTH_URL="http://187.124.238.244"
-            NEXTAUTH_URL="http://187.124.238.244"
-            NEXTAUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}"
-            AUTH_SECRET="${{ secrets.NEXTAUTH_SECRET }}"
-            GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
-            GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
-            GSC_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
-            GSC_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
-            GA4_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}"
-            GA4_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}"
-            FACEBOOK_CLIENT_ID="${{ secrets.FACEBOOK_CLIENT_ID }}"
-            FACEBOOK_CLIENT_SECRET="${{ secrets.FACEBOOK_CLIENT_SECRET }}"
-            DATAFORSEO_LOGIN="${{ secrets.DATAFORSEO_LOGIN }}"
-            DATAFORSEO_PASSWORD="${{ secrets.DATAFORSEO_PASSWORD }}"
-            SERPAPI_KEY="${{ secrets.SERPAPI_KEY }}"
-            SUPERADMIN_EMAIL="${{ secrets.SUPERADMIN_EMAIL }}"
-            SUPERADMIN_PASSWORD="${{ secrets.SUPERADMIN_PASSWORD }}"
-            ENVEOF
-
-            # ── install deps ───────────────────────────────────────────
-            echo ">>> Installing dependencies..."
-            cd "$APP_DIR"
-            npm ci --prefer-offline
-
-            # ── prisma ────────────────────────────────────────────────
-            echo ">>> Running Prisma migrations..."
-            mkdir -p /root/searchauditpro/data
-            DATABASE_URL="file:/root/searchauditpro/data/prod.db" npx prisma migrate deploy
-            DATABASE_URL="file:/root/searchauditpro/data/prod.db" npx prisma generate
-
-            # ── build ─────────────────────────────────────────────────
-            echo ">>> Building Next.js app..."
-            NODE_ENV=production npm run build
-
-            # ── (re)start with PM2 ────────────────────────────────────
-            echo ">>> Restarting PM2..."
-            if pm2 describe searchauditpro > /dev/null 2>&1; then
-              pm2 reload searchauditpro --update-env
-            else
-              pm2 start ecosystem.config.js
-            fi
-            pm2 save
-
-            echo ">>> Deployment complete ✓"
+        env:
+          SERVER_HOST:        ${{ secrets.SERVER_HOST }}
+          SERVER_USER:        ${{ secrets.SERVER_USER }}
+          SERVER_PASSWORD:    ${{ secrets.SERVER_PASSWORD }}
+          NEXTAUTH_SECRET:    ${{ secrets.NEXTAUTH_SECRET }}
+          GOOGLE_CLIENT_ID:   ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          DATAFORSEO_LOGIN:   ${{ secrets.DATAFORSEO_LOGIN }}
+          DATAFORSEO_PASSWORD: ${{ secrets.DATAFORSEO_PASSWORD }}
+          SERPAPI_KEY:        ${{ secrets.SERPAPI_KEY }}
+          SUPERADMIN_EMAIL:   ${{ secrets.SUPERADMIN_EMAIL }}
+          SUPERADMIN_PASSWORD: ${{ secrets.SUPERADMIN_PASSWORD }}
+        run: python3 .github/scripts/deploy.py
