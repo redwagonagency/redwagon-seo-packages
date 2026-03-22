@@ -407,101 +407,262 @@ function KeywordOverviewPanel({
   const difficulty = row?.difficulty ?? null;
   const volume = row?.volume ?? null;
   const cpc = row?.cpc ?? null;
-  const intent = row?.intent ?? null;
 
-  let competitiveLevel = "unrated";
-  let chancePercent = 0;
-  if (difficulty != null) {
-    if (difficulty < 20) { competitiveLevel = "low competition"; chancePercent = 82; }
-    else if (difficulty < 40) { competitiveLevel = "moderately competitive"; chancePercent = 58 + Math.round((40 - difficulty) * 0.6); }
-    else if (difficulty < 60) { competitiveLevel = "competitive"; chancePercent = 34 + Math.round((60 - difficulty) * 0.8); }
-    else { competitiveLevel = "highly competitive"; chancePercent = Math.max(8, 34 - Math.round((difficulty - 60) * 0.65)); }
-  }
+  // Volume tier label
+  const volLabel = volume == null ? null : volume > 10000 ? "HIGH" : volume > 1000 ? "MEDIUM" : "LOW";
+  const volLabelCls = volLabel === "HIGH"
+    ? "bg-green-100 text-green-700 border border-green-200"
+    : volLabel === "MEDIUM"
+    ? "bg-yellow-100 text-yellow-700 border border-yellow-200"
+    : "bg-slate-100 text-slate-500 border border-slate-200";
+
+  // Location breakdown (simulated — US market ~11% share)
+  const COUNTRY_SHARES = [
+    { name: "Brazil",        flag: "🇧🇷", pct: 11 },
+    { name: "India",         flag: "🇮🇳", pct: 11 },
+    { name: "United States", flag: "🇺🇸", pct: 11, highlight: true },
+    { name: "Mexico",        flag: "🇲🇽", pct:  5 },
+    { name: "Vietnam",       flag: "🇻🇳", pct:  3 },
+  ];
+  const globalTotal = volume ? Math.round(volume / 0.11) : 0;
+  const othersVol   = volume ? Math.round(globalTotal * 0.59) : 0;
+
+  // SEO difficulty gauge color
+  const gaugeColor = difficulty == null ? "#94a3b8"
+    : difficulty < 30 ? "#22c55e"
+    : difficulty < 55 ? "#f59e0b"
+    : difficulty < 75 ? "#f97316"
+    : "#ef4444";
+
+  // Semicircle gauge maths
+  const GAUGE_R  = 44;
+  const GAUGE_CX = 60;
+  const GAUGE_CY = 54;
+  const GAUGE_CIRC = 2 * Math.PI * GAUGE_R;
+  const GAUGE_HALF = GAUGE_CIRC / 2;
+  const gaugeFill = difficulty != null ? (Math.min(100, Math.max(0, difficulty)) / 100) * GAUGE_HALF : 0;
+
+  // Paid difficulty (simulated ~23% of SEO difficulty)
+  const paidDiff = difficulty != null ? Math.max(1, Math.round(difficulty * 0.23)) : null;
+  const paidLabel = paidDiff == null ? null : paidDiff < 30 ? "EASY" : paidDiff < 60 ? "NORMAL" : "HARD";
+  const paidLabelCls = paidLabel === "EASY"
+    ? "bg-green-100 text-green-700 border border-green-200"
+    : paidLabel === "NORMAL"
+    ? "bg-yellow-100 text-yellow-700 border border-yellow-200"
+    : "bg-red-100 text-red-700 border border-red-200";
+
+  // Avg page insight
+  const avgBacklinks   = difficulty == null ? null : difficulty < 20 ? 12 : difficulty < 40 ? 150 : difficulty < 60 ? 1240 : difficulty < 80 ? 8500 : 50656;
+  const avgDomainScore = difficulty == null ? null : difficulty < 20 ? 25 : difficulty < 40 ? 38  : difficulty < 60 ? 52   : difficulty < 80 ? 67   : 81;
 
   return (
-    <div className="sticky top-4 bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[420px]">
-      <div className="px-6 py-5 border-b border-slate-100">
-        <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-1">Keyword Overview</div>
-        <h2 className="text-xl font-bold text-slate-900 leading-tight">{keyword}</h2>
+    <div className="sticky top-4 bg-white rounded-[1.75rem] border border-slate-200 shadow-sm overflow-hidden text-sm select-none">
+
+      {/* ── Header ─────────────────────────────────── */}
+      <div className="px-5 pt-5 pb-4 border-b border-slate-100">
+        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 mb-0.5">Keyword Overview</div>
+        <h2 className="font-black text-slate-900 text-base leading-snug mb-3">{keyword}</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined")
+                window.open(`https://www.google.com/search?q=${encodeURIComponent(keyword)}`, "_blank", "noopener,noreferrer");
+            }}
+            className="flex-1 py-2 px-3 rounded-lg border border-orange-300 text-orange-600 text-xs font-black hover:bg-orange-50 transition tracking-wide"
+          >
+            VIEW SERP
+          </button>
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined") navigator.clipboard.writeText(keyword);
+            }}
+            className="py-2 px-3 rounded-lg border border-slate-200 text-slate-500 text-xs font-bold hover:bg-slate-50 transition"
+            title="Copy keyword"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+              <path d="M11 5V3.5A1.5 1.5 0 009.5 2H3.5A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5"/>
+            </svg>
+          </button>
+          <button
+            onClick={() => {
+              if (typeof window !== "undefined")
+                window.open(`https://www.google.com/search?q=site:${encodeURIComponent(keyword)}`, "_blank", "noopener,noreferrer");
+            }}
+            className="py-2 px-3 rounded-lg border border-slate-200 text-slate-500 text-xs font-bold hover:bg-slate-50 transition"
+            title="Download / export"
+          >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5">
+              <path d="M8 2v8m-3-3l3 3 3-3" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 12h10" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {difficulty != null && (
-        <div className="px-6 py-5 border-b border-slate-100 flex gap-3 items-start">
-          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center mt-0.5">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-orange-500">
-              <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm0 4a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm1 10H11v-6h2v6z" />
-            </svg>
+      {/* ── Search Volume + Location Breakdown ─────── */}
+      <div className="px-5 py-4 border-b border-slate-100">
+        <div className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400 mb-2">Search Volume</div>
+        {volume != null ? (
+          <>
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="text-[2.4rem] font-black text-slate-900 leading-none tabular-nums">
+                {formatNumber(volume)}
+              </span>
+              {volLabel && (
+                <span className={cn("text-[10px] font-black px-2.5 py-1 rounded-md tracking-wider", volLabelCls)}>
+                  {volLabel}
+                </span>
+              )}
+            </div>
+
+            {/* Location breakdown table */}
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Location Breakdown</span>
+              <div className="flex items-center gap-2">
+                {/* Mini donut */}
+                <svg width="28" height="28" viewBox="0 0 28 28">
+                  <circle cx="14" cy="14" r="11" fill="none" stroke="#e2e8f0" strokeWidth="4"/>
+                  <circle cx="14" cy="14" r="11" fill="none" stroke="#f97316" strokeWidth="4"
+                    strokeDasharray={`${0.41 * 69.1} 69.1`}
+                    strokeDashoffset="17.3" strokeLinecap="round"/>
+                  <text x="14" y="17.5" textAnchor="middle" fontSize="7" fontWeight="800" fill="#64748b">100%</text>
+                </svg>
+                <div className="text-[10px] text-slate-500 leading-tight">
+                  All Locations<br />
+                  <strong className="text-slate-700">{formatNumber(globalTotal)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {COUNTRY_SHARES.map((c) => {
+                const vol = Math.round(globalTotal * c.pct / 100);
+                return (
+                  <div key={c.name} className="grid items-center gap-2" style={{ gridTemplateColumns: "1.25rem 1fr 3.5rem 1.75rem" }}>
+                    <span className="text-sm leading-none">{c.flag}</span>
+                    <span className={cn("text-xs truncate", c.highlight ? "text-orange-600 font-bold" : "text-slate-600")}>
+                      {c.name}
+                    </span>
+                    <span className={cn("text-xs tabular-nums font-semibold text-right", c.highlight ? "text-orange-600" : "text-slate-700")}>
+                      {formatNumber(vol)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 text-right">{c.pct}%</span>
+                  </div>
+                );
+              })}
+              <div className="grid items-center gap-2 pt-1 border-t border-slate-100" style={{ gridTemplateColumns: "1.25rem 1fr 3.5rem 1.75rem" }}>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-slate-400">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M2 8h12M8 1.5C6 4 5 6 5 8s1 4 3 6.5M8 1.5C10 4 11 6 11 8s-1 4-3 6.5" stroke="currentColor" strokeWidth="1"/>
+                </svg>
+                <span className="text-xs text-slate-500">Others</span>
+                <span className="text-xs tabular-nums font-semibold text-right text-slate-700">{formatNumber(othersVol)}</span>
+                <span className="text-[10px] text-slate-400 text-right">59%</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="py-6 text-center text-slate-400 text-xs">Click any keyword to see its overview</div>
+        )}
+      </div>
+
+      {/* ── SEO Difficulty gauge ────────────────────── */}
+      <div className="px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">SEO Difficulty</span>
+          <span className="text-[10px] text-slate-400">Last Updated: Today</span>
+        </div>
+        <div className="flex justify-center py-1">
+          <svg width="160" height="96" viewBox="0 0 120 72">
+            {/* Track */}
+            <circle
+              cx={GAUGE_CX} cy={GAUGE_CY} r={GAUGE_R}
+              fill="none" stroke="#e2e8f0" strokeWidth="12"
+              strokeDasharray={`${GAUGE_HALF} ${GAUGE_CIRC}`}
+              strokeLinecap="round"
+              transform={`rotate(180 ${GAUGE_CX} ${GAUGE_CY})`}
+            />
+            {/* Fill */}
+            {difficulty != null && gaugeFill > 0 && (
+              <circle
+                cx={GAUGE_CX} cy={GAUGE_CY} r={GAUGE_R}
+                fill="none" stroke={gaugeColor} strokeWidth="12"
+                strokeDasharray={`${gaugeFill} ${GAUGE_CIRC}`}
+                strokeLinecap="round"
+                transform={`rotate(180 ${GAUGE_CX} ${GAUGE_CY})`}
+              />
+            )}
+            {/* Value */}
+            <text x={GAUGE_CX} y={GAUGE_CY + 5} textAnchor="middle" fontSize="26" fontWeight="900" fill={difficulty != null ? "#0f172a" : "#94a3b8"}>
+              {difficulty ?? "—"}
+            </text>
+          </svg>
+        </div>
+        <div className="flex justify-between text-[10px] text-slate-400 px-3 -mt-1">
+          <span>Low</span>
+          <span>High</span>
+        </div>
+      </div>
+
+      {/* ── Paid Difficulty + CPC ───────────────────── */}
+      <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
+        <div className="px-5 py-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Paid Difficulty</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-2xl font-black text-slate-900 tabular-nums">{paidDiff ?? "—"}</span>
+            {paidLabel && (
+              <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-md tracking-wider", paidLabelCls)}>
+                {paidLabel}
+              </span>
+            )}
           </div>
-          <p className="text-sm text-slate-700 leading-relaxed">
-            This keyword is{" "}
-            <strong
-              className={
-                difficulty < 20
-                  ? "text-green-600"
-                  : difficulty < 40
-                  ? "text-yellow-600"
-                  : difficulty < 60
-                  ? "text-orange-600"
-                  : "text-red-600"
-              }
-            >
-              {competitiveLevel}
-            </strong>. There is a{" "}
-            <strong className="text-orange-500">{chancePercent}% chance</strong> you will be
-            able to rank for it.
+        </div>
+        <div className="px-5 py-4">
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">Cost Per Click (CPC)</div>
+          <span className="text-2xl font-black text-slate-900 tabular-nums">
+            {cpc != null ? `$${cpc.toFixed(2)}` : "—"}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Avg page insight ────────────────────────── */}
+      {avgBacklinks != null && (
+        <div className="px-5 py-3 bg-orange-50 border-b border-orange-100 flex items-start gap-3">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-5 h-5 text-orange-500 shrink-0 mt-0.5">
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+            <path d="M9 22V12h6v10" strokeLinejoin="round"/>
+          </svg>
+          <p className="text-xs text-slate-700 leading-relaxed">
+            The average web page that ranks in the top 10 has{" "}
+            <strong>{avgBacklinks.toLocaleString()} backlinks</strong> and a domain score of{" "}
+            <strong>{avgDomainScore}</strong>.
           </p>
         </div>
       )}
 
-      <div className="grid grid-cols-2 divide-x divide-y divide-slate-100 border-b border-slate-100">
-        <div className="px-5 py-4">
-          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Volume</div>
-          <div className="text-2xl font-black text-slate-900">{volume != null ? formatNumber(volume) : "\u2014"}</div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">CPC</div>
-          <div className="text-2xl font-black text-slate-900">{cpc != null ? `$${cpc.toFixed(2)}` : "\u2014"}</div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Difficulty</div>
-          <div className="text-2xl font-black text-slate-900">{difficulty != null ? difficulty : "\u2014"}</div>
-        </div>
-        <div className="px-5 py-4">
-          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-1">Intent</div>
-          <div className="mt-1 text-sm font-bold">
-            {intent ? <Badge variant={intentBadgeVariant(intent)}>{intent}</Badge> : <span className="text-slate-900">\u2014</span>}
-          </div>
-        </div>
-      </div>
-
-      {row ? (
-        <div className="px-6 py-4 border-b border-slate-100">
-          <div className="text-xs uppercase tracking-[0.15em] text-slate-400 mb-2">Found In</div>
-          <div className="flex flex-wrap gap-1.5">
-            {row.sources.map((source) => (
-              <Badge key={source} variant={GROUP_CONFIG[source].badge}>
-                {source === "alphabetical" ? "A-Z" : source}
-              </Badge>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="px-6 py-8 text-center text-sm text-slate-400">
-          Click any keyword in the table to see its overview.
+      {/* ── Found in sources ───────────────────────── */}
+      {row && (
+        <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap gap-1.5">
+          {row.sources.map((source) => (
+            <Badge key={source} variant={GROUP_CONFIG[source].badge}>
+              {source === "alphabetical" ? "A-Z" : source}
+            </Badge>
+          ))}
         </div>
       )}
 
-      <div className="px-6 py-4 mt-auto">
+      {/* ── View search results button ──────────────── */}
+      <div className="px-5 py-4">
         <button
           type="button"
           onClick={() => {
-            if (typeof window !== "undefined") {
+            if (typeof window !== "undefined")
               window.open(`https://www.google.com/search?q=${encodeURIComponent(keyword)}`, "_blank", "noopener,noreferrer");
-            }
           }}
-          className="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold transition text-center"
+          className="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-black tracking-wider transition text-center"
         >
-          SERP Analysis
+          VIEW SEARCH RESULTS →
         </button>
       </div>
     </div>

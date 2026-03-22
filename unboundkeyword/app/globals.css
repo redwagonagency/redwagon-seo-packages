@@ -207,30 +207,42 @@ body {
   backdrop-filter: blur(12px);
 }
 /* ── Hero image (cutout treatment) ──────────────────────────────── */
-.ubk-hero-image-wrap {
-  position: relative;
-  isolation: isolate;
-}
-
-.ubk-hero-image-wrap::before {
-  content: "";
-  position: absolute;
-  inset: 8% 10% 8% 10%;
-  z-index: -1;
-  background: radial-gradient(circle at 50% 35%, rgba(241,91,39,0.42), rgba(241,91,39,0.12) 55%, transparent 78%);
-  filter: blur(16px);
-}
-
-.ubk-hero-image {
-  max-width: 420px;
-  width: 100%;
-  height: auto;
+/* (old hero image wrap removed) */
+/* ── Hero person image (natural RGBA transparency) ── */
+.ubk-hero-person {
+  max-height: 540px;
+  width: auto;
+  max-width: 100%;
   object-fit: contain;
-  margin: 0 auto;
-  mix-blend-mode: multiply;
-  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 70%, rgba(0,0,0,0.82) 82%, transparent 100%);
-  mask-image: radial-gradient(circle at 50% 45%, #000 70%, rgba(0,0,0,0.82) 82%, transparent 100%);
-  filter: drop-shadow(0 16px 34px rgba(0,0,0,0.42)) drop-shadow(0 0 36px rgba(241,91,39,0.25));
+  position: relative;
+  filter: drop-shadow(0 24px 48px rgba(0,0,0,0.48)) drop-shadow(0 0 72px rgba(249,115,22,0.22));
+  transform-origin: bottom center;
+}
+
+/* ── Floating stat chips around hero image ── */
+.ubk-float-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 40px;
+  background: rgba(12, 12, 26, 0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(255,255,255,0.13);
+  font-size: 12px;
+  color: rgba(255,255,255,0.9);
+  white-space: nowrap;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.38), inset 0 1px 0 rgba(255,255,255,0.06);
+  z-index: 10;
+  animation: ubk-float 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes ubk-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-8px); }
 }
 
 /* ── Below fold (white background) ───────────── */

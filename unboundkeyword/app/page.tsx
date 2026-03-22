@@ -246,76 +246,122 @@ export default function HomePage() {
         </div>
 
         {/* Hero content */}
-        <div className="relative z-10 flex flex-col items-center text-center px-6 pt-14 pb-10 max-w-4xl mx-auto">
+        {/* Hero content — two-column split */}
+        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-10">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_460px] gap-6 xl:gap-12 items-end">
 
-          {/* Eyebrow badge */}
-          <a href="#" className="ubk-badge inline-flex items-center gap-2 text-xs font-bold px-4 py-1.5 rounded-full mb-6">
-            <span className="ubk-dot" />
-            New: AI Models available
-          </a>
+            {/* ── Left: text + search ─────────────────── */}
+            <div className="flex flex-col items-start text-left pb-14">
+              <a href="#" className="ubk-badge inline-flex items-center gap-2 text-xs font-bold px-4 py-1.5 rounded-full mb-6">
+                <span className="ubk-dot" />
+                New: AI Models available
+              </a>
 
-          {/* Headline */}
-          <h1 className="text-5xl sm:text-6xl md:text-[72px] font-black leading-[1.04] tracking-tight mb-8">
-            Discover what people are<br />
-            <span className="ubk-orange-accent">asking about</span>…
-          </h1>
+              <h1 className="text-5xl sm:text-6xl md:text-[68px] font-black leading-[1.04] tracking-tight mb-5">
+                Discover what people are<br />
+                <span className="ubk-orange-accent">asking about</span>…
+              </h1>
 
-          {/* Hero Image */}
-          <div className="mb-10 flex justify-center ubk-hero-image-wrap">
-            <img
-              src="/joe-headshot.png"
-              alt="Keyword research advisor"
-              className="ubk-hero-image"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </div>
+              <p className="text-white/48 text-lg mb-7 max-w-lg leading-relaxed" style={{ color: "rgba(255,255,255,0.48)" }}>
+                Keyword discovery across Google, YouTube, Amazon, TikTok and&nbsp;more&nbsp;—&nbsp;all in one platform.
+              </p>
 
-          {/* Platform tabs row */}
-          <div className="flex flex-wrap justify-center gap-1.5 mb-4 mt-2">
-            {TABS.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                className={`ubk-tab px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
-                  activeTab === t.id ? "ubk-tab-active" : ""
-                }`}
+              {/* Platform tabs */}
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {TABS.map(t => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setActiveTab(t.id)}
+                    className={`ubk-tab px-3.5 py-1.5 rounded-full text-xs font-bold transition ${
+                      activeTab === t.id ? "ubk-tab-active" : ""
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search form */}
+              <form
+                onSubmit={handleSearch}
+                className="ubk-hero-search flex items-center w-full max-w-xl rounded-xl overflow-hidden"
               >
-                {t.label}
-              </button>
-            ))}
-          </div>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Enter a topic, brand or question…"
+                  className="flex-1 bg-transparent text-white text-sm placeholder:text-white/35 px-4 py-3 outline-none min-w-0"
+                />
+                <div className="hidden sm:flex items-center border-l border-white/10 px-3 py-3 text-white/50 text-xs font-medium shrink-0 gap-1">
+                  🌐 English
+                </div>
+                <div className="hidden sm:flex items-center border-l border-white/10 px-3 py-3 text-white/50 text-xs font-medium shrink-0 gap-1">
+                  🇺🇸 United States
+                </div>
+                <button type="submit" className="ubk-search-btn text-sm font-black px-6 py-3 shrink-0">
+                  SEARCH
+                </button>
+              </form>
+              <p className="text-white/25 text-xs mt-2">Use 1–3 words for best results</p>
+            </div>
 
-          {/* Search form */}
-          <form
-            onSubmit={handleSearch}
-            className="ubk-hero-search flex items-center w-full max-w-2xl rounded-xl overflow-hidden"
-          >
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Enter a topic, brand or question…"
-              className="flex-1 bg-transparent text-white text-sm placeholder:text-white/35 px-4 py-3 outline-none min-w-0"
-            />
-            {/* Language selector */}
-            <div className="hidden sm:flex items-center border-l border-white/10 px-3 py-3 text-white/50 text-xs font-medium shrink-0 gap-1">
-              🌐 English
+            {/* ── Right: person image + floating chips ─ */}
+            <div className="relative hidden lg:flex items-end justify-center self-end" style={{ minHeight: 460 }}>
+              {/* Warm glow behind the photo */}
+              <div
+                className="pointer-events-none absolute inset-x-16 bottom-0"
+                style={{
+                  height: "72%",
+                  borderRadius: "50%",
+                  background: "radial-gradient(ellipse at 50% 80%, rgba(249,115,22,0.28) 0%, rgba(249,115,22,0.06) 60%, transparent 80%)",
+                  filter: "blur(28px)",
+                }}
+              />
+
+              {/* Floating chips */}
+              <div className="ubk-float-chip" style={{ top: 56, left: -8, animationDelay: "0s" }}>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-orange-400 shrink-0">
+                  <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a1 1 0 110 2 1 1 0 010-2zm1 9H7V7h2v5z"/>
+                </svg>
+                <span><strong className="text-white">8,400</strong> <span style={{ color: "rgba(255,255,255,0.55)" }}>keyword ideas</span></span>
+              </div>
+
+              <div className="ubk-float-chip" style={{ top: 140, right: -8, animationDelay: "1.4s" }}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 text-blue-400 shrink-0">
+                  <circle cx="8" cy="8" r="6.5"/>
+                  <path d="M8 5v3l2 2" strokeLinecap="round"/>
+                </svg>
+                <span><strong className="text-white">920</strong> <span style={{ color: "rgba(255,255,255,0.55)" }}>questions found</span></span>
+              </div>
+
+              <div className="ubk-float-chip" style={{ top: "45%", left: -16, animationDelay: "2.6s" }}>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-green-400 shrink-0">
+                  <path d="M2 12l4-4 3 3 5-7" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span><span style={{ color: "rgba(255,255,255,0.55)" }}>SEO opp</span> <strong className="text-white">74 / 100</strong></span>
+              </div>
+
+              <div className="ubk-float-chip" style={{ top: "62%", right: -4, animationDelay: "0.8s" }}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-3.5 h-3.5 text-purple-400 shrink-0">
+                  <rect x="2" y="10" width="2" height="4" rx="0.5"/>
+                  <rect x="7" y="6" width="2" height="8" rx="0.5"/>
+                  <rect x="12" y="2" width="2" height="12" rx="0.5"/>
+                </svg>
+                <span><span style={{ color: "rgba(255,255,255,0.55)" }}>A-Z</span> <strong className="text-white">26 letters</strong> <span style={{ color: "rgba(255,255,255,0.55)" }}>mapped</span></span>
+              </div>
+
+              {/* Person photo */}
+              <img
+                src="/joe-headshot.png"
+                alt="Joe — keyword research expert"
+                className="ubk-hero-person"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
             </div>
-            {/* Country selector */}
-            <div className="hidden sm:flex items-center border-l border-white/10 px-3 py-3 text-white/50 text-xs font-medium shrink-0 gap-1">
-              🇺🇸 United States
-            </div>
-            <button
-              type="submit"
-              className="ubk-search-btn text-sm font-black px-6 py-3 shrink-0"
-            >
-              SEARCH
-            </button>
-          </form>
-          <p className="text-white/25 text-xs mt-2">Use 1–3 words for best results</p>
+
+          </div>
         </div>
 
         {/* ── 51B Bar chart (immediately below search, still inside hero zone) */}
