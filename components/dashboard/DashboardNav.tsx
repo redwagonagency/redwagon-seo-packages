@@ -117,6 +117,7 @@ const ALL_ITEMS = NAV_SECTIONS.flatMap((s) => s.items);
 interface Props {
   userName: string;
   userEmail: string;
+  userRole?: string;
 }
 
 export default function DashboardNav({ userName, userEmail }: Props) {
