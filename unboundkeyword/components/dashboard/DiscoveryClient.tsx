@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
@@ -337,7 +338,8 @@ function KeywordWheel({
 }
 
 export default function DiscoveryClient() {
-  const [seed, setSeed] = useState("");
+  const searchParams = useSearchParams();
+  const [seed, setSeed] = useState(() => searchParams?.get("q") ?? "");
   const [location, setLocation] = useState("2840");
   const [language, setLanguage] = useState("en");
   const [loading, setLoading] = useState(false);
@@ -352,6 +354,8 @@ export default function DiscoveryClient() {
   const [successMsg, setSuccessMsg] = useState("");
   const [stateFilter, setStateFilter] = useState("All States");
   const [dmaFilter, setDmaFilter] = useState("All DMAs");
+
+  const autoSearched = useRef(false);
 
   const toggleKeyword = useCallback((kw: string) => {
     setSelected((prev) => {
@@ -370,9 +374,9 @@ export default function DiscoveryClient() {
 
   const clearAll = useCallback(() => setSelected(new Set()), []);
 
-  async function discover(e: React.FormEvent) {
-    e.preventDefault();
-    if (!seed.trim()) return;
+  // Extract fetch logic so it can be called programmatically or from form submit
+  async function runDiscover(seedValue: string) {
+    if (!seedValue.trim()) return;
     setLoading(true);
     setError("");
     setResult(null);
@@ -383,7 +387,7 @@ export default function DiscoveryClient() {
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed: seed.trim(), location: Number(location), language, save: true }),
+        body: JSON.stringify({ seed: seedValue.trim(), location: Number(location), language, save: true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Discovery failed");
@@ -394,6 +398,22 @@ export default function DiscoveryClient() {
       setLoading(false);
     }
   }
+
+  async function discover(e: React.FormEvent) {
+    e.preventDefault();
+    runDiscover(seed);
+  }
+
+  // Auto-trigger search if ?q= param is present on first render
+  useEffect(() => {
+    const q = searchParams?.get("q") ?? "";
+    if (q && !autoSearched.current) {
+      autoSearched.current = true;
+      setSeed(q);
+      runDiscover(q);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function openAddModal() {
     const res = await fetch("/api/lists");

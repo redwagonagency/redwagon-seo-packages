@@ -167,8 +167,8 @@ function SpokeWheel({ keyword = "seo" }: { keyword?: string }) {
           </g>
         );
       })}
-      <circle cx={cx} cy={cy} r={innerR} fill="#0b0b18" stroke="rgba(168,85,247,0.5)" strokeWidth="1.5" />
-      <circle cx={cx} cy={cy} r={innerR - 5} fill="rgba(124,58,237,0.15)" />
+      <circle cx={cx} cy={cy} r={innerR} fill="#0b0b18" stroke="rgba(241,91,39,0.55)" strokeWidth="1.5" />
+      <circle cx={cx} cy={cy} r={innerR - 5} fill="rgba(241,91,39,0.12)" />
       <text x={cx} y={cy - 4} textAnchor="middle" fontSize="22" fontWeight="900" fill="white">{keyword}</text>
       <text x={cx} y={cy + 17} textAnchor="middle" fontSize="8" fill="rgba(255,255,255,0.35)" letterSpacing="1.5">EXPLORE</text>
     </svg>

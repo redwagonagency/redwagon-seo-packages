@@ -5,9 +5,9 @@
   --ubk-bg:        #0b0b18;
   --ubk-surface:   #12121f;
   --ubk-border:    rgba(255,255,255,0.07);
-  --ubk-accent:    #7c3aed;
-  --ubk-accent2:   #a855f7;
-  --ubk-glow:      rgba(124,58,237,0.35);
+  --ubk-accent:    #f15b27;
+  --ubk-accent2:   #ff7a4d;
+  --ubk-glow:      rgba(241,91,39,0.35);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -24,13 +24,13 @@ body {
 
 /* ── Dark page background ───────────────────────── */
 .ubk-bg {
-  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 70%),
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(241,91,39,0.12) 0%, transparent 70%),
               var(--ubk-bg);
 }
 
 /* ── Logo ───────────────────────────────────────── */
 .ubk-logo {
-  background: linear-gradient(135deg, #c084fc, #818cf8);
+  background: linear-gradient(135deg, #f15b27, #ff9b6e);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -38,7 +38,7 @@ body {
 
 /* ── Buttons ────────────────────────────────────── */
 .ubk-btn-primary {
-  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  background: linear-gradient(135deg, #ea580c, #f97316);
   color: #fff;
   border: none;
   cursor: pointer;
@@ -47,7 +47,7 @@ body {
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  box-shadow: 0 0 32px rgba(124,58,237,0.4);
+  box-shadow: 0 0 32px rgba(241,91,39,0.35);
 }
 .ubk-btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
 
@@ -66,21 +66,21 @@ body {
 
 /* ── Badge ──────────────────────────────────────── */
 .ubk-badge {
-  background: rgba(124,58,237,0.15);
-  border: 1px solid rgba(124,58,237,0.35);
-  color: #c084fc;
+  background: rgba(241,91,39,0.12);
+  border: 1px solid rgba(241,91,39,0.35);
+  color: #f97316;
 }
 .ubk-dot {
   width: 6px; height: 6px;
   border-radius: 50%;
-  background: #a855f7;
+  background: #f97316;
   display: inline-block;
-  box-shadow: 0 0 6px #a855f7;
+  box-shadow: 0 0 6px #f97316;
 }
 
 /* ── Headline accent ────────────────────────────── */
 .ubk-headline-accent {
-  background: linear-gradient(135deg, #c084fc 0%, #818cf8 60%, #67e8f9 100%);
+  background: linear-gradient(135deg, #f15b27 0%, #ff9b6e 60%, #fbbf24 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -88,7 +88,7 @@ body {
 
 /* ── Stats ──────────────────────────────────────── */
 .ubk-stat-val {
-  background: linear-gradient(135deg, #c084fc, #818cf8);
+  background: linear-gradient(135deg, #f15b27, #ff9b6e);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -108,9 +108,9 @@ body {
 
 /* ── Keyword chips ──────────────────────────────── */
 .ubk-kw-chip {
-  background: rgba(124,58,237,0.12);
-  border: 1px solid rgba(124,58,237,0.25);
-  color: #c4b5fd;
+  background: rgba(241,91,39,0.10);
+  border: 1px solid rgba(241,91,39,0.25);
+  color: #f97316;
   transition: opacity 0.2s;
 }
 
@@ -121,20 +121,20 @@ body {
   transition: border-color 0.2s, transform 0.2s;
 }
 .ubk-feature-card:hover {
-  border-color: rgba(124,58,237,0.35);
+  border-color: rgba(241,91,39,0.35);
   transform: translateY(-2px);
 }
 
 /* ── Feature icon ───────────────────────────────── */
 .ubk-icon-wrap {
-  background: rgba(124,58,237,0.15);
-  color: #a78bfa;
+  background: rgba(241,91,39,0.12);
+  color: #f97316;
 }
 
 /* ── CTA banner ─────────────────────────────────── */
 .ubk-cta-banner {
-  background: linear-gradient(135deg, rgba(124,58,237,0.18) 0%, rgba(167,139,250,0.08) 100%);
-  border: 1px solid rgba(124,58,237,0.3);
+  background: linear-gradient(135deg, rgba(241,91,39,0.14) 0%, rgba(249,115,22,0.06) 100%);
+  border: 1px solid rgba(241,91,39,0.3);
 }
 
 /* ── Search form ─────────────────────────────────── */
@@ -144,8 +144,8 @@ body {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 .ubk-search-form:focus-within {
-  border-color: rgba(124,58,237,0.6);
-  box-shadow: 0 0 0 4px rgba(124,58,237,0.12);
+  border-color: rgba(241,91,39,0.6);
+  box-shadow: 0 0 0 4px rgba(241,91,39,0.10);
 }
 
 /* ── Platform tabs ───────────────────────────────── */
@@ -161,9 +161,9 @@ body {
   color: rgba(255,255,255,0.8);
 }
 .ubk-tab-active {
-  background: rgba(124,58,237,0.25) !important;
-  border-color: rgba(124,58,237,0.55) !important;
-  color: #c084fc !important;
+  background: rgba(241,91,39,0.20) !important;
+  border-color: rgba(241,91,39,0.55) !important;
+  color: #f97316 !important;
 }
 
 /* ── Chart stat badge ────────────────────────────── */
