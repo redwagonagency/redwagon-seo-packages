@@ -175,7 +175,10 @@ export async function runProjectReport(projectId: string) {
     // 2. On-Page Multi-Page Crawl (plan-gated, sitemap-based)
     (async () => {
       try {
-        const pages: PageAuditResult[] = await crawlSitePages(project.domain, maxPages);
+        const crawlResult = await crawlSitePages(project.domain, maxPages);
+        const pages: PageAuditResult[] = Array.isArray(crawlResult)
+          ? crawlResult
+          : (crawlResult as { pages: PageAuditResult[] }).pages;
         const avgScore = pages.length > 0
           ? Math.round(pages.reduce((s, p) => s + p.score, 0) / pages.length)
           : 0;
