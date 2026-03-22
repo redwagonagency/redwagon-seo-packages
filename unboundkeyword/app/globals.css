@@ -206,7 +206,98 @@ body {
   border: 1px solid rgba(255,255,255,0.08);
   backdrop-filter: blur(12px);
 }
+/* ── Hero image (cutout treatment) ──────────────────────────────── */
+.ubk-hero-image-wrap {
+  position: relative;
+  isolation: isolate;
+}
 
+.ubk-hero-image-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 8% 10% 8% 10%;
+  z-index: -1;
+  background: radial-gradient(circle at 50% 35%, rgba(241,91,39,0.42), rgba(241,91,39,0.12) 55%, transparent 78%);
+  filter: blur(16px);
+}
+
+.ubk-hero-image {
+  max-width: 420px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  margin: 0 auto;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 70%, rgba(0,0,0,0.82) 82%, transparent 100%);
+  mask-image: radial-gradient(circle at 50% 45%, #000 70%, rgba(0,0,0,0.82) 82%, transparent 100%);
+  filter: drop-shadow(0 16px 34px rgba(0,0,0,0.42)) drop-shadow(0 0 36px rgba(241,91,39,0.25));
+}
+
+/* ── Below fold (white background) ───────────── */
+.ubk-below-fold {
+  background: #ffffff;
+  color: #1a1a1a;
+}
+.ubk-below-fold * { --ubk-text: #1a1a1a; }
+.ubk-below-fold .ubk-badge {
+  background: rgba(241,91,39,0.10);
+  border: 1px solid rgba(241,91,39,0.25);
+  color: #f15b27;
+}
+.ubk-below-fold .ubk-btn-primary {
+  background: linear-gradient(135deg, #ea580c, #f97316);
+  color: #fff;
+  box-shadow: 0 4px 20px rgba(241,91,39,0.35);
+}
+.ubk-below-fold .ubk-btn-ghost {
+  background: rgba(0,0,0,0.05);
+  color: rgba(0,0,0,0.6);
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.ubk-below-fold .ubk-tab {
+  background: rgba(0,0,0,0.03);
+  border: 1px solid rgba(0,0,0,0.1);
+  color: rgba(0,0,0,0.55);
+}
+.ubk-below-fold .ubk-tab-active {
+  background: rgba(241,91,39,0.15) !important;
+  border-color: rgba(241,91,39,0.4) !important;
+  color: #f15b27 !important;
+}
+.ubk-below-fold .ubk-feature-card {
+  background: #f9f9f9;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.ubk-below-fold .ubk-feature-card:hover {
+  border-color: rgba(241,91,39,0.35);
+}
+.ubk-below-fold .ubk-headline-accent {
+  background: linear-gradient(135deg, #f15b27 0%, #ff9b6e 60%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ubk-below-fold .ubk-vis-strip {
+  background: #f5f5f5;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.ubk-below-fold .ubk-mock-search {
+  background: rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.ubk-below-fold .ubk-cta-banner {
+  background: linear-gradient(135deg, rgba(241,91,39,0.12) 0%, rgba(249,115,22,0.05) 100%);
+  border: 1px solid rgba(241,91,39,0.25);
+}
+.ubk-below-fold a {
+  color: #f15b27;
+}
+.ubk-below-fold h1, .ubk-below-fold h2, .ubk-below-fold h3, .ubk-below-fold h4 {
+  color: #1a1a1a;
+}
+.ubk-below-fold p, .ubk-below-fold li {
+  color: rgba(0,0,0,0.65);
+}
 /* ── Scrollbar hide ─────────────────────────────── */
 @layer utilities {
   .scrollbar-hide {

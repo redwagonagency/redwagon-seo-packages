@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
+import OverviewWithVolume from "./OverviewWithVolume";
 import { cn, formatNumber, difficultyColor, intentBadgeVariant } from "@/lib/utils";
 
 interface DiscoveryKeyword {
@@ -143,6 +144,11 @@ const MASTER_SOURCE_ORDER: DiscoveryGroup["type"][] = [
   "related",
 ];
 
+const MAX_WHEEL_ITEMS = 240;
+const INITIAL_TABLE_ROWS = 300;
+const TABLE_ROWS_STEP = 300;
+const INITIAL_QUESTION_CHIPS = 220;
+
 function buildMasterKeywordRows(groups: DiscoveryGroup[]): MasterKeywordRow[] {
   const keywordMap = new Map<string, MasterKeywordRow>();
 
@@ -238,26 +244,57 @@ function KeywordWheel({
   group,
   selected,
   onToggleKeyword,
+  onDrilldown,
+  isDrilldownMode,
 }: {
   seed: string;
   group: DiscoveryGroup;
   selected: Set<string>;
   onToggleKeyword: (keyword: string) => void;
+  onDrilldown: (keyword: string) => void;
+  isDrilldownMode?: boolean;
 }) {
   const cfg = GROUP_CONFIG[group.type];
   const items = group.keywords;
+  const wheelItems = items.slice(0, MAX_WHEEL_ITEMS);
+  const isWheelCapped = items.length > wheelItems.length;
   const centerX = 340;
   const centerY = 340;
   const innerRadius = 74;
   const outerRadius = 242;
   const labelRadius = 274;
+  const ringStroke =
+    group.type === "questions"
+      ? "rgb(59 130 246)"
+      : group.type === "prepositions"
+      ? "rgb(168 85 247)"
+      : group.type === "comparisons"
+      ? "rgb(249 115 22)"
+      : "rgb(100 116 139)";
+
+  const handleKeywordClick = (keyword: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Right-click or Ctrl+click to drill down, regular click to select
+    if (e.ctrlKey || e.metaKey || e.button === 2) {
+      onDrilldown(keyword);
+    } else {
+      onToggleKeyword(keyword);
+    }
+  };
 
   return (
     <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
       <div className="flex items-center justify-between gap-4 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">{group.label} Wheel</h2>
-          <p className="text-sm text-slate-500">AnswerThePublic-style circular view for {group.label.toLowerCase()} keywords.</p>
+          <p className="text-sm text-slate-500">
+            Click keywords to select • Ctrl+Click to drill down and explore related terms
+          </p>
+          {isWheelCapped && (
+            <p className="text-xs text-slate-500 mt-1">
+              Rendering first {wheelItems.length} of {items.length} for performance.
+            </p>
+          )}
         </div>
         <Badge variant={cfg.badge}>{items.length} clickable</Badge>
       </div>
@@ -276,8 +313,8 @@ function KeywordWheel({
             />
           ))}
 
-          {items.map((keyword, index) => {
-            const angle = (-90 + (360 / items.length) * index) * (Math.PI / 180);
+          {wheelItems.map((keyword, index) => {
+            const angle = (-90 + (360 / wheelItems.length) * index) * (Math.PI / 180);
             const lineX = centerX + outerRadius * Math.cos(angle);
             const lineY = centerY + outerRadius * Math.sin(angle);
             const innerX = centerX + innerRadius * Math.cos(angle);
@@ -290,12 +327,18 @@ function KeywordWheel({
             return (
               <g
                 key={`${keyword.keyword}-${index}`}
-                onClick={() => onToggleKeyword(keyword.keyword)}
+                onClick={(e) => handleKeywordClick(keyword.keyword, e as unknown as React.MouseEvent)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onDrilldown(keyword.keyword);
+                }}
                 className="cursor-pointer"
                 role="button"
                 tabIndex={0}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
+                  if (event.key === "Enter") {
+                    onDrilldown(keyword.keyword);
+                  } else if (event.key === " ") {
                     event.preventDefault();
                     onToggleKeyword(keyword.keyword);
                   }
@@ -325,7 +368,7 @@ function KeywordWheel({
                     isSelected ? "fill-indigo-700" : "fill-slate-700"
                   )}
                 >
-                  {keyword.keyword}
+                  {keyword.keyword.length > 56 ? `${keyword.keyword.slice(0, 56)}...` : keyword.keyword}
                 </text>
                 <text
                   x={labelX + (textAnchor === "start" ? 8 : textAnchor === "end" ? -8 : 0)}
@@ -340,7 +383,8 @@ function KeywordWheel({
           })}
 
           <circle cx={centerX} cy={centerY} r={58} fill="rgb(15 23 42)" />
-          <circle cx={centerX} cy={centerY} r={72} fill="none" stroke="rgb(99 102 241)" strokeWidth={2} opacity={0.35} />
+          <circle cx={centerX} cy={centerY} r={72} fill="none" stroke={ringStroke} strokeWidth={2.5} opacity={0.45} />
+          <circle cx={centerX} cy={centerY} r={82} fill="none" stroke={ringStroke} strokeWidth={1} opacity={0.22} />
           <text x={centerX} y={centerY - 6} textAnchor="middle" className="fill-white text-[22px] font-bold">
             {seed}
           </text>
@@ -376,6 +420,11 @@ export default function DiscoveryClient() {
   const [successMsg, setSuccessMsg] = useState("");
   const [stateFilter, setStateFilter] = useState("All States");
   const [dmaFilter, setDmaFilter] = useState("All DMAs");
+  const [drilldownPath, setDrilldownPath] = useState<string[]>([]);
+  const [drilldownResult, setDrilldownResult] = useState<DiscoveryResult | null>(null);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const [visibleTableRows, setVisibleTableRows] = useState(INITIAL_TABLE_ROWS);
+  const [showAllQuestionChips, setShowAllQuestionChips] = useState(false);
 
   const autoSearched = useRef(false);
 
@@ -424,6 +473,12 @@ export default function DiscoveryClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Discovery failed");
       setResult(data);
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        params.set("q", seedValue.trim());
+        params.set("platform", platform);
+        window.history.replaceState({}, "", `/dashboard/discover?${params.toString()}`);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -434,6 +489,48 @@ export default function DiscoveryClient() {
   async function discover(e: React.FormEvent) {
     e.preventDefault();
     runDiscover(seed);
+  }
+
+  async function drilldownKeyword(keyword: string) {
+    setDrilldownLoading(true);
+    try {
+      const res = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seed: keyword.trim(),
+          platform,
+          location: Number(location),
+          language,
+          deepMode: false,
+          includeJobs,
+          excludeTerms,
+          locationHints,
+          save: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Drilldown failed");
+      setDrilldownResult(data);
+      setDrilldownPath([...drilldownPath, keyword]);
+    } catch (err: unknown) {
+      console.error("Drilldown error:", err);
+    } finally {
+      setDrilldownLoading(false);
+    }
+  }
+
+  function backFromDrilldown() {
+    if (drilldownPath.length === 0) return;
+    const newPath = drilldownPath.slice(0, -1);
+    if (newPath.length === 0) {
+      setDrilldownPath([]);
+      setDrilldownResult(null);
+    } else {
+      setDrilldownPath(newPath);
+      // TODO: Could show previous drill-down result, or re-fetch
+      drilldownKeyword(newPath[newPath.length - 1]);
+    }
   }
 
   // Auto-trigger search if ?q= param is present on first render
@@ -520,6 +617,8 @@ export default function DiscoveryClient() {
       : !blockedTerms.some((term) => row.keyword.toLowerCase().includes(term));
     return matchesGroup && matchesQuery && passesOutputFilter;
   });
+  const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
+  const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
   const localIdeas = buildLocalSearchIdeas(result?.seed ?? seed, masterRows);
   const filteredLocalIdeas = localIdeas.filter((item) => {
     const stateOk = stateFilter === "All States" || item.state === stateFilter;
@@ -527,6 +626,14 @@ export default function DiscoveryClient() {
     return stateOk && dmaOk;
   });
   const contentIdeas = buildContentIdeas(result?.seed ?? seed, allGroups, masterRows);
+
+  useEffect(() => {
+    setVisibleTableRows(INITIAL_TABLE_ROWS);
+  }, [activeGroup, tableQuery, outputExcludeTerms, result?.seed]);
+
+  useEffect(() => {
+    setShowAllQuestionChips(false);
+  }, [result?.seed]);
 
   return (
     <div className="p-8 max-w-7xl">
@@ -811,6 +918,77 @@ export default function DiscoveryClient() {
           </div>
 
           {(() => {
+            const questionGroup = allGroups.find((group) => group.type === "questions");
+            const hasQuestions = questionGroup && questionGroup.keywords.length > 0;
+
+            if (hasQuestions) {
+              const visibleQuestionKeywords = showAllQuestionChips
+                ? questionGroup.keywords
+                : questionGroup.keywords.slice(0, INITIAL_QUESTION_CHIPS);
+
+              return (
+                <div className="mb-8 rounded-[2rem] border border-blue-200 bg-[linear-gradient(145deg,#eff6ff,#f0f9ff)] shadow-sm overflow-hidden">
+                  <div className="px-6 py-5 border-b border-blue-100 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-blue-700 mb-2">Question Keywords</div>
+                      <h3 className="text-xl font-bold text-slate-900">How, What, Where, When, Why questions</h3>
+                      <p className="text-sm text-slate-600 mt-1">Click to select the question keywords users are asking about your topic.</p>
+                    </div>
+                    <Badge variant="blue">{questionGroup.keywords.length} questions</Badge>
+                  </div>
+                  <div className="p-6">
+                    <div className="flex flex-wrap gap-3">
+                      {visibleQuestionKeywords.map((item) => (
+                        <button
+                          key={`question-${item.keyword}`}
+                          type="button"
+                          onClick={(e) => {
+                            if (e.ctrlKey || e.metaKey) {
+                              drilldownKeyword(item.keyword);
+                            } else {
+                              toggleKeyword(item.keyword);
+                            }
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            drilldownKeyword(item.keyword);
+                          }}
+                          className={cn(
+                            "inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border font-medium text-sm transition duration-200 cursor-pointer",
+                            selected.has(item.keyword)
+                              ? "border-blue-400 bg-blue-50 text-blue-900 shadow-sm"
+                              : "border-blue-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50/50"
+                          )}
+                          title="Click to select • Ctrl+Click to drill down"
+                        >
+                          <span className={cn("w-1.5 h-1.5 rounded-full transition", selected.has(item.keyword) ? "bg-blue-600" : "bg-blue-300")} />
+                          {item.keyword}
+                          {item.volume && <span className="text-xs opacity-75">({formatNumber(item.volume)})</span>}
+                        </button>
+                      ))}
+                    </div>
+                    {questionGroup.keywords.length > INITIAL_QUESTION_CHIPS && (
+                      <div className="mt-4">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setShowAllQuestionChips((prev) => !prev)}
+                        >
+                          {showAllQuestionChips
+                            ? "Show fewer question chips"
+                            : `Show all ${questionGroup.keywords.length} question chips`}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
+          {(() => {
             const wheelGroups = WHEEL_GROUPS
               .map((type) => allGroups.find((group) => group.type === type))
               .filter((group): group is DiscoveryGroup => Boolean(group && group.keywords.length));
@@ -828,6 +1006,7 @@ export default function DiscoveryClient() {
                     group={wheelGroup}
                     selected={selected}
                     onToggleKeyword={toggleKeyword}
+                    onDrilldown={drilldownKeyword}
                   />
                 ))}
                 <p className="mt-3 text-xs text-slate-500">
@@ -836,6 +1015,76 @@ export default function DiscoveryClient() {
               </div>
             );
           })()}
+
+          {drilldownResult && drilldownPath.length > 0 && (
+            <div className="mb-8 space-y-4 border-t-4 border-indigo-300 pt-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs uppercase tracking-[0.18em] text-indigo-600 font-semibold">Drill-Down Level {drilldownPath.length}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={() => { setDrilldownPath([]); setDrilldownResult(null); }}
+                      className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                    >
+                      {result?.seed}
+                    </button>
+                    {drilldownPath.map((keyword, idx) => (
+                      <div key={`drillpath-${idx}`} className="flex items-center gap-2">
+                        <span className="text-slate-400">→</span>
+                        <button
+                          onClick={() => {
+                            const newPath = drilldownPath.slice(0, idx + 1);
+                            setDrilldownPath(newPath);
+                            if (idx < drilldownPath.length - 1) {
+                              drilldownKeyword(keyword);
+                            }
+                          }}
+                          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+                        >
+                          {keyword}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <h3 className="text-2xl font-bold text-slate-900">Keywords related to "<span className="text-indigo-600">{drilldownPath[drilldownPath.length - 1]}</span>"</h3>
+                  <p className="text-sm text-slate-600 mt-1">Continue drilling down to explore deeper keyword relationships.</p>
+                </div>
+                <button
+                  onClick={backFromDrilldown}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 font-medium transition"
+                >
+                  ← Back
+                </button>
+              </div>
+
+              {drilldownLoading ? (
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-12 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border border-indigo-500 border-t-transparent mb-3"></div>
+                    <p className="text-slate-600">Loading related keywords...</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {drilldownResult.groups
+                    .filter((g): g is DiscoveryGroup => g.keywords.length > 0)
+                    .map((group) => (
+                      <KeywordWheel
+                        key={`drilldown-${group.type}`}
+                        seed={drilldownPath[drilldownPath.length - 1]}
+                        group={group}
+                        selected={selected}
+                        onToggleKeyword={toggleKeyword}
+                        onDrilldown={drilldownKeyword}
+                        isDrilldownMode={true}
+                      />
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {alphaGroups.length > 0 && (
             <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(145deg,#ecfdf5,#f0fdf4)] shadow-sm overflow-hidden">
@@ -935,6 +1184,37 @@ export default function DiscoveryClient() {
               })}
             </div>
 
+            <div id="keyword-ideas" className="px-6 py-4 border-b border-slate-100 bg-indigo-50/40">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Keyword Ideas</h3>
+                  <p className="text-sm text-slate-600">Top opportunities from your discovery output. Click to add/remove from selection.</p>
+                </div>
+                <Badge variant="purple">{Math.min(filteredMasterRows.length, 120)} showing</Badge>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredMasterRows.slice(0, 120).map((row) => (
+                  <button
+                    key={`idea-${row.keyword}`}
+                    type="button"
+                    onClick={() => toggleKeyword(row.keyword)}
+                    className={cn(
+                      "text-left rounded-xl border px-3 py-2.5 transition",
+                      selected.has(row.keyword)
+                        ? "border-indigo-300 bg-indigo-50"
+                        : "border-slate-200 bg-white hover:border-indigo-200"
+                    )}
+                  >
+                    <div className="font-semibold text-slate-900 text-sm">{row.keyword}</div>
+                    <div className="mt-1 text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+                      <span>{row.volume ? `${formatNumber(row.volume)} vol` : "no volume"}</span>
+                      {row.intent ? <Badge variant={intentBadgeVariant(row.intent)}>{row.intent}</Badge> : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] text-sm">
                 <thead className="bg-slate-50 border-b border-slate-100">
@@ -955,7 +1235,7 @@ export default function DiscoveryClient() {
                         No keywords match the current source filter or table search.
                       </td>
                     </tr>
-                  ) : filteredMasterRows.map((row) => (
+                  ) : displayedMasterRows.map((row) => (
                     <tr key={row.keyword} className="border-b border-slate-100 hover:bg-slate-50/80">
                       <td className="px-6 py-3 align-top">
                         <input
@@ -1001,6 +1281,33 @@ export default function DiscoveryClient() {
                 </tbody>
               </table>
             </div>
+            {filteredMasterRows.length > 0 && (
+              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  Showing {displayedMasterRows.length} of {filteredMasterRows.length} rows
+                </p>
+                {canLoadMoreTableRows ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVisibleTableRows((prev) => prev + TABLE_ROWS_STEP)}
+                  >
+                    Load {Math.min(TABLE_ROWS_STEP, filteredMasterRows.length - displayedMasterRows.length)} more
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVisibleTableRows(INITIAL_TABLE_ROWS)}
+                    disabled={displayedMasterRows.length <= INITIAL_TABLE_ROWS}
+                  >
+                    Reset view
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-8 grid gap-6 xl:grid-cols-2">
@@ -1056,7 +1363,7 @@ export default function DiscoveryClient() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(145deg,#fffbeb,#fff7ed)] shadow-sm overflow-hidden">
+            <div id="content-ideas" className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(145deg,#fffbeb,#fff7ed)] shadow-sm overflow-hidden">
               <div className="px-6 py-5 border-b border-amber-100">
                 <div className="text-xs uppercase tracking-[0.18em] text-amber-700 mb-2">Content Ideas</div>
                 <h3 className="text-xl font-bold text-slate-900">Publish-ready SEO content opportunities</h3>
@@ -1079,6 +1386,15 @@ export default function DiscoveryClient() {
                 ))}
               </div>
             </div>
+          </div>
+
+          <div id="historical-performance" className="mt-8">
+            <div className="mb-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Historical Performance</div>
+              <h3 className="text-2xl font-bold text-slate-900">Volume trend, desktop vs mobile, and intent signals</h3>
+              <p className="text-sm text-slate-600 mt-1">Analyze historical movement and device split directly inside discovery.</p>
+            </div>
+            <OverviewWithVolume />
           </div>
         </>
       )}

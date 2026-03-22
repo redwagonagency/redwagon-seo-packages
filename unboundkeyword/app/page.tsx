@@ -255,11 +255,22 @@ export default function HomePage() {
           </a>
 
           {/* Headline */}
-          <h1 className="text-5xl sm:text-6xl md:text-[72px] font-black leading-[1.04] tracking-tight mb-6">
-            See what people are<br />
-            searching{" "}
-            <span className="ubk-orange-accent">everywhere</span>
+          <h1 className="text-5xl sm:text-6xl md:text-[72px] font-black leading-[1.04] tracking-tight mb-8">
+            Discover what people are<br />
+            <span className="ubk-orange-accent">asking about</span>…
           </h1>
+
+          {/* Hero Image */}
+          <div className="mb-10 flex justify-center ubk-hero-image-wrap">
+            <img
+              src="/joe-headshot.png"
+              alt="Keyword research advisor"
+              className="ubk-hero-image"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          </div>
 
           {/* Platform tabs row */}
           <div className="flex flex-wrap justify-center gap-1.5 mb-4 mt-2">
@@ -402,9 +413,10 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════
           SPOKE WHEEL — "Untapped goldmine"
       ═══════════════════════════════════════════════════ */}
-      <section className="max-w-6xl mx-auto px-6 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-          <div>
+      <section className="ubk-below-fold py-16">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+            <div>
             <div className="ubk-badge inline-flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-full mb-5">
               Visual Keyword Explorer
             </div>
@@ -429,13 +441,14 @@ export default function HomePage() {
             <SpokeWheel keyword="keyword" />
             <p className="text-center text-white/20 text-xs mt-1">Questions · Prepositions · Comparisons · A–Z</p>
           </div>
+          </div>
         </div>
       </section>
 
       {/* ═══════════════════════════════════════════════════
           AUTOSUGGEST PREVIEW
       ═══════════════════════════════════════════════════ */}
-      <section className="max-w-6xl mx-auto px-6 pb-14">
+      <section className="ubk-below-fold max-w-6xl mx-auto px-6 pb-14">
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-4xl font-black mb-3">
             See exactly what people type —{" "}
@@ -485,7 +498,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════
           FEATURES GRID
       ═══════════════════════════════════════════════════ */}
-      <section className="max-w-6xl mx-auto px-6 py-14 border-t border-white/[0.06]">
+      <section className="ubk-below-fold max-w-6xl mx-auto px-6 py-14 border-t border-gray-200">
         <h2 className="text-center text-3xl md:text-4xl font-black mb-3">
           Everything keyword research needs
         </h2>
@@ -506,7 +519,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════
           CTA BANNER
       ═══════════════════════════════════════════════════ */}
-      <section className="px-6 pb-20 max-w-3xl mx-auto text-center">
+      <section className="ubk-below-fold px-6 pb-20 max-w-3xl mx-auto text-center">
         <div className="ubk-cta-banner rounded-3xl p-10 md:p-14">
           <h2 className="text-3xl md:text-4xl font-black mb-4">
             Anyone can use UnboundKeyword<br />to create <span className="ubk-orange-accent">better content</span>
@@ -521,7 +534,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════════════
           FOOTER
       ═══════════════════════════════════════════════════ */}
-      <footer className="border-t border-white/[0.07] py-8 text-center text-sm text-white/25">
+      <footer className="ubk-below-fold border-t border-gray-200 py-8 text-center text-sm text-gray-400">
         © 2026 UnBoundKeyword.com · All rights reserved ·{" "}
         <Link href="/privacy" className="hover:text-white/60 transition">Privacy</Link>
         {" · "}

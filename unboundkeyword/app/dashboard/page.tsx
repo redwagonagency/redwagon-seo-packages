@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import Image from "next/image";
 import DashboardSearch from "@/components/dashboard/DashboardSearch";
+import OverviewWithVolume from "@/components/dashboard/OverviewWithVolume";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -210,6 +211,12 @@ export default async function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Volume Analytics Section ─── */}
+      <div className="mt-12">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#f15b27] mb-4">KEYWORD INSIGHTS</h2>
+        <OverviewWithVolume />
+      </div>
     </div>
   );
 }

@@ -23,6 +23,8 @@ model User {
   lists    KeywordList[]
   discoverySessions DiscoverySession[]
   discoveryKeywords DiscoveryKeyword[]
+  keywordSnapshots KeywordSnapshot[]
+  keywordDemographics KeywordDemographic[]
 }
 
 model Account {
@@ -110,22 +112,25 @@ model DiscoverySession {
 }
 
 model DiscoveryKeyword {
-  id          String   @id @default(cuid())
-  sessionId   String?
-  userId      String
-  seedKeyword String
-  keyword     String
-  groupType   String
-  letter      String?
-  platform    String   @default("google")
-  location    String
-  language    String
-  volume      Int?
-  difficulty  Int?
-  cpc         Float?
-  intent      String?
-  source      String   @default("discover")
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  sessionId       String?
+  userId          String
+  seedKeyword     String
+  keyword         String
+  groupType       String
+  letter          String?
+  platform        String   @default("google")
+  location        String
+  language        String
+  volume          Int?
+  desktopVolume   Int?     // Desktop-specific volume
+  mobileVolume    Int?     // Mobile-specific volume
+  difficulty      Int?
+  cpc             Float?
+  intent          String?
+  ageRangeData    String?  // JSON: { "18-24": 15, "25-34": 25, ...}
+  source          String   @default("discover")
+  createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   session DiscoverySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
@@ -134,4 +139,48 @@ model DiscoveryKeyword {
   @@index([keyword])
   @@index([groupType])
   @@index([platform, location, language])
+}
+
+// ─── Historical Keyword Volume Tracking ───────────────────────────────────────
+
+model KeywordSnapshot {
+  id          String   @id @default(cuid())
+  userId      String
+  keyword     String
+  platform    String   @default("google")
+  location    String
+  language    String
+  volume      Int?
+  desktopVolume Int?   // Desktop search volume at snapshot time
+  mobileVolume Int?    // Mobile search volume at snapshot time
+  difficulty  Int?
+  cpc         Float?
+  intent      String?
+  snapshotDate DateTime @default(now()) // Date of the snapshot
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, keyword, platform])
+  @@index([snapshotDate])
+  @@unique([userId, keyword, platform, location, snapshotDate])
+}
+
+// ─── Demographic Insights per Keyword ──────────────────────────────────────────
+
+model KeywordDemographic {
+  id          String   @id @default(cuid())
+  userId      String
+  keyword     String
+  platform    String
+  ageRange    String   // "18-24", "25-34", etc.
+  percentage  Float    // % of searches from this age group
+  searchCount Int?     // Absolute count if available
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, keyword, platform])
+  @@unique([userId, keyword, platform, ageRange])
 }

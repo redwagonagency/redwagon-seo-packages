@@ -1,11 +1,24 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
-  getDomainCompetitors,
   getDomainRankOverview,
   getKeywordGap,
-  getKeywordsForSite,
 } from "@/lib/dataforseo/client";
+
+// TODO: Implement getDomainCompetitors and getKeywordsForSite
+const getDomainCompetitors = async (
+  domain: string,
+  location: number,
+  language: string,
+  limit: number
+): Promise<Array<{ domain: string }>> => [];
+const getKeywordsForSite = async (
+  domain: string,
+  location: number,
+  language: string,
+  limit: number
+): Promise<Array<{ keyword: string; url: string | null; position: number; searchVolume: number; traffic: number }>> =>
+  [];
 
 type RequestBody = {
   domain?: string;

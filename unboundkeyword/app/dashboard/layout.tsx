@@ -16,6 +16,29 @@ const NAV_GROUPS = [
       { href: "/dashboard/discover", label: "Keyword Discovery", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
       ) },
+    ],
+  },
+  {
+    group: "KEYWORD INSIGHTS",
+    items: [
+      { href: "/dashboard/a-z", label: "A-Z Keywords", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a6 6 0 016 6v4a6 6 0 016-6h4a2 2 0 012 2v12a4 4 0 01-4 4zm-9-15a2 2 0 012-2h2.5A6 6 0 0112 7v3a2 2 0 01-2 2H5a2 2 0 01-2-2V6z" /></svg>
+      ) },
+      { href: "/dashboard/keyword-cluster", label: "Keyword Clusters", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10l2 3l-3 1l2 3l-3-1l-2 3l1-3l-3-1l3-1l-1-3l3 1z" /></svg>
+      ) },
+      { href: "/dashboard/local-keywords", label: "Local Keywords", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+      ) },
+      { href: "/dashboard/keyword-intent", label: "Keyword Intent", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m9 1a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      ) },
+      { href: "/dashboard/discover#keyword-ideas", label: "Keyword Ideas", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5h2m-1 0v14m-7-7h14" /></svg>
+      ) },
+      { href: "/dashboard/discover#content-ideas", label: "Content Ideas", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h10" /></svg>
+      ) },
       { href: "/dashboard/lists", label: "Keyword Lists", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
       ) },
@@ -60,9 +83,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {group.group}
               </div>
               {group.items.map((item) => {
-                const active = item.href === "/dashboard"
+                const normalizedHref = item.href.split("#")[0].split("?")[0];
+                const active = normalizedHref === "/dashboard"
                   ? path === "/dashboard"
-                  : path.startsWith(item.href);
+                  : path.startsWith(normalizedHref);
                 return (
                   <Link
                     key={item.href}
