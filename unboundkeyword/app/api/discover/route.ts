@@ -8,6 +8,7 @@ import {
   getKeywordSuggestions,
   getRelatedKeywords,
   getKeywordIdeasLabs,
+  getKeywordData,
   getSearchIntent,
   getGoogleAutocompleteLiveAdvanced,
   type KeywordSuggestionItem,
@@ -93,6 +94,74 @@ const A_TO_Z_SUFFIX: Record<string, string> = {
   y: "youtube",
   z: "zoom strategy",
 };
+
+const GEO_STATE_TERMS = [
+  "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware",
+  "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+  "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri",
+  "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york",
+  "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island",
+  "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington",
+  "west virginia", "wisconsin", "wyoming",
+];
+
+const GEO_CITY_TERMS = [
+  "new york", "los angeles", "chicago", "houston", "phoenix", "philadelphia", "san antonio", "san diego",
+  "dallas", "san jose", "austin", "jacksonville", "fort worth", "columbus", "charlotte", "seattle",
+  "denver", "washington dc", "boston", "nashville", "atlanta", "miami", "orlando", "las vegas",
+];
+
+const ZIP_PREFIX_TERMS = [
+  "100", "101", "112", "200", "303", "331", "606", "700", "750", "770", "802", "850", "900", "941",
+];
+
+function sanitizeTermsCsv(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  return value
+    .split(",")
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function containsExcludedTerm(keyword: string, excludedTerms: string[]): boolean {
+  if (excludedTerms.length === 0) return false;
+  const kw = keyword.toLowerCase();
+  return excludedTerms.some((term) => kw.includes(term));
+}
+
+function normalizeDiscoveryKeywords(items: DiscoveryKeyword[], excludedTerms: string[]): DiscoveryKeyword[] {
+  return uniqueByKeyword(
+    items.filter((item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms))
+  );
+}
+
+function buildForcedCandidates(seed: string, extraLocationHints: string[], includeJobs: boolean): string[] {
+  const forcedQuestions = QUESTION_PREFIXES.map((prefix) => `${prefix} ${seed}`);
+  const forcedPrepositions = PREPOSITIONS.map((prep) => `${seed} ${prep}`);
+  const forcedComparisons = COMPARISON_TERMS.map((term) => `${seed} ${term}`);
+  const forcedAlphabetical = ALPHABET.map((letter) => `${seed} ${letter}`).concat(
+    ALPHABET.map((letter) => `${seed} ${A_TO_Z_SUFFIX[letter]}`)
+  );
+
+  const geoTokens = [...GEO_STATE_TERMS, ...GEO_CITY_TERMS, ...ZIP_PREFIX_TERMS.map((zip) => `${zip}`), ...extraLocationHints];
+  const forcedGeo = geoTokens.flatMap((geo) => [
+    `${seed} in ${geo}`,
+    `${seed} near ${geo}`,
+    `${seed} ${geo}`,
+  ]);
+
+  const forcedJobs = includeJobs
+    ? [`${seed} jobs`, `${seed} careers`, `${seed} salary`, `${seed} hiring`, `${seed} interview questions`]
+    : [];
+
+  return Array.from(
+    new Set(
+      [...forcedQuestions, ...forcedPrepositions, ...forcedComparisons, ...forcedAlphabetical, ...forcedGeo, ...forcedJobs]
+        .map((term) => term.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+}
 
 export interface DiscoveryKeyword {
   keyword: string;
@@ -184,29 +253,91 @@ function extractAutocompleteKeywords(items: unknown[], seed: string): string[] {
   return Array.from(results);
 }
 
+async function enrichForcedCandidates(
+  candidates: string[],
+  excludedTerms: string[]
+): Promise<RelatedKeywordItem[]> {
+  const filteredCandidates = candidates.filter((candidate) => !containsExcludedTerm(candidate, excludedTerms));
+  if (filteredCandidates.length === 0) return [];
+
+  const enriched: RelatedKeywordItem[] = [];
+  const batchSize = 200;
+
+  for (let i = 0; i < filteredCandidates.length; i += batchSize) {
+    const batch = filteredCandidates.slice(i, i + batchSize);
+    try {
+      const volumeData = await getKeywordData(batch);
+      const items =
+        (volumeData as { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> })?.tasks?.[0]
+          ?.result?.[0]?.items ?? [];
+
+      const mapped = items
+        .filter((item) => typeof item.keyword === "string")
+        .map((item) => ({
+          keyword: String(item.keyword).trim().toLowerCase(),
+          searchVolume:
+            typeof item.search_volume === "number"
+              ? item.search_volume
+              : typeof item.searchVolume === "number"
+              ? item.searchVolume
+              : 0,
+          cpc:
+            typeof item.cpc === "number"
+              ? item.cpc
+              : typeof item.low_top_of_page_bid === "number"
+              ? item.low_top_of_page_bid
+              : null,
+          competition: null,
+        })) as RelatedKeywordItem[];
+      enriched.push(...mapped);
+    } catch {
+      enriched.push(
+        ...batch.map((keyword) => ({ keyword, searchVolume: 0, cpc: null, competition: null }))
+      );
+    }
+  }
+
+  return uniqueByKeyword(enriched);
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { seed, location = 2840, language = "en", save = false } = await req.json();
+  const {
+    seed,
+    location = 2840,
+    language = "en",
+    platform = "google",
+    save = false,
+    deepMode = true,
+    excludeTerms = "",
+    locationHints = "",
+    includeJobs = true,
+  } = await req.json();
   if (!seed || typeof seed !== "string") {
     return Response.json({ error: "seed keyword required" }, { status: 400 });
   }
 
   const seedClean = seed.trim().toLowerCase();
+  const excludedTerms = sanitizeTermsCsv(excludeTerms);
+  const extraLocationHints = sanitizeTermsCsv(locationHints);
 
   try {
-    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult] = await Promise.allSettled([
-      getKeywordSuggestions(seedClean, location, language, 200),
-      getRelatedKeywords(seedClean, location, language, 100),
-      getKeywordIdeasLabs(seedClean, location, language, 200),
+    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, forcedResult] = await Promise.allSettled([
+      getKeywordSuggestions(seedClean, location, language, 1000),
+      getRelatedKeywords(seedClean, location, language, 1000),
+      getKeywordIdeasLabs(seedClean, location, language, 1000),
       getGoogleAutocompleteLiveAdvanced(seedClean, {
         locationCode: Number(location),
         languageCode: String(language),
-        limit: 200,
+        limit: 1000,
       }),
+      deepMode
+        ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
+        : Promise.resolve([]),
     ]);
 
     const suggestionsRaw: KeywordSuggestionItem[] =
@@ -216,12 +347,17 @@ export async function POST(req: NextRequest) {
     const ideasRaw = ideasResult.status === "fulfilled" ? ideasResult.value : [];
     const autocompleteRaw = autocompleteResult.status === "fulfilled" ? autocompleteResult.value.items : [];
 
-    const suggestions = suggestionsRaw.filter((item) => item.keyword?.trim().length > 0);
-    const related = relatedRaw.filter((item) => item.keyword?.trim().length > 0);
+    const suggestions = suggestionsRaw.filter(
+      (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
+    );
+    const related = relatedRaw.filter(
+      (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
+    );
+    const forcedRaw: RelatedKeywordItem[] = forcedResult.status === "fulfilled" ? forcedResult.value : [];
 
     // Use ideas as additional fallback supply so broad keywords still return usable results.
     const ideaFallback = ideasRaw
-      .filter((item) => item.keyword?.trim().length > 0)
+      .filter((item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms))
       .map((item) => ({
         keyword: item.keyword,
         searchVolume: item.searchVolume ?? 0,
@@ -229,7 +365,9 @@ export async function POST(req: NextRequest) {
         competition: null,
       })) as RelatedKeywordItem[];
 
-    const autocompleteFallback = extractAutocompleteKeywords(autocompleteRaw, seedClean).map((keyword) => ({
+    const autocompleteFallback = extractAutocompleteKeywords(autocompleteRaw, seedClean)
+      .filter((keyword) => !containsExcludedTerm(keyword, excludedTerms))
+      .map((keyword) => ({
       keyword,
       searchVolume: 0,
       cpc: null,
@@ -242,7 +380,8 @@ export async function POST(req: NextRequest) {
       ...related.map((r) => r.keyword),
       ...ideaFallback.map((i) => i.keyword),
       ...autocompleteFallback.map((i) => i.keyword),
-    ].filter(Boolean).slice(0, 50);
+      ...forcedRaw.map((i) => i.keyword),
+    ].filter(Boolean).slice(0, 400);
 
     const intentMap: Record<string, string> = {};
     if (allKeywords.length > 0) {
@@ -252,7 +391,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const relatedPool = uniqueByKeyword([...related, ...ideaFallback, ...autocompleteFallback]);
+    const relatedPool = uniqueByKeyword([...related, ...ideaFallback, ...autocompleteFallback, ...forcedRaw]);
 
     // 1. Questions (suggestions-first, with related/ideas fallback)
     const questionKeywords = uniqueByKeyword([
@@ -300,20 +439,20 @@ export async function POST(req: NextRequest) {
       { keyword: `${seedClean} reviews` },
     ];
 
-    const safeQuestionKeywords = uniqueByKeyword([
+    const safeQuestionKeywords = normalizeDiscoveryKeywords([
       ...questionKeywords,
       ...(questionKeywords.length === 0 ? fallbackQuestions : []),
-    ]).slice(0, 60);
+    ], excludedTerms).slice(0, 500);
 
-    const safePrepKeywords = uniqueByKeyword([
+    const safePrepKeywords = normalizeDiscoveryKeywords([
       ...prepKeywords,
       ...(prepKeywords.length === 0 ? fallbackPrepositions : []),
-    ]).slice(0, 40);
+    ], excludedTerms).slice(0, 500);
 
-    const safeCompKeywords = uniqueByKeyword([
+    const safeCompKeywords = normalizeDiscoveryKeywords([
       ...compKeywords,
       ...(compKeywords.length === 0 ? fallbackComparisons : []),
-    ]).slice(0, 30);
+    ], excludedTerms).slice(0, 500);
 
     const alphaGroups: DiscoveryGroup[] = [];
     for (const letter of ALPHABET) {
@@ -330,7 +469,7 @@ export async function POST(req: NextRequest) {
             return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
           })
           .map((r) => relToDiscovery(r, intentMap)),
-      ]).slice(0, 8);
+      ]).slice(0, 32);
 
       if (matches.length === 0) {
         alphaGroups.push({
@@ -349,10 +488,10 @@ export async function POST(req: NextRequest) {
 
     // 5. Related
     const relatedKeywords = relatedPool
-      .slice(0, 50)
+      .slice(0, 1000)
       .map((r) => relToDiscovery(r, intentMap));
 
-    const safeRelatedKeywords = uniqueByKeyword([
+    const safeRelatedKeywords = normalizeDiscoveryKeywords([
       ...relatedKeywords,
       ...(relatedKeywords.length === 0
         ? [
@@ -363,7 +502,7 @@ export async function POST(req: NextRequest) {
             { keyword: `${seedClean} tools` },
           ]
         : []),
-    ]).slice(0, 50);
+    ], excludedTerms).slice(0, 1000);
 
     const groups: DiscoveryGroup[] = ([
       { type: "questions" as const, label: "Questions", keywords: safeQuestionKeywords },
@@ -374,7 +513,7 @@ export async function POST(req: NextRequest) {
     ] as DiscoveryGroup[]).filter((g) => g.keywords.length > 0);
 
     if (save) {
-      await prisma.discoverySession.create({
+      const createdSession = await prisma.discoverySession.create({
         data: {
           userId: (session.user as { id: string }).id,
           seedKeyword: seedClean,
@@ -383,12 +522,41 @@ export async function POST(req: NextRequest) {
           resultsJson: JSON.stringify(groups),
         },
       });
+
+      const keywordRows = groups.flatMap((group) =>
+        group.keywords.map((keyword) => ({
+          sessionId: createdSession.id,
+          userId: (session.user as { id: string }).id,
+          seedKeyword: seedClean,
+          keyword: keyword.keyword,
+          groupType: group.type,
+          letter: group.letter ?? null,
+          platform: String(platform),
+          location: String(location),
+          language,
+          volume: keyword.volume ?? null,
+          difficulty: keyword.difficulty ?? null,
+          cpc: keyword.cpc ?? null,
+          intent: keyword.intent ?? null,
+          source: "discover",
+        }))
+      );
+
+      if (keywordRows.length > 0) {
+        await prisma.discoveryKeyword.createMany({ data: keywordRows });
+      }
     }
 
     return Response.json({
       seed: seedClean,
       groups,
       totalKeywords: groups.reduce((acc, g) => acc + g.keywords.length, 0),
+      filters: {
+        excludedTerms,
+        locationHints: extraLocationHints,
+        includeJobs: Boolean(includeJobs),
+        deepMode: Boolean(deepMode),
+      },
     });
   } catch (e) {
     return Response.json(

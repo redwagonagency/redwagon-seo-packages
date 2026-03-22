@@ -28,6 +28,12 @@ interface DiscoveryResult {
   seed: string;
   groups: DiscoveryGroup[];
   totalKeywords: number;
+  filters?: {
+    excludedTerms: string[];
+    locationHints: string[];
+    includeJobs: boolean;
+    deepMode: boolean;
+  };
 }
 
 interface MasterKeywordRow extends DiscoveryKeyword {
@@ -87,6 +93,16 @@ const LANGUAGE_OPTIONS = [
   { value: "es", label: "Spanish" },
   { value: "fr", label: "French" },
   { value: "de", label: "German" },
+];
+
+const PLATFORM_OPTIONS = [
+  { value: "google", label: "Google" },
+  { value: "youtube", label: "YouTube" },
+  { value: "amazon", label: "Amazon" },
+  { value: "bing", label: "Bing" },
+  { value: "instagram", label: "Instagram" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "chatgpt", label: "ChatGPT" },
 ];
 
 const STATE_OPTIONS = [
@@ -340,14 +356,20 @@ function KeywordWheel({
 export default function DiscoveryClient() {
   const searchParams = useSearchParams();
   const [seed, setSeed] = useState(() => searchParams?.get("q") ?? "");
+  const [platform, setPlatform] = useState(() => searchParams?.get("platform") ?? "google");
   const [location, setLocation] = useState("2840");
   const [language, setLanguage] = useState("en");
+  const [excludeTerms, setExcludeTerms] = useState("");
+  const [locationHints, setLocationHints] = useState("");
+  const [includeJobs, setIncludeJobs] = useState(true);
+  const [deepMode, setDeepMode] = useState(true);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DiscoveryResult | null>(null);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [tableQuery, setTableQuery] = useState("");
+  const [outputExcludeTerms, setOutputExcludeTerms] = useState("");
   const [lists, setLists] = useState<List[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addingToList, setAddingToList] = useState(false);
@@ -387,7 +409,17 @@ export default function DiscoveryClient() {
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed: seedValue.trim(), location: Number(location), language, save: true }),
+        body: JSON.stringify({
+          seed: seedValue.trim(),
+          platform,
+          location: Number(location),
+          language,
+          deepMode,
+          includeJobs,
+          excludeTerms,
+          locationHints,
+          save: true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Discovery failed");
@@ -474,11 +506,19 @@ export default function DiscoveryClient() {
       allGroups.filter((group) => group.type === type).reduce((sum, group) => sum + group.keywords.length, 0),
     ])
   ) as Record<DiscoveryGroup["type"], number>;
+  const alphaGroups = allGroups.filter((group) => group.type === "alphabetical");
   const filteredMasterRows = masterRows.filter((row) => {
     const matchesGroup = !activeGroup || row.sources.includes(activeGroup as DiscoveryGroup["type"]);
     const query = tableQuery.trim().toLowerCase();
     const matchesQuery = !query || row.keyword.toLowerCase().includes(query);
-    return matchesGroup && matchesQuery;
+    const blockedTerms = outputExcludeTerms
+      .split(",")
+      .map((term) => term.trim().toLowerCase())
+      .filter(Boolean);
+    const passesOutputFilter = blockedTerms.length === 0
+      ? true
+      : !blockedTerms.some((term) => row.keyword.toLowerCase().includes(term));
+    return matchesGroup && matchesQuery && passesOutputFilter;
   });
   const localIdeas = buildLocalSearchIdeas(result?.seed ?? seed, masterRows);
   const filteredLocalIdeas = localIdeas.filter((item) => {
@@ -533,7 +573,19 @@ export default function DiscoveryClient() {
               required
             />
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-1">Platform</label>
+                <select
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1">Market</label>
                 <select
@@ -558,6 +610,42 @@ export default function DiscoveryClient() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Exclude terms (server-side)"
+                placeholder="jobs, salary, internship"
+                value={excludeTerms}
+                onChange={(e) => setExcludeTerms(e.target.value)}
+              />
+              <Input
+                label="Location hints"
+                placeholder="austin, 78701, brooklyn"
+                value={locationHints}
+                onChange={(e) => setLocationHints(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={deepMode}
+                  onChange={(e) => setDeepMode(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Deep mode (force expanded questions, prepositions, A-Z, and geo variations)
+              </label>
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={includeJobs}
+                  onChange={(e) => setIncludeJobs(e.target.checked)}
+                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Include jobs/careers intent expansions
+              </label>
             </div>
 
             <div>
@@ -603,25 +691,74 @@ export default function DiscoveryClient() {
         </div>
       )}
 
+      {!loading && !result && (
+        <div className="mb-8 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">What will populate after discovery</div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Preview: charts and tables that will fill with your data</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              "Clickable wheel graphs: Questions, Prepositions, Comparisons, Related",
+              "A-Z autocomplete matrix with all 26 letters",
+              "Master deduplicated keyword table (volume, KD, CPC, intent)",
+              "Group totals chart with click-to-drill source filters",
+              "Local search ideas panel (state + DMA filters)",
+              "Content idea cards generated from discovery clusters",
+            ].map((item) => (
+              <div key={item} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {result && (
         <>
           <div className="grid gap-4 md:grid-cols-4 mb-6">
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4">
+            <button
+              type="button"
+              onClick={() => setActiveGroup(activeGroup === "questions" ? null : "questions")}
+              className={cn(
+                "rounded-2xl border px-4 py-4 text-left transition",
+                activeGroup === "questions" ? "border-blue-300 bg-blue-100" : "border-blue-200 bg-blue-50 hover:bg-blue-100"
+              )}
+            >
               <div className="text-xs uppercase tracking-[0.18em] text-blue-600 mb-2">Questions</div>
               <div className="text-2xl font-black text-slate-900">{groupTotals.questions}</div>
-            </div>
-            <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-4">
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroup(activeGroup === "prepositions" ? null : "prepositions")}
+              className={cn(
+                "rounded-2xl border px-4 py-4 text-left transition",
+                activeGroup === "prepositions" ? "border-purple-300 bg-purple-100" : "border-purple-200 bg-purple-50 hover:bg-purple-100"
+              )}
+            >
               <div className="text-xs uppercase tracking-[0.18em] text-purple-600 mb-2">Prepositions</div>
               <div className="text-2xl font-black text-slate-900">{groupTotals.prepositions}</div>
-            </div>
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroup(activeGroup === "comparisons" ? null : "comparisons")}
+              className={cn(
+                "rounded-2xl border px-4 py-4 text-left transition",
+                activeGroup === "comparisons" ? "border-orange-300 bg-orange-100" : "border-orange-200 bg-orange-50 hover:bg-orange-100"
+              )}
+            >
               <div className="text-xs uppercase tracking-[0.18em] text-orange-600 mb-2">Comparisons</div>
               <div className="text-2xl font-black text-slate-900">{groupTotals.comparisons}</div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveGroup(activeGroup === "alphabetical" ? null : "alphabetical")}
+              className={cn(
+                "rounded-2xl border px-4 py-4 text-left transition",
+                activeGroup === "alphabetical" ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+              )}
+            >
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-2">Related + A-Z</div>
               <div className="text-2xl font-black text-slate-900">{groupTotals.related + groupTotals.alphabetical}</div>
-            </div>
+            </button>
           </div>
 
           {/* Summary bar */}
@@ -700,6 +837,48 @@ export default function DiscoveryClient() {
             );
           })()}
 
+          {alphaGroups.length > 0 && (
+            <div className="mb-8 rounded-[2rem] border border-emerald-200 bg-[linear-gradient(145deg,#ecfdf5,#f0fdf4)] shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-emerald-100 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-emerald-700 mb-2">A-Z Autocomplete</div>
+                  <h3 className="text-xl font-bold text-slate-900">Full A-Z list with drill-down click support</h3>
+                  <p className="text-sm text-slate-600 mt-1">Every letter is rendered so users can click keywords directly into selection.</p>
+                </div>
+                <Badge variant="green">{groupTotals.alphabetical} keywords</Badge>
+              </div>
+              <div className="p-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {alphaGroups.map((group) => (
+                  <div key={`alpha-${group.letter}`} className="rounded-xl border border-white/80 bg-white/90 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 font-black">
+                        {group.letter}
+                      </span>
+                      <span className="text-xs text-slate-500">{group.keywords.length} terms</span>
+                    </div>
+                    <div className="max-h-44 overflow-auto space-y-1.5 pr-1">
+                      {group.keywords.map((item) => (
+                        <button
+                          key={`${group.letter}-${item.keyword}`}
+                          type="button"
+                          onClick={() => toggleKeyword(item.keyword)}
+                          className={cn(
+                            "w-full text-left text-xs rounded-lg border px-2.5 py-1.5 transition",
+                            selected.has(item.keyword)
+                              ? "border-emerald-400 bg-emerald-50 text-emerald-800"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300"
+                          )}
+                        >
+                          {item.keyword}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -709,12 +888,18 @@ export default function DiscoveryClient() {
                   Questions, prepositions, comparisons, A-Z, and related suggestions are merged and deduplicated here.
                 </p>
               </div>
-              <div className="w-full lg:w-80">
+              <div className="w-full lg:w-[520px] grid gap-3 sm:grid-cols-2">
                 <Input
                   label="Filter results"
                   placeholder="Search within the master table"
                   value={tableQuery}
                   onChange={(e) => setTableQuery(e.target.value)}
+                />
+                <Input
+                  label="Output excludes"
+                  placeholder="jobs, salary, near me"
+                  value={outputExcludeTerms}
+                  onChange={(e) => setOutputExcludeTerms(e.target.value)}
                 />
               </div>
             </div>
@@ -854,7 +1039,7 @@ export default function DiscoveryClient() {
               <div className="px-6 py-4 max-h-[360px] overflow-auto space-y-2">
                 {filteredLocalIdeas.length === 0 ? (
                   <div className="text-sm text-slate-500">No local ideas match the current filters.</div>
-                ) : filteredLocalIdeas.slice(0, 40).map((idea) => (
+                ) : filteredLocalIdeas.slice(0, 200).map((idea) => (
                   <button
                     key={`${idea.keyword}-${idea.marketHint}`}
                     onClick={() => toggleKeyword(idea.keyword)}

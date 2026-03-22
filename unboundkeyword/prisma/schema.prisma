@@ -21,6 +21,8 @@ model User {
   accounts Account[]
   sessions Session[]
   lists    KeywordList[]
+  discoverySessions DiscoverySession[]
+  discoveryKeywords DiscoveryKeyword[]
 }
 
 model Account {
@@ -101,5 +103,35 @@ model DiscoverySession {
   resultsJson  String   // JSON: DiscoveryResult[]
   createdAt    DateTime @default(now())
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keywords DiscoveryKeyword[]
+
   @@index([userId])
+}
+
+model DiscoveryKeyword {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  userId      String
+  seedKeyword String
+  keyword     String
+  groupType   String
+  letter      String?
+  platform    String   @default("google")
+  location    String
+  language    String
+  volume      Int?
+  difficulty  Int?
+  cpc         Float?
+  intent      String?
+  source      String   @default("discover")
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session DiscoverySession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, seedKeyword])
+  @@index([keyword])
+  @@index([groupType])
+  @@index([platform, location, language])
 }

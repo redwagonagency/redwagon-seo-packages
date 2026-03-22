@@ -22,7 +22,7 @@ export default function DashboardSearch() {
     e.preventDefault();
     const q = query.trim();
     if (!q) return;
-    router.push(`/dashboard/discover?q=${encodeURIComponent(q)}`);
+    router.push(`/dashboard/discover?q=${encodeURIComponent(q)}&platform=${encodeURIComponent(activePlatform)}`);
   }
 
   const active = PLATFORM_TABS.find(t => t.id === activePlatform)!;
@@ -126,7 +126,10 @@ export default function DashboardSearch() {
           <button
             key={preset}
             type="button"
-            onClick={() => { setQuery(preset); router.push(`/dashboard/discover?q=${encodeURIComponent(preset)}`); }}
+            onClick={() => {
+              setQuery(preset);
+              router.push(`/dashboard/discover?q=${encodeURIComponent(preset)}&platform=${encodeURIComponent(activePlatform)}`);
+            }}
             className="text-[11px] text-[#f15b27] font-semibold border border-[#f15b27]/25 bg-[#fff3ee] rounded-full px-2.5 py-0.5 hover:bg-[#ffe4d6] transition"
           >
             {preset}
