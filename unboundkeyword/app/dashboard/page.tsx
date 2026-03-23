@@ -13,22 +13,25 @@ export default async function DashboardPage() {
 
   const selectedSite = await getSelectedSiteForUser(userId);
 
-  const [listCount, keywordCount, discoveryCount, googleLinked, topKeywordRow, avgCpcRow, industryStats] = await Promise.all([
+  const [listCount, keywordCount, googleLinked, topKeywordRow, avgCpcRow, industryStats] = await Promise.all([
     prisma.keywordList.count({ where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) } }),
     prisma.keywordInList.count({
       where: {
         list: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
       },
     }),
-    prisma.discoverySession.count({ where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) } }),
     prisma.account.findFirst({ where: { userId, provider: "google" } }),
-    prisma.discoveryKeyword.findFirst({
-      where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+    prisma.keywordInList.findFirst({
+      where: {
+        list: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+      },
       orderBy: [{ volume: "desc" }],
       select: { keyword: true, volume: true },
     }),
-    prisma.discoveryKeyword.aggregate({
-      where: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+    prisma.keywordInList.aggregate({
+      where: {
+        list: { userId, ...(selectedSite ? { siteId: selectedSite.id } : { siteId: null }) },
+      },
       _avg: { cpc: true },
     }),
     (prisma as unknown as {
@@ -46,7 +49,6 @@ export default async function DashboardPage() {
     domain: selectedSite?.domain || "your site",
     listCount,
     keywordCount,
-    discoveryCount,
     topKeyword: topKeywordRow?.keyword || null,
     topKeywordVolume: topKeywordRow?.volume || 0,
     avgKeywordCpc: avgCpcRow._avg.cpc || 0,
@@ -143,10 +145,10 @@ export default async function DashboardPage() {
                 href={
                   joeInsight.action === "Run AI Decision Report"
                     ? "/dashboard/decision-engine"
-                    : joeInsight.action === "Run first Discovery session"
-                    ? "/dashboard/discover"
+                    : joeInsight.action === "Create first keyword list"
+                    ? "/dashboard/lists"
                     : joeInsight.action === "Add keywords to your list"
-                    ? "/dashboard/keywords"
+                    ? "/dashboard/lists"
                     : "/dashboard/settings/projects"
                 }
                 className="ml-auto text-xs font-bold text-[#f15b27] border border-[#f15b27]/40 rounded-lg px-3 py-1.5 hover:bg-[#f15b27] hover:text-white transition"
@@ -174,11 +176,6 @@ export default async function DashboardPage() {
             <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black mb-2">Keyword Research</div>
             <h3 className="text-lg font-black text-slate-900">Keyword Overview</h3>
             <p className="text-sm text-slate-500 mt-1">Volume, CPC, SEO and paid difficulty, and trends.</p>
-          </Link>
-          <Link href="/dashboard/discover" className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-[#f15b27] transition">
-            <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black mb-2">Discovery</div>
-            <h3 className="text-lg font-black text-slate-900">Keyword Ideas</h3>
-            <p className="text-sm text-slate-500 mt-1">Question, comparison, and social hashtag workflows.</p>
           </Link>
         </div>
 

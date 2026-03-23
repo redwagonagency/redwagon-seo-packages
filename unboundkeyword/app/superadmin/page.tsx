@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
+import { estimateEndpointPrice } from "@/lib/api-pricing";
 import SuperadminIndustryStatsManager from "@/components/dashboard/SuperadminIndustryStatsManager";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +43,11 @@ export default async function SuperadminPage() {
     recentSearchHistory,
     userSearchCount,
     topSearchedKws,
+    apiByUserEndpoint,
+    searchByUser,
+    competitorCacheCount,
+    discoveryKeywordCount,
+    uncategorizedKeywordsCount,
   ] = await Promise.all([
     prisma.user.findMany({
       select: { id: true, name: true, email: true, createdAt: true },
@@ -99,6 +105,22 @@ export default async function SuperadminPage() {
       orderBy: { _count: { id: "desc" } },
       take: 20,
     }).catch(() => []),
+    prisma.apiQueryLog.groupBy({
+      by: ["userId", "endpoint"],
+      where: { userId: { not: null } },
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 1000,
+    }).catch(() => []),
+    prisma.userSearch.groupBy({
+      by: ["userId"],
+      _count: { id: true },
+    }).catch(() => []),
+    prisma.competitorAnalysisCache.count().catch(() => 0),
+    prisma.discoveryKeyword.count().catch(() => 0),
+    prisma.keywordInList.count({
+      where: { list: { name: "Uncategorized" } },
+    }).catch(() => 0),
   ]);
 
   // User signup buckets by month (last 6 months)
@@ -126,27 +148,50 @@ export default async function SuperadminPage() {
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const newUsersThisMonth = users.filter((u) => u.createdAt >= thisMonthStart).length;
 
-  // DataForSEO estimated cost per call by endpoint pattern
-  const ENDPOINT_COSTS: Record<string, number> = {
-    "/serp/google/organic/live/advanced": 0.0025,
-    "/serp/google/autocomplete/live/advanced": 0.0005,
-    "/keywords_data/google_ads/search_volume/live": 0.002,
-    "/keywords_data/google_ads/keywords_for_keywords/live": 0.002,
-    "/keywords_data/google_ads/keywords_for_site/live": 0.002,
-    "/keywords_data/dataforseo_trends/demography/live": 0.002,
-    "/dataforseo_labs/google/keywords_for_keywords/live": 0.0015,
-    "/dataforseo_labs/google/ranked_keywords/live": 0.0015,
-    "/dataforseo_labs/google/bulk_keyword_difficulty/live": 0.001,
-    "/content_analysis/search/live": 0.01,
-    "/backlinks/bulk_ranks/live": 0.003,
-    "/backlinks/anchors/live": 0.003,
-  };
-
   const endpointCostRows = topEndpoints.map((ep) => {
-    const costPerCall = Object.entries(ENDPOINT_COSTS).find(([k]) => ep.endpoint.includes(k))?.[1] ?? 0.001;
-    return { endpoint: ep.endpoint, calls: ep._count.id, estimated: ep._count.id * costPerCall };
+    const pricing = estimateEndpointPrice(ep.endpoint);
+    return {
+      endpoint: ep.endpoint,
+      calls: ep._count.id,
+      costPerCall: pricing.estimatedUsdPerCall,
+      pricingRule: pricing.matchedRule,
+      estimated: ep._count.id * pricing.estimatedUsdPerCall,
+    };
   });
   const totalEstimatedCost = endpointCostRows.reduce((s, e) => s + e.estimated, 0);
+
+  const searchByUserMap = new Map(
+    (searchByUser as { userId: string; _count: { id: number } }[]).map((row) => [row.userId, row._count.id])
+  );
+
+  const userCostMap = new Map<string, { calls: number; estimatedCost: number; topEndpoints: string[] }>();
+  for (const row of (apiByUserEndpoint as { userId: string | null; endpoint: string; _count: { id: number } }[])) {
+    if (!row.userId) continue;
+    const pricing = estimateEndpointPrice(row.endpoint);
+    const current = userCostMap.get(row.userId) ?? { calls: 0, estimatedCost: 0, topEndpoints: [] };
+    current.calls += row._count.id;
+    current.estimatedCost += row._count.id * pricing.estimatedUsdPerCall;
+    if (current.topEndpoints.length < 3 && !current.topEndpoints.includes(row.endpoint)) {
+      current.topEndpoints.push(row.endpoint);
+    }
+    userCostMap.set(row.userId, current);
+  }
+
+  const perUserUsageRows = users
+    .map((user) => {
+      const usage = userCostMap.get(user.id) ?? { calls: 0, estimatedCost: 0, topEndpoints: [] };
+      return {
+        id: user.id,
+        email: user.email ?? "—",
+        calls: usage.calls,
+        estimatedCost: usage.estimatedCost,
+        searches: searchByUserMap.get(user.id) ?? 0,
+        topEndpoints: usage.topEndpoints,
+      };
+    })
+    .filter((row) => row.calls > 0 || row.searches > 0)
+    .sort((a, b) => b.calls - a.calls || b.searches - a.searches)
+    .slice(0, 50);
 
   return (
     <div className="p-8 space-y-6 max-w-7xl">
@@ -261,6 +306,20 @@ export default async function SuperadminPage() {
       {/* ── DATA OUTPUT ─────────────────────────────────────────── */}
       <div>
         <h2 className="text-xs uppercase tracking-[0.18em] font-black text-[#f15b27] mb-3">Stored Data Output</h2>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        {[
+          { label: "Discovery Keywords", value: fmt(discoveryKeywordCount) },
+          { label: "Competitor Cache", value: fmt(competitorCacheCount) },
+          { label: "Uncategorized Keywords", value: fmt(uncategorizedKeywordsCount) },
+          { label: "User API Profiles", value: fmt(perUserUsageRows.length) },
+        ].map((card) => (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
+            <p className="mt-1 text-2xl font-black text-slate-900">{card.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Top searched keywords */}
@@ -395,6 +454,7 @@ export default async function SuperadminPage() {
                   <tr>
                     <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Calls</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">$/Call</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Est. Cost</th>
                   </tr>
                 </thead>
@@ -403,6 +463,7 @@ export default async function SuperadminPage() {
                     <tr key={r.endpoint} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all">{r.endpoint}</td>
                       <td className="px-4 py-2.5 text-right text-xs font-black text-[#f15b27] tabular-nums">{r.calls}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">${r.costPerCall.toFixed(4)}</td>
                       <td className="px-4 py-2.5 text-right text-xs tabular-nums text-amber-700">${r.estimated.toFixed(3)}</td>
                     </tr>
                   ))}
@@ -445,6 +506,41 @@ export default async function SuperadminPage() {
           )}
         </section>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Per-User API Usage &amp; Cost</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">Estimated spend and endpoint usage distribution by user account.</p>
+        </div>
+        {perUserUsageRows.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-slate-400">No per-user usage data yet.</div>
+        ) : (
+          <div className="overflow-y-auto max-h-[360px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">User</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">API Calls</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Searches</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Est. Cost</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Top Endpoints</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perUserUsageRows.map((row) => (
+                  <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-xs font-medium text-slate-700">{row.email}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-black tabular-nums text-[#f15b27]">{fmt(row.calls)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">{fmt(row.searches)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs font-semibold tabular-nums text-amber-700">${row.estimatedCost.toFixed(3)}</td>
+                    <td className="px-4 py-2.5 text-[10px] text-slate-500 max-w-[360px] truncate">{row.topEndpoints.join(", ") || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {/* Site management + Industry Stats */}
       <div className="grid gap-6 lg:grid-cols-2">

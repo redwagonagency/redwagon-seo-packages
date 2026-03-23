@@ -8,6 +8,8 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logUserSearch } from "@/lib/search-logger";
+import { getSelectedSiteIdForUser } from "@/lib/site-context";
+import { runWithApiUsageUserContext } from "@/lib/api-usage-context";
 import {
   getSerpLiveDataEnhanced,
   getGoogleAutocompleteAZ,
@@ -17,7 +19,11 @@ import {
   getAiKeywordSearchVolume,
   getLlmMentionsSearchLive,
   getKeywordData,
+  type ClickstreamSearchVolumeItem,
   getDFSTrendsDemography,
+  getDFSTrendsMergedData,
+  getDFSTrendsSubregionInterests,
+  getClickstreamGlobalSearchVolumeAdvanced,
   getRelatedKeywords,
   getKeywordSuggestions,
   getBulkKeywordDifficulty,
@@ -53,6 +59,13 @@ export interface DemographicsData {
   female: number | null;
   ageGroups: { label: string; index: number }[];
   locationData: { label: string; index: number }[];
+}
+
+export interface DeviceSplitData {
+  mobile: number | null;
+  desktop: number | null;
+  tablet: number | null;
+  source: "dataforseo_trends_merged";
 }
 
 export interface PaidSearchData {
@@ -114,7 +127,9 @@ export interface KeywordOverviewResponse {
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
   paid: PaidSearchData | null;
+  clickstreamGlobalVolume: number | null;
   demographics: DemographicsData | null;
+  deviceSplit: DeviceSplitData | null;
   relatedKeywords: RelatedKwItem[];
   questions: string[];
   prepositions: string[];
@@ -128,6 +143,7 @@ export interface KeywordOverviewResponse {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as { id: string }).id;
   const body = (await req.json()) as {
     keyword?: string;
     domain?: string;
@@ -142,13 +158,16 @@ export async function POST(req: NextRequest) {
   }
 
   const seed = keyword.trim();
+  const selectedSiteId = await getSelectedSiteIdForUser(userId).catch(() => null);
   const errors: Record<string, string> = {};
 
   // Build question-prefix and preposition-prefix batches for richer autocomplete
-  const QUESTION_PREFIXES_KW = ["what", "how", "why", "where", "when", "who", "which", "can", "is", "are", "will", "should", "does", "do", "how to", "how do", "what is", "what are"];
+  const QUESTION_PREFIXES_KW = ["what", "how", "why", "where", "when", "who", "which", "can", "is", "are", "will", "should", "does", "do", "how to", "how do", "what is", "what are", "how much", "how many", "where can", "is it", "are there"];
   const PREPOSITION_PREFIXES_KW = ["for", "with", "without", "vs", "near", "in", "alternatives to", "like", "instead of", "compared to", "after", "before", "during", "for beginners", "for business"];
+  const COMPARISON_PREFIXES_KW = ["vs", "versus", "or", "alternatives", "alternative to", "compare", "compared to", "better than", "difference between"];
   const questionQueries = QUESTION_PREFIXES_KW.map((p) => `${p} ${seed}`);
   const prepositionQueries = PREPOSITION_PREFIXES_KW.map((p) => `${seed} ${p}`);
+  const comparisonQueries = COMPARISON_PREFIXES_KW.map((p) => `${seed} ${p}`);
 
   const [
     serpResult,
@@ -158,31 +177,41 @@ export async function POST(req: NextRequest) {
     aiVolumeResult,
     llmResult,
     paidResult,
+    clickstreamGlobalVolumeResult,
     demoResult,
+    subregionResult,
+    trendsMergedResult,
     relatedKwResult,
     suggestionsResult,
     difficultyResult,
     labsResult,
     questionAutocompleteResult,
     prepositionAutocompleteResult,
+    comparisonAutocompleteResult,
     deepPaaResult,
-  ] = await Promise.allSettled([
-    getSerpLiveDataEnhanced(seed, location, language, 10),
-    getGoogleAutocompleteAZ(seed, location, language),
-    getContentAnalysisSearchLive(seed),
-    getContentAnalysisPhraseTrendsLive(seed),
-    getAiKeywordSearchVolume([seed], location, language),
-    domain ? getLlmMentionsSearchLive(seed, domain, 20) : Promise.resolve([]),
-    getKeywordData([seed]),
-    getDFSTrendsDemography([seed], location),
-    getRelatedKeywords(seed, location, language, 40),
-    getKeywordSuggestions(seed, location, language, 30),
-    getBulkKeywordDifficulty([seed], location, language),
-    getKeywordOverviewLabs([seed], location, language),
-    getAutocompleteBatch(questionQueries, location, language),
-    getAutocompleteBatch(prepositionQueries, location, language),
-    getPeopleAlsoAskQuestions(seed, location, language, 60),
-  ]);
+  ] = await runWithApiUsageUserContext(userId, () =>
+    Promise.allSettled([
+      getSerpLiveDataEnhanced(seed, location, language, 10),
+      getGoogleAutocompleteAZ(seed, location, language),
+      getContentAnalysisSearchLive(seed),
+      getContentAnalysisPhraseTrendsLive(seed),
+      getAiKeywordSearchVolume([seed], location, language),
+      domain ? getLlmMentionsSearchLive(seed, domain, 20) : Promise.resolve([]),
+      getKeywordData([seed]),
+      getClickstreamGlobalSearchVolumeAdvanced([seed]),
+      getDFSTrendsDemography([seed], location),
+      getDFSTrendsSubregionInterests([seed], location),
+      getDFSTrendsMergedData([seed], location),
+      getRelatedKeywords(seed, location, language, 40),
+      getKeywordSuggestions(seed, location, language, 30),
+      getBulkKeywordDifficulty([seed], location, language),
+      getKeywordOverviewLabs([seed], location, language),
+      getAutocompleteBatch(questionQueries, location, language),
+      getAutocompleteBatch(prepositionQueries, location, language),
+      getAutocompleteBatch(comparisonQueries, location, language),
+      getPeopleAlsoAskQuestions(seed, location, language, 60),
+    ])
+  );
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
     if (result.status === "rejected") {
@@ -205,7 +234,14 @@ export async function POST(req: NextRequest) {
   const aiVolume = settle(aiVolumeResult, "aiVolume", []);
   const llmMentions = settle(llmResult, "llmMentions", []);
   const paidRaw = settle(paidResult, "paid", null);
+  const clickstreamGlobalRaw = settle(clickstreamGlobalVolumeResult, "clickstreamGlobalVolume", {
+    items: [] as ClickstreamSearchVolumeItem[],
+    result: null,
+    raw: null,
+  });
   const demoRaw = settle(demoResult, "demographics", null);
+  const subregionRaw = settle(subregionResult, "subregions", null);
+  const trendsMergedRaw = settle(trendsMergedResult, "trendsMerged", null);
   const relatedRaw = relatedKwResult.status === "fulfilled" ? relatedKwResult.value : [];
   const suggestionsRaw = suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
   const difficultyRaw = difficultyResult.status === "fulfilled" ? difficultyResult.value : [];
@@ -213,6 +249,7 @@ export async function POST(req: NextRequest) {
   const labsItem = labsRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase()) ?? null;
   const questionAutocomplete = questionAutocompleteResult.status === "fulfilled" ? questionAutocompleteResult.value : [];
   const prepositionAutocomplete = prepositionAutocompleteResult.status === "fulfilled" ? prepositionAutocompleteResult.value : [];
+  const comparisonAutocomplete = comparisonAutocompleteResult.status === "fulfilled" ? comparisonAutocompleteResult.value : [];
   const deepPaaItems = deepPaaResult.status === "fulfilled" ? deepPaaResult.value : [];
 
   // Parse demographics — DFS Trends Demography uses sub_type="gender"|"age_group"
@@ -289,6 +326,113 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Parse subregion interests from DFS Trends and attach to demographics locationData.
+  const subregionRows = new Map<string, number>();
+  function collectSubregion(node: unknown) {
+    if (Array.isArray(node)) {
+      for (const child of node) collectSubregion(child);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+
+    const record = node as Record<string, unknown>;
+    const labelRaw =
+      typeof record.location_name === "string" ? record.location_name :
+      typeof record.location === "string" ? record.location :
+      typeof record.subregion === "string" ? record.subregion :
+      typeof record.region === "string" ? record.region :
+      typeof record.name === "string" ? record.name :
+      typeof record.category === "string" ? record.category :
+      null;
+
+    const valueRaw =
+      typeof record.value === "number" ? record.value :
+      typeof record.index === "number" ? record.index :
+      typeof record.interest === "number" ? record.interest :
+      typeof record.search_volume === "number" ? record.search_volume :
+      null;
+
+    if (labelRaw && valueRaw !== null) {
+      const label = labelRaw.trim();
+      if (label && !["male", "female"].includes(label.toLowerCase())) {
+        subregionRows.set(label, Math.max(subregionRows.get(label) ?? 0, Math.round(valueRaw)));
+      }
+    }
+
+    for (const value of Object.values(record)) collectSubregion(value);
+  }
+
+  collectSubregion(subregionRaw);
+  const locationData = [...subregionRows.entries()]
+    .map(([label, index]) => ({ label, index }))
+    .sort((a, b) => b.index - a.index)
+    .slice(0, 12);
+
+  if (locationData.length > 0) {
+    if (!demographics) demographics = { male: null, female: null, ageGroups: [], locationData: [] };
+    demographics.locationData = locationData;
+  }
+
+  const clickstreamGlobalItems = clickstreamGlobalRaw?.items ?? [];
+  const clickstreamGlobalVolume =
+    clickstreamGlobalItems.find((item) => item.keyword.toLowerCase() === seed.toLowerCase())?.searchVolume ??
+    clickstreamGlobalItems[0]?.searchVolume ??
+    null;
+
+  // Parse device split from DataForSEO Trends merged_data when available.
+  let deviceSplit: DeviceSplitData | null = null;
+  if (trendsMergedRaw && typeof trendsMergedRaw === "object") {
+    const bucket = new Map<string, number>();
+
+    function walk(node: unknown) {
+      if (Array.isArray(node)) {
+        for (const child of node) walk(child);
+        return;
+      }
+      if (!node || typeof node !== "object") return;
+
+      const record = node as Record<string, unknown>;
+      const categoryRaw = typeof record.category === "string" ? record.category.toLowerCase().trim() : null;
+      const valueRaw = typeof record.value === "number" ? record.value : null;
+
+      if (categoryRaw && valueRaw !== null) {
+        const normalized = categoryRaw.includes("desktop")
+          ? "desktop"
+          : categoryRaw.includes("mobile")
+          ? "mobile"
+          : categoryRaw.includes("tablet")
+          ? "tablet"
+          : null;
+        if (normalized) {
+          bucket.set(normalized, (bucket.get(normalized) ?? 0) + valueRaw);
+        }
+      }
+
+      for (const value of Object.values(record)) walk(value);
+    }
+
+    walk(trendsMergedRaw);
+
+    const desktopRaw = bucket.get("desktop") ?? 0;
+    const mobileRaw = bucket.get("mobile") ?? 0;
+    const tabletRaw = bucket.get("tablet") ?? 0;
+    const total = desktopRaw + mobileRaw + tabletRaw;
+
+    if (total > 0) {
+      deviceSplit = {
+        desktop: Math.round((desktopRaw / total) * 100),
+        mobile: Math.round((mobileRaw / total) * 100),
+        tablet: tabletRaw > 0 ? Math.round((tabletRaw / total) * 100) : null,
+        source: "dataforseo_trends_merged",
+      };
+
+      const splitSum = (deviceSplit.desktop ?? 0) + (deviceSplit.mobile ?? 0) + (deviceSplit.tablet ?? 0);
+      if (splitSum !== 100) {
+        deviceSplit.desktop = (deviceSplit.desktop ?? 0) + (100 - splitSum);
+      }
+    }
+  }
+
   // Parse paid search data + monthly volumes
   // Google Ads API returns tasks[0].result as a direct array of keyword items
   type PaidRaw = { tasks?: Array<{ result?: Array<Record<string, unknown>> }> };
@@ -352,9 +496,9 @@ export async function POST(req: NextRequest) {
   const relatedKeywords = [...relatedMap.values()].sort((a, b) => b.volume - a.volume).slice(0, 60);
 
   // Extract questions / prepositions / comparisons — mine autocomplete + dedicated question/preposition batches
-  const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should", "do"];
+  const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should", "do", "could", "would"];
   const PREPOSITION_WORDS = ["for", "with", "without", "near", "in", "on", "at", "by", "to", "vs", "versus", "like", "after", "before", "during", "alternatives", "instead", "compared"];
-  const COMPARISON_WORDS = ["vs", "versus", "or", "alternative", "alternatives", "compare", "compared", "better", "difference"];
+  const COMPARISON_WORDS = ["vs", "versus", "or", "alternative", "alternatives", "compare", "compared", "better", "difference", "better than", "worse than", "instead of", "replace", "replacement"];
 
   const allAutocomplete: string[] = autocomplete.flatMap((g) => g.suggestions);
   // Combine all keyword sources including dedicated question/preposition autocomplete
@@ -366,15 +510,41 @@ export async function POST(req: NextRequest) {
     ...relatedRaw.map((s) => s.keyword).filter(Boolean),
   ])].filter((s) => s.toLowerCase() !== seed.toLowerCase());
 
-  // Questions: prioritize dedicated question-prefix autocomplete results, then filter remainder
-  const questionSet = new Set<string>();
-  for (const s of questionAutocomplete) {
-    if (QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))) questionSet.add(s);
+  // Questions: build per-prefix buckets so results are not dominated by one pattern (e.g. only "what")
+  const questionBuckets = new Map<string, string[]>();
+  for (const prefix of QUESTION_WORDS) questionBuckets.set(prefix, []);
+  const questionSeen = new Set<string>();
+  const questionPool = [...new Set([
+    ...questionAutocomplete,
+    ...allKeywordPool,
+    ...deepPaaItems.map((item) => item.keyword).filter(Boolean),
+  ])];
+  for (const suggestion of questionPool) {
+    const normalized = suggestion.trim();
+    const lower = normalized.toLowerCase();
+    const matchedPrefix = QUESTION_WORDS.find((word) => lower.startsWith(`${word} `));
+    if (!matchedPrefix) continue;
+    const key = lower;
+    if (questionSeen.has(key)) continue;
+    questionSeen.add(key);
+    questionBuckets.get(matchedPrefix)?.push(normalized);
   }
-  for (const s of allAutocomplete) {
-    if (QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))) questionSet.add(s);
+  const questions: string[] = [];
+  let keepPicking = true;
+  while (keepPicking && questions.length < 100) {
+    keepPicking = false;
+    for (const prefix of QUESTION_WORDS) {
+      const bucketItems = questionBuckets.get(prefix) ?? [];
+      if (!bucketItems.length) continue;
+      const next = bucketItems.shift();
+      if (next) {
+        questions.push(next);
+        keepPicking = true;
+      }
+      if (questions.length >= 100) break;
+    }
   }
-  const questions = [...questionSet].slice(0, 80);
+  const questionSet = new Set(questions.map((item) => item.toLowerCase()));
 
   // Prepositions: prioritize dedicated preposition autocomplete
   const prepositionSet = new Set<string>();
@@ -383,12 +553,22 @@ export async function POST(req: NextRequest) {
     const words = s.toLowerCase().split(/\s+/);
     if (PREPOSITION_WORDS.some((w) => words.includes(w))) prepositionSet.add(s);
   }
-  const prepositions = [...prepositionSet].filter((s) => !questionSet.has(s)).slice(0, 80);
+  const prepositions = [...prepositionSet].filter((s) => !questionSet.has(s.toLowerCase())).slice(0, 80);
 
-  const comparisons = allKeywordPool.filter((s) => {
-    const lower = s.toLowerCase();
-    return COMPARISON_WORDS.some((w) => lower.includes(" " + w + " ") || lower.endsWith(" " + w));
-  }).filter((s) => !questionSet.has(s) && !prepositionSet.has(s)).slice(0, 60);
+  const comparisonSet = new Set<string>();
+  for (const suggestion of comparisonAutocomplete) {
+    const normalized = suggestion.trim();
+    if (normalized) comparisonSet.add(normalized);
+  }
+  for (const suggestion of [...allKeywordPool, ...deepPaaItems.map((item) => item.keyword).filter(Boolean)]) {
+    const lower = suggestion.toLowerCase();
+    if (COMPARISON_WORDS.some((word) => lower.includes(` ${word} `) || lower.endsWith(` ${word}`))) {
+      comparisonSet.add(suggestion.trim());
+    }
+  }
+  const comparisons = [...comparisonSet]
+    .filter((s) => s && !questionSet.has(s.toLowerCase()) && !prepositionSet.has(s))
+    .slice(0, 100);
 
   // Merge deep PAA with SERP PAA, deduplicate by question text
   const paaMap = new Map<string, PeopleAlsoAskItem>();
@@ -491,7 +671,18 @@ export async function POST(req: NextRequest) {
     },
   }).catch(() => { /* non-critical */ });
 
-  void logUserSearch(session.user.id, seed, "keyword", { volume: labsItem?.searchVolume ?? null, domain: domain || null });
+  void logUserSearch(session.user.id, seed, "keyword", { volume: labsItem?.searchVolume ?? null, domain: domain || null }, {
+    siteId: selectedSiteId,
+    source: "keyword",
+    keywords: [
+      { keyword: seed, volume: paidData?.searchVolume ?? labsItem?.searchVolume ?? null, cpc: paidData?.cpc ?? labsItem?.cpc ?? null, difficulty: keywordDifficulty ?? null, competition: paidData?.competition ?? null },
+      ...relatedKeywords.map((item) => ({ keyword: item.keyword, volume: item.volume, cpc: item.cpc, difficulty: item.difficulty, competition: item.competition })),
+      ...(questions ?? []).map((item) => ({ keyword: item })),
+      ...(prepositions ?? []).map((item) => ({ keyword: item })),
+      ...(comparisons ?? []).map((item) => ({ keyword: item })),
+      ...(mergedPaa ?? []).map((item) => ({ keyword: item.question })),
+    ],
+  });
 
   return Response.json({
     keyword: seed,
@@ -507,7 +698,9 @@ export async function POST(req: NextRequest) {
     aiVolume,
     llmMentions,
     paid: paidData,
+    clickstreamGlobalVolume,
     demographics,
+    deviceSplit,
     relatedKeywords,
     questions,
     prepositions,

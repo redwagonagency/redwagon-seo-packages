@@ -3,15 +3,16 @@ import { auth } from "@/lib/auth";
 import {
   getDomainRankOverview,
   getDomainCompetitors,
-  getKeywordGap,
   getBulkTrafficEstimation,
   getHistoricalBulkTraffic,
   getBacklinkTotalSummary,
-  getCommonKeywords,
   getRankedKeywords,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 import { prisma } from "@/lib/prisma";
+import { runWithApiUsageUserContext } from "@/lib/api-usage-context";
+import { captureKeywordsToUncategorized } from "@/lib/keyword-capture";
+import { logUserSearch } from "@/lib/search-logger";
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -95,6 +96,14 @@ export async function POST(req: NextRequest) {
       });
       if (cached && Date.now() - new Date(cached.updatedAt).getTime() < CACHE_TTL_MS) {
         const parsed = JSON.parse(cached.data) as CompetitorAnalysisResponse;
+        void logUserSearch(userId, domain, "competitor", {
+          fromCache: true,
+          competitors: parsed.competitors.length,
+        }, {
+          siteId: selectedSite?.id ?? null,
+          source: "competitor",
+          keywords: parsed.competitors.flatMap((row) => row.rankedKeywords.map((kw) => ({ keyword: kw.keyword, volume: kw.searchVolume ?? 0, cpc: kw.cpc ?? null }))),
+        });
         return Response.json({ ...parsed, fromCache: true, cachedAt: cached.updatedAt.toISOString() });
       }
     }
@@ -117,24 +126,28 @@ export async function POST(req: NextRequest) {
 
     // Get your domain overview + suggested competitors + your ranked keywords simultaneously
     const needSuggested = customCompetitors.length === 0 && savedCompetitors.length === 0;
-    const [yourOverviewResult, suggestedResult, yourRankedResult] = await Promise.allSettled([
-      getDomainRankOverview(domain, location, language),
-      needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
-      getRankedKeywords(domain, location, language, 300),
-    ]);
+    const [yourOverviewResult, suggestedResult, yourRankedResult] = await runWithApiUsageUserContext(userId, () =>
+      Promise.allSettled([
+        getDomainRankOverview(domain, location, language),
+        needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
+        getRankedKeywords(domain, location, language, 300),
+      ])
+    );
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
     const suggested = suggestedResult.status === "fulfilled" ? suggestedResult.value : [];
     const yourRankedKeywords: RankedKwItem[] = yourRankedResult.status === "fulfilled" ? yourRankedResult.value : [];
     const suggestedDomains = suggested.map((s) => normalizeDomain(s.domain)).filter(Boolean);
 
-    const chosenCompetitors = (
+    const chosenCompetitors = Array.from(new Set(
       customCompetitors.length > 0
         ? customCompetitors
         : savedCompetitors.length > 0
           ? savedCompetitors
           : suggestedDomains.slice(0, 8)
-    ).slice(0, 10);
+    ))
+      .filter((candidate) => candidate !== domain)
+      .slice(0, 10);
 
     if (chosenCompetitors.length === 0) {
       return Response.json({
@@ -149,13 +162,17 @@ export async function POST(req: NextRequest) {
 
     // Bulk traffic estimation + historical for all domains at once (efficient)
     const allTargets = [domain, ...chosenCompetitors];
-    const [bulkTrafficResult, histBulkResult] = await Promise.allSettled([
-      getBulkTrafficEstimation(allTargets.map((t) => ({ target: t })), location, language),
-      getHistoricalBulkTraffic(allTargets, location, language),
-    ]);
+    const [bulkTrafficResult, histBulkResult] = await runWithApiUsageUserContext(userId, () =>
+      Promise.allSettled([
+        getBulkTrafficEstimation(allTargets.map((t) => ({ target: t })), location, language),
+        getHistoricalBulkTraffic(allTargets, location, language),
+      ])
+    );
     // Pre-fetch ranked keywords for all competitors in parallel
-    const competitorRankedResults = await Promise.allSettled(
-      chosenCompetitors.map((cd) => getRankedKeywords(cd, location, language, 300))
+    const competitorRankedResults = await runWithApiUsageUserContext(userId, () =>
+      Promise.allSettled(
+        chosenCompetitors.map((cd) => getRankedKeywords(cd, location, language, 300))
+      )
     );
 
     const bulkTraffic = bulkTrafficResult.status === "fulfilled" ? bulkTrafficResult.value : [];
@@ -181,40 +198,73 @@ export async function POST(req: NextRequest) {
     });
 
     // Per-competitor data: common keywords, keyword gap, backlinks
+    const yourRankedMap = new Map<string, RankedKwItem>();
+    for (const kw of yourRankedKeywords) {
+      yourRankedMap.set(kw.keyword.toLowerCase(), kw);
+    }
+
     const competitorRows: CompetitorRow[] = await Promise.all(
       chosenCompetitors.map(async (compDomain, idx): Promise<CompetitorRow> => {
-        const [commonResult, gapResult, backlinkResult] = await Promise.allSettled([
-          getCommonKeywords(domain, compDomain, location, language, 500),
-          getKeywordGap(domain, [compDomain], location, language, 500),
-          getBacklinkTotalSummary(compDomain),
-        ]);
+        const backlinkResult = await runWithApiUsageUserContext(userId, () => getBacklinkTotalSummary(compDomain).catch(() => ({ backlinksTotal: 0, referringDomains: 0, domainRank: 0 })));
+
         const rankedKws: RankedKwItem[] =
           competitorRankedResults[idx]?.status === "fulfilled"
             ? (competitorRankedResults[idx] as PromiseFulfilledResult<RankedKwItem[]>).value
             : [];
 
-        const common = commonResult.status === "fulfilled" ? commonResult.value : { count: 0, items: [] };
-        const gap = gapResult.status === "fulfilled" ? gapResult.value : [];
-        const backlink = backlinkResult.status === "fulfilled" ? backlinkResult.value : { backlinksTotal: 0, referringDomains: 0, domainRank: 0 };
+        const commonKeywords: CompetitorRow["commonKeywords"] = [];
+        const keywordGap: CompetitorRow["keywordGap"] = [];
+
+        for (const kw of rankedKws) {
+          const your = yourRankedMap.get(kw.keyword.toLowerCase());
+          const yourPosition = your?.position ?? null;
+          const competitorPosition = kw.position ?? null;
+          const volume = kw.searchVolume ?? null;
+
+          if (your) {
+            commonKeywords.push({
+              keyword: kw.keyword,
+              volume,
+              yourPosition,
+              competitorPosition,
+            });
+          }
+
+          const opportunity = yourPosition === null
+            ? "missing"
+            : competitorPosition !== null && yourPosition > competitorPosition
+            ? "weak"
+            : yourPosition > 20
+            ? "weak"
+            : "strong";
+
+          if (opportunity !== "strong") {
+            keywordGap.push({
+              keyword: kw.keyword,
+              volume,
+              yourPosition,
+              competitorPosition,
+              opportunity,
+            });
+          }
+        }
+
+        commonKeywords.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+        keywordGap.sort((a, b) => (b.volume ?? 0) - (a.volume ?? 0));
+
         const traffic = bulkTrafficMap.get(compDomain);
 
         return {
           domain: compDomain,
-          commonKeywordsCount: common.count,
-          commonKeywords: common.items,
-          keywordGapCount: gap.length,
-          keywordGap: gap.map((g) => ({
-            keyword: g.keyword,
-            volume: g.volume,
-            yourPosition: g.yourPosition,
-            competitorPosition: g.competitorPositions[0]?.position ?? null,
-            opportunity: g.opportunity,
-          })),
+          commonKeywordsCount: commonKeywords.length,
+          commonKeywords: commonKeywords.slice(0, 500),
+          keywordGapCount: keywordGap.length,
+          keywordGap: keywordGap.slice(0, 500),
           rankedKeywords: rankedKws,
           estimatedTraffic: traffic?.traffic ?? 0,
-          backlinks: backlink.backlinksTotal,
-          referringDomains: backlink.referringDomains,
-          domainRank: backlink.domainRank,
+          backlinks: backlinkResult.backlinksTotal,
+          referringDomains: backlinkResult.referringDomains,
+          domainRank: backlinkResult.domainRank,
         };
       })
     );
@@ -234,6 +284,32 @@ export async function POST(req: NextRequest) {
       update: { data: JSON.stringify(responseData) },
       create: { userId, domain, data: JSON.stringify(responseData) },
     }).catch((err: unknown) => console.error("[competitor cache] save failed:", err));
+
+    void captureKeywordsToUncategorized({
+      userId,
+      siteId: selectedSite?.id ?? null,
+      source: "competitor",
+      rows: [
+        { keyword: domain },
+        ...yourRankedKeywords.map((kw) => ({ keyword: kw.keyword, volume: kw.searchVolume ?? 0, cpc: kw.cpc ?? null })),
+        ...competitorRows.flatMap((row) => [
+          { keyword: row.domain },
+          ...row.rankedKeywords.map((kw) => ({ keyword: kw.keyword, volume: kw.searchVolume ?? 0, cpc: kw.cpc ?? null })),
+          ...row.commonKeywords.map((kw) => ({ keyword: kw.keyword, volume: kw.volume ?? 0 })),
+          ...row.keywordGap.map((kw) => ({ keyword: kw.keyword, volume: kw.volume ?? 0 })),
+        ]),
+      ],
+    }).catch(() => {});
+
+    void logUserSearch(userId, domain, "competitor", {
+      competitors: competitorRows.length,
+      commonKeywords: competitorRows.reduce((sum, row) => sum + row.commonKeywordsCount, 0),
+      keywordGap: competitorRows.reduce((sum, row) => sum + row.keywordGapCount, 0),
+    }, {
+      siteId: selectedSite?.id ?? null,
+      source: "competitor",
+      keywords: competitorRows.flatMap((row) => row.rankedKeywords.map((kw) => ({ keyword: kw.keyword, volume: kw.searchVolume ?? 0, cpc: kw.cpc ?? null }))),
+    });
 
     return Response.json({ ...responseData, fromCache: false, cachedAt: null });
   } catch (error) {

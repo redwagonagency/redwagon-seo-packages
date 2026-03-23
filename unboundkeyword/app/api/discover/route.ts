@@ -18,6 +18,9 @@ import {
 } from "@/lib/dataforseo/client";
 import { prisma } from "@/lib/prisma";
 import { getSelectedSiteIdForUser } from "@/lib/site-context";
+import { runWithApiUsageUserContext } from "@/lib/api-usage-context";
+import { logUserSearch } from "@/lib/search-logger";
+import { DISCOVERY_SUPPORTED_PLATFORMS } from "@/lib/discovery-platforms";
 
 type DiscoverySessionCreateResult = { id: string };
 
@@ -366,8 +369,7 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedPlatform = String(platform).toLowerCase();
-  const supportedPlatforms = new Set(["google", "shopping", "youtube", "amazon", "bing", "facebook", "instagram", "tiktok", "chatgpt", "pinterest"]);
-  if (!supportedPlatforms.has(normalizedPlatform)) {
+  if (!DISCOVERY_SUPPORTED_PLATFORMS.has(normalizedPlatform)) {
     return Response.json({ error: `Unsupported platform: ${platform}` }, { status: 400 });
   }
 
@@ -390,40 +392,42 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, paaResult, forcedResult, azAutocompleteResult] = await Promise.allSettled([
-      getKeywordSuggestions(seedClean, location, language, 2000),
-      getRelatedKeywords(seedClean, location, language, 2000),
-      getKeywordIdeasLabs(seedClean, location, language, 2000),
-      getGoogleAutocompleteLiveAdvanced(seedClean, {
-        locationCode: Number(location),
-        languageCode: String(language),
-        limit: 2000,
-      }),
-      // Multi-angle PAA: run 5 parallel queries to bypass Google's ~4-item PAA limit per SERP
+    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, paaResult, forcedResult, azAutocompleteResult] = await runWithApiUsageUserContext(userId, () =>
       Promise.allSettled([
-        getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 500),
-        getPeopleAlsoAskQuestions(`what is ${seedClean}`, Number(location), String(language), 500),
-        getPeopleAlsoAskQuestions(`how to ${seedClean}`, Number(location), String(language), 500),
-        getPeopleAlsoAskQuestions(`best ${seedClean}`, Number(location), String(language), 500),
-        getPeopleAlsoAskQuestions(`${seedClean} tips`, Number(location), String(language), 500),
-      ]).then((results) => {
-        const seen = new Set<string>();
-        const merged: RelatedKeywordItem[] = [];
-        for (const r of results) {
-          if (r.status === "fulfilled") {
-            for (const item of r.value) {
-              const key = item.keyword?.trim().toLowerCase();
-              if (key && !seen.has(key)) { seen.add(key); merged.push(item); }
+        getKeywordSuggestions(seedClean, location, language, 2000),
+        getRelatedKeywords(seedClean, location, language, 2000),
+        getKeywordIdeasLabs(seedClean, location, language, 2000),
+        getGoogleAutocompleteLiveAdvanced(seedClean, {
+          locationCode: Number(location),
+          languageCode: String(language),
+          limit: 2000,
+        }),
+        // Multi-angle PAA: run 5 parallel queries to bypass Google's ~4-item PAA limit per SERP
+        Promise.allSettled([
+          getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 500),
+          getPeopleAlsoAskQuestions(`what is ${seedClean}`, Number(location), String(language), 500),
+          getPeopleAlsoAskQuestions(`how to ${seedClean}`, Number(location), String(language), 500),
+          getPeopleAlsoAskQuestions(`best ${seedClean}`, Number(location), String(language), 500),
+          getPeopleAlsoAskQuestions(`${seedClean} tips`, Number(location), String(language), 500),
+        ]).then((results) => {
+          const seen = new Set<string>();
+          const merged: RelatedKeywordItem[] = [];
+          for (const r of results) {
+            if (r.status === "fulfilled") {
+              for (const item of r.value) {
+                const key = item.keyword?.trim().toLowerCase();
+                if (key && !seen.has(key)) { seen.add(key); merged.push(item); }
+              }
             }
           }
-        }
-        return merged;
-      }),
-      deepMode
-        ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
-        : Promise.resolve([]),
-      getGoogleAutocompleteAZ(seedClean, Number(location), String(language)),
-    ]);
+          return merged;
+        }),
+        deepMode
+          ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
+          : Promise.resolve([]),
+        getGoogleAutocompleteAZ(seedClean, Number(location), String(language)),
+      ])
+    );
 
     const suggestionsRaw: KeywordSuggestionItem[] =
       suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
@@ -476,7 +480,7 @@ export async function POST(req: NextRequest) {
 
     const intentMap: Record<string, string> = {};
     if (allKeywords.length > 0) {
-      const intentData = await getSearchIntent(allKeywords, location, language).catch(() => []);
+      const intentData = await runWithApiUsageUserContext(userId, () => getSearchIntent(allKeywords, location, language).catch(() => []));
       for (const item of intentData) {
         if (item.keyword) intentMap[item.keyword.toLowerCase()] = item.intent;
       }
@@ -686,6 +690,22 @@ export async function POST(req: NextRequest) {
         await prismaCompat.discoveryKeyword.createMany({ data: keywordRows });
       }
     }
+
+    void logUserSearch(userId, seedClean, "discover", {
+      groups: groups.length,
+      totalKeywords: groups.reduce((acc, g) => acc + g.keywords.length, 0),
+      platform: normalizedPlatform,
+    }, {
+      siteId: selectedSiteId,
+      source: "discover",
+      keywords: groups.flatMap((group) => group.keywords.map((kw) => ({
+        keyword: kw.keyword,
+        volume: kw.volume ?? null,
+        cpc: kw.cpc ?? null,
+        difficulty: kw.difficulty ?? null,
+        intent: kw.intent ?? null,
+      }))),
+    });
 
     return Response.json({
       seed: seedClean,

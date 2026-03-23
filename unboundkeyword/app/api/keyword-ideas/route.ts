@@ -5,6 +5,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { logUserSearch } from "@/lib/search-logger";
+import { runWithApiUsageUserContext } from "@/lib/api-usage-context";
 import {
   getKeywordIdeasLabs,
   getRelatedKeywords,
@@ -68,30 +69,32 @@ export async function POST(req: NextRequest) {
       bingPerfResult,
       relatedResult,
       suggestionsResult,
-    ] = await Promise.allSettled([
-      // Google Labs keyword ideas
-      getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => []),
-      // Bing keywords for keywords
-      getBingKeywordsForKeywords([seed], location, language).catch(() => []),
-      // Bing keywords for site (only if we have a domain)
-      siteDomain
-        ? getBingKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
-        : Promise.resolve([]),
-      // Google Ads keywords for site
-      siteDomain
-        ? getGoogleAdsKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
-        : Promise.resolve([]),
-      // Google Trends explore
-      getGoogleTrendsExplore([seed], location, language).catch(() => []),
-      // Amazon
-      getAmazonRelatedKeywords(seed, location, language, 1, 30).catch(() => []),
-      // Placeholder — Bing performance will run after collecting unique keywords
-      Promise.resolve([] as { keyword: string; searchVolume: number; cpc: number | null; competition: number | null }[]),
-      // Related keywords (DataForSEO Labs)
-      getRelatedKeywords(seed, location, language, 50).catch(() => []),
-      // Keyword suggestions (DataForSEO Labs)
-      getKeywordSuggestions(seed, location, language, 30).catch(() => []),
-    ]);
+    ] = await runWithApiUsageUserContext(userId, () =>
+      Promise.allSettled([
+        // Google Labs keyword ideas
+        getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => []),
+        // Bing keywords for keywords
+        getBingKeywordsForKeywords([seed], location, language).catch(() => []),
+        // Bing keywords for site (only if we have a domain)
+        siteDomain
+          ? getBingKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
+          : Promise.resolve([]),
+        // Google Ads keywords for site
+        siteDomain
+          ? getGoogleAdsKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
+          : Promise.resolve([]),
+        // Google Trends explore
+        getGoogleTrendsExplore([seed], location, language).catch(() => []),
+        // Amazon
+        getAmazonRelatedKeywords(seed, location, language, 1, 30).catch(() => []),
+        // Placeholder — Bing performance will run after collecting unique keywords
+        Promise.resolve([] as { keyword: string; searchVolume: number; cpc: number | null; competition: number | null }[]),
+        // Related keywords (DataForSEO Labs)
+        getRelatedKeywords(seed, location, language, 50).catch(() => []),
+        // Keyword suggestions (DataForSEO Labs)
+        getKeywordSuggestions(seed, location, language, 30).catch(() => []),
+      ])
+    );
 
     const labsItems = labsResult.status === "fulfilled" ? labsResult.value : [];
     const bingKFK = bingKFKResult.status === "fulfilled" ? bingKFKResult.value : [];
@@ -250,7 +253,7 @@ export async function POST(req: NextRequest) {
       .map((k) => k.keyword);
 
     if (topKeywords.length > 0) {
-      const bingPerf = await getBingKeywordPerformanceBatch(topKeywords, location, language).catch(() => []);
+      const bingPerf = await runWithApiUsageUserContext(userId, () => getBingKeywordPerformanceBatch(topKeywords, location, language).catch(() => []));
       for (const bp of bingPerf) {
         const k = bp.keyword.toLowerCase();
         const existing = kwMap.get(k);
@@ -266,7 +269,16 @@ export async function POST(req: NextRequest) {
 
     keywords = keywords.slice(0, limit);
 
-    void logUserSearch(session.user.id, keyword as string, "keyword", { results: keywords.length });
+    void logUserSearch(session.user.id, keyword as string, "keyword", { results: keywords.length }, {
+      siteId: selectedSite?.id ?? null,
+      source: "keyword",
+      keywords: keywords.map((item) => ({
+        keyword: item.keyword,
+        volume: item.volume,
+        cpc: item.cpc,
+        difficulty: item.difficulty,
+      })),
+    });
 
     return Response.json({
       keywords,

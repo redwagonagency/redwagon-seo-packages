@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import OverviewWithVolume from "./OverviewWithVolume";
 import { cn, formatNumber, difficultyColor, intentBadgeVariant } from "@/lib/utils";
+import { DISCOVERY_PLATFORM_OPTIONS } from "@/lib/discovery-platforms";
 
 interface DiscoveryKeyword {
   keyword: string;
@@ -105,18 +106,7 @@ const LANGUAGE_OPTIONS = [
   { value: "de", label: "German" },
 ];
 
-const PLATFORM_OPTIONS = [
-  { value: "google", label: "Google" },
-  { value: "shopping", label: "Google Shopping" },
-  { value: "youtube", label: "YouTube" },
-  { value: "amazon", label: "Amazon" },
-  { value: "bing", label: "Bing" },
-  { value: "facebook", label: "Facebook" },
-  { value: "instagram", label: "Instagram" },
-  { value: "tiktok", label: "TikTok" },
-  { value: "pinterest", label: "Pinterest" },
-  { value: "chatgpt", label: "ChatGPT" },
-];
+const PLATFORM_OPTIONS = DISCOVERY_PLATFORM_OPTIONS;
 
 const STATE_OPTIONS = [
   "All States",
@@ -1086,7 +1076,7 @@ export default function DiscoveryClient() {
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         params.set("q", seedValue.trim());
-        params.set("platform", activePlatforms[0]);
+        params.set("platform", activePlatforms.join(","));
         window.history.replaceState({}, "", `/dashboard/discover?${params.toString()}`);
       }
     } catch (err: unknown) {
@@ -1229,6 +1219,7 @@ export default function DiscoveryClient() {
   });
   const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
   const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
+  const allPlatformsSelected = PLATFORM_OPTIONS.every((option) => platforms.includes(option.value));
   const isSocialPlatform = platforms.length > 0 && platforms.every((p) => ["instagram", "tiktok", "facebook", "pinterest"].includes(p));
   const socialSeedRows = buildSocialHashtagRows(filteredMasterRows).slice(0, 366);
   const socialRowsWithTab = socialModeTab === "hashtags"
@@ -1309,6 +1300,23 @@ export default function DiscoveryClient() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-2">Platforms</label>
+                <div className="mb-2 flex items-center gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPlatforms(PLATFORM_OPTIONS.map((option) => option.value))}
+                    className="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                  >
+                    Check all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlatforms([])}
+                    className="rounded border border-slate-200 px-2 py-0.5 text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                  >
+                    Clear all
+                  </button>
+                  <span className="text-slate-400">{allPlatformsSelected ? "All selected" : `${platforms.length} selected`}</span>
+                </div>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
                   {PLATFORM_OPTIONS.map((option) => (
                     <label key={option.value} className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -1318,7 +1326,7 @@ export default function DiscoveryClient() {
                         checked={platforms.includes(option.value)}
                         onChange={(e) => {
                           if (e.target.checked) {
-                            setPlatforms((prev) => [...prev, option.value]);
+                            setPlatforms((prev) => (prev.includes(option.value) ? prev : [...prev, option.value]));
                           } else {
                             setPlatforms((prev) => prev.filter((p) => p !== option.value));
                           }

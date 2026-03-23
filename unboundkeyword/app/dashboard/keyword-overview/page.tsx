@@ -20,6 +20,7 @@ import type {
   PhraseTrendItem,
   PaidSearchData,
   DemographicsData,
+  DeviceSplitData,
   RelatedKwItem,
   ClickDistribution,
   LocalPackResult,
@@ -49,7 +50,9 @@ interface OverviewData {
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
   paid: PaidSearchData | null;
+  clickstreamGlobalVolume: number | null;
   demographics: DemographicsData | null;
+  deviceSplit: DeviceSplitData | null;
   relatedKeywords?: RelatedKwItem[];
   questions?: string[];
   prepositions?: string[];
@@ -280,7 +283,7 @@ export default function KeywordOverviewPage() {
         <div className="space-y-5">
 
           {/* ── 1. HERO STAT BOXES ── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
               <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-1">Monthly Volume</div>
               <div className="text-3xl font-black tabular-nums text-slate-900">
@@ -292,6 +295,14 @@ export default function KeywordOverviewPage() {
                   {data.paid.volumeSource === "google_ads" ? "Google Ads" : "DataForSEO Labs"}
                 </div>
               )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-1">Clickstream Global</div>
+              <div className="text-3xl font-black tabular-nums text-slate-900">
+                {data.clickstreamGlobalVolume != null ? data.clickstreamGlobalVolume.toLocaleString() : "—"}
+              </div>
+              <div className="text-xs font-semibold text-slate-400 mt-0.5">global searches / month</div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
@@ -461,124 +472,105 @@ export default function KeywordOverviewPage() {
               })()}
             </div>
 
-            {/* Right: Demographics */}
-            {data.demographics && (data.demographics.male !== null || data.demographics.ageGroups.length > 0) ? (
-              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
-                <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-3">Searchers&rsquo; Age Range</div>
+            {/* Right: Audience insights (real data only) */}
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
+              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-3">Audience Insights</div>
 
-                {/* Gender split */}
-                {data.demographics.male !== null && data.demographics.female !== null && (
-                  <div className="mb-4">
-                    <div className="text-xs font-semibold text-slate-500 mb-1.5">Gender Split</div>
-                    <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
-                      <div className="bg-blue-400 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.demographics.male}%` }}>
-                        {data.demographics.male >= 20 ? `${data.demographics.male}%` : ""}
-                      </div>
-                      <div className="bg-pink-400 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.demographics.female}%` }}>
-                        {data.demographics.female >= 20 ? `${data.demographics.female}%` : ""}
-                      </div>
+              {data.deviceSplit && data.deviceSplit.mobile !== null && data.deviceSplit.desktop !== null ? (
+                <div className="mb-4">
+                  <div className="text-xs font-semibold text-slate-500 mb-1.5">Device Split</div>
+                  <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
+                    <div className="bg-slate-600 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.deviceSplit.desktop}%` }}>
+                      {data.deviceSplit.desktop >= 18 ? `${data.deviceSplit.desktop}%` : ""}
                     </div>
-                    <div className="flex justify-between mt-1 text-[11px]">
-                      <span className="text-blue-500 font-semibold">♂ Male {data.demographics.male}%</span>
-                      <span className="text-pink-500 font-semibold">Female {data.demographics.female}% ♀</span>
+                    <div className="bg-[#f15b27] flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.deviceSplit.mobile}%` }}>
+                      {data.deviceSplit.mobile >= 18 ? `${data.deviceSplit.mobile}%` : ""}
                     </div>
+                    {(data.deviceSplit.tablet ?? 0) > 0 && (
+                      <div className="bg-sky-500 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.deviceSplit.tablet}%` }}>
+                        {data.deviceSplit.tablet && data.deviceSplit.tablet >= 14 ? `${data.deviceSplit.tablet}%` : ""}
+                      </div>
+                    )}
                   </div>
-                )}
+                  <div className="mt-1 flex justify-between text-[11px]">
+                    <span className="text-slate-500 font-semibold">Desktop {data.deviceSplit.desktop}%</span>
+                    <span className="text-[#f15b27] font-semibold">Mobile {data.deviceSplit.mobile}%</span>
+                    {(data.deviceSplit.tablet ?? 0) > 0 && (
+                      <span className="text-sky-600 font-semibold">Tablet {data.deviceSplit.tablet}%</span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
 
-                {/* Age range recharts */}
-                {data.demographics.ageGroups.length > 0 && (() => {
-                  const maxIdx = Math.max(...data.demographics!.ageGroups.map((a) => a.index), 1);
-                  const ageData = data.demographics!.ageGroups.map((ag) => ({
-                    label: ag.label,
-                    value: Math.round((ag.index / maxIdx) * 100),
-                    raw: ag.index,
-                  }));
-                  return (
-                    <div>
-                      <div className="text-xs font-semibold text-slate-500 mb-2">Age Groups</div>
-                      <ResponsiveContainer width="100%" height={Math.max(ageData.length * 34, 120)}>
-                        <BarChart data={ageData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
-                          <XAxis type="number" hide domain={[0, 100]} />
-                          <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={48} />
-                          <Tooltip formatter={(v) => [`${v} (index)`, "Relative interest"]} contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }} />
-                          <Bar dataKey="value" fill="#f15b27" radius={[0, 6, 6, 0]} maxBarSize={22} label={{ position: "right", fontSize: 11, fill: "#94a3b8", formatter: (v: unknown) => `${v}` }} />
-                        </BarChart>
-                      </ResponsiveContainer>
+              {data.demographics && (data.demographics.male !== null || data.demographics.ageGroups.length > 0) && (
+                <>
+                  {data.demographics.male !== null && data.demographics.female !== null && (
+                    <div className="mb-4">
+                      <div className="text-xs font-semibold text-slate-500 mb-1.5">Gender Split</div>
+                      <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
+                        <div className="bg-blue-400 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.demographics.male}%` }}>
+                          {data.demographics.male >= 20 ? `${data.demographics.male}%` : ""}
+                        </div>
+                        <div className="bg-pink-400 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${data.demographics.female}%` }}>
+                          {data.demographics.female >= 20 ? `${data.demographics.female}%` : ""}
+                        </div>
+                      </div>
+                      <div className="flex justify-between mt-1 text-[11px]">
+                        <span className="text-blue-500 font-semibold">Male {data.demographics.male}%</span>
+                        <span className="text-pink-500 font-semibold">Female {data.demographics.female}%</span>
+                      </div>
                     </div>
-                  );
-                })()}
+                  )}
 
-                {/* Location / Regional breakdown */}
-                {((data.demographics as DemographicsData & { locationData?: { label: string; index: number }[] }).locationData?.length ?? 0) > 0 && (() => {
-                  const locData = (data.demographics as DemographicsData & { locationData: { label: string; index: number }[] }).locationData;
-                  const maxLoc = Math.max(...locData.map((l) => l.index), 1);
-                  const locChart = locData.map((l) => ({ label: l.label, value: Math.round((l.index / maxLoc) * 100) }));
-                  return (
-                    <div className="mt-4">
-                      <div className="text-xs font-semibold text-slate-500 mb-2">Top Regions</div>
-                      <ResponsiveContainer width="100%" height={Math.max(locChart.length * 30, 100)}>
-                        <BarChart data={locChart} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
-                          <XAxis type="number" hide domain={[0, 100]} />
-                          <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} width={80} />
-                          <Tooltip formatter={(v) => [`${v} (index)`, "Regional interest"]} contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }} />
-                          <Bar dataKey="value" fill="#6366f1" radius={[0, 6, 6, 0]} maxBarSize={18} label={{ position: "right", fontSize: 10, fill: "#94a3b8", formatter: (v: unknown) => `${v}` }} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
-                <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-3">Audience Insights</div>
-                <p className="text-xs text-slate-500 mb-4 leading-5">
-                  Detailed demographic breakdown is not available from Google Trends for this keyword. Below are estimated audience signals based on industry benchmarks and keyword characteristics.
-                </p>
-                {(() => {
-                  // Derive audience signals from keyword + overview data
-                  const kw = (data.keyword ?? "").toLowerCase();
-                  const vol = data.paid?.searchVolume ?? 0;
-                  const isLocal = /near me|local|city|zip|area/.test(kw);
-                  const isTech = /software|app|tool|saas|developer|code|api|crm|seo/.test(kw);
-                  const isHealth = /health|fitness|diet|weight|workout|symptom|medical/.test(kw);
-                  const isEcomm = /buy|shop|price|review|best|cheap|discount|deal/.test(kw);
-                  const mobileEst = isLocal ? 72 : isTech ? 38 : isHealth ? 61 : isEcomm ? 55 : 51;
-                  const desktopEst = 100 - mobileEst;
-                  const ctrBenchmark = vol > 10000 ? 2.8 : vol > 1000 ? 4.2 : 6.1;
-                  const audienceType = isTech ? "Technical / Professional" : isHealth ? "Health-conscious" : isLocal ? "Local / Near Me" : isEcomm ? "Commercial / Shopper" : "General";
-                  return (
-                    <div className="space-y-4">
+                  {data.demographics.ageGroups.length > 0 && (() => {
+                    const maxIdx = Math.max(...data.demographics!.ageGroups.map((a) => a.index), 1);
+                    const ageData = data.demographics!.ageGroups.map((ag) => ({
+                      label: ag.label,
+                      value: Math.round((ag.index / maxIdx) * 100),
+                      raw: ag.index,
+                    }));
+                    return (
                       <div>
-                        <div className="text-xs font-semibold text-slate-500 mb-1.5">Estimated Device Split</div>
-                        <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
-                          <div className="bg-slate-600 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${desktopEst}%` }}>
-                            {desktopEst >= 20 ? `${desktopEst}% Desktop` : ""}
-                          </div>
-                          <div className="bg-[#f15b27] flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${mobileEst}%` }}>
-                            {mobileEst >= 20 ? `${mobileEst}% Mobile` : ""}
-                          </div>
-                        </div>
-                        <div className="flex justify-between mt-1 text-[11px]">
-                          <span className="text-slate-500 font-semibold">🖥 Desktop {desktopEst}%</span>
-                          <span className="text-[#f15b27] font-semibold">📱 Mobile {mobileEst}% est.</span>
-                        </div>
+                        <div className="text-xs font-semibold text-slate-500 mb-2">Age Groups</div>
+                        <ResponsiveContainer width="100%" height={Math.max(ageData.length * 34, 120)}>
+                          <BarChart data={ageData} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
+                            <XAxis type="number" hide domain={[0, 100]} />
+                            <YAxis type="category" dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={48} />
+                            <Tooltip formatter={(v) => [`${v} (index)`, "Relative interest"]} contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }} />
+                            <Bar dataKey="value" fill="#f15b27" radius={[0, 6, 6, 0]} maxBarSize={22} label={{ position: "right", fontSize: 11, fill: "#94a3b8", formatter: (v: unknown) => `${v}` }} />
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-                          <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Audience Type</div>
-                          <div className="text-sm font-black text-slate-800">{audienceType}</div>
-                        </div>
-                        <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
-                          <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Est. Organic CTR</div>
-                          <div className="text-sm font-black text-slate-800">{ctrBenchmark}%</div>
-                        </div>
+                    );
+                  })()}
+
+                  {((data.demographics as DemographicsData & { locationData?: { label: string; index: number }[] }).locationData?.length ?? 0) > 0 && (() => {
+                    const locData = (data.demographics as DemographicsData & { locationData: { label: string; index: number }[] }).locationData;
+                    const maxLoc = Math.max(...locData.map((l) => l.index), 1);
+                    const locChart = locData.map((l) => ({ label: l.label, value: Math.round((l.index / maxLoc) * 100) }));
+                    return (
+                      <div className="mt-4">
+                        <div className="text-xs font-semibold text-slate-500 mb-2">Top Regions</div>
+                        <ResponsiveContainer width="100%" height={Math.max(locChart.length * 30, 100)}>
+                          <BarChart data={locChart} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
+                            <XAxis type="number" hide domain={[0, 100]} />
+                            <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} width={80} />
+                            <Tooltip formatter={(v) => [`${v} (index)`, "Regional interest"]} contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }} />
+                            <Bar dataKey="value" fill="#6366f1" radius={[0, 6, 6, 0]} maxBarSize={18} label={{ position: "right", fontSize: 10, fill: "#94a3b8", formatter: (v: unknown) => `${v}` }} />
+                          </BarChart>
+                        </ResponsiveContainer>
                       </div>
-                      <p className="text-[10px] text-slate-400 italic">Estimates based on keyword type &amp; volume. Connect Google Search Console for real audience data.</p>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+                    );
+                  })()}
+                </>
+              )}
+
+              {!data.deviceSplit && (!data.demographics || (data.demographics.male === null && data.demographics.ageGroups.length === 0)) && (
+                <p className="text-xs text-slate-500 leading-5">
+                  No audience or device breakdown is available for this keyword from the connected data sources.
+                </p>
+              )}
+            </div>
           </div>
 
           {/* ── 4. KEYWORD IDEAS ── */}

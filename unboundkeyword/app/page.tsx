@@ -17,23 +17,23 @@ const TABS = [
 
 // ── Platform bar chart ────────────────────────────────────────────────────────
 const PLATFORMS = [
-  { name: "Google",       abbr: "G",  val: 13.7, color: "#EA4335", highlight: true  },
-  { name: "Instagram",    abbr: "Ig", val: 6.5,  color: "#C13584", highlight: false },
-  { name: "Baidu",        abbr: "Bd", val: 5.0,  color: "#2932E1", highlight: false },
-  { name: "Snapchat",     abbr: "Sc", val: 4.0,  color: "#FFCC00", highlight: false },
-  { name: "Amazon",       abbr: "Az", val: 3.5,  color: "#FF9900", highlight: false },
-  { name: "YouTube",      abbr: "YT", val: 3.3,  color: "#FF0000", highlight: false },
-  { name: "LinkedIn",     abbr: "Li", val: 3.2,  color: "#0A66C2", highlight: false },
-  { name: "Pinterest",    abbr: "Pi", val: 2.4,  color: "#E60023", highlight: false },
-  { name: "Google Play",  abbr: "GP", val: 2.1,  color: "#01875F", highlight: false },
-  { name: "Facebook",     abbr: "Fb", val: 1.5,  color: "#1877F2", highlight: false },
-  { name: "Yahoo",        abbr: "Ya", val: 1.1,  color: "#720E9E", highlight: false },
-  { name: "TikTok",       abbr: "Tk", val: 1.0,  color: "#555555", highlight: false },
-  { name: "ChatGPT",      abbr: "AI", val: 1.0,  color: "#10A37F", highlight: false },
-  { name: "Reddit",       abbr: "Re", val: 0.9,  color: "#FF4500", highlight: false },
-  { name: "Bing",         abbr: "Bi", val: 0.6,  color: "#008373", highlight: false },
-  { name: "X",            abbr: "X",  val: 0.5,  color: "#444444", highlight: false },
-  { name: "App Store",    abbr: "AS", val: 0.5,  color: "#0070C9", highlight: false },
+  { name: "Google",       abbr: "G",  val: 13.7, color: "#EA4335", highlight: true,  logo: "google" },
+  { name: "Instagram",    abbr: "Ig", val: 6.5,  color: "#C13584", highlight: false, logo: "instagram" },
+  { name: "Baidu",        abbr: "Bd", val: 5.0,  color: "#2932E1", highlight: false, logo: "baidu" },
+  { name: "Snapchat",     abbr: "Sc", val: 4.0,  color: "#FFCC00", highlight: false, logo: "snapchat", logoColor: "111827" },
+  { name: "Amazon",       abbr: "Az", val: 3.5,  color: "#FF9900", highlight: false, logo: "amazon" },
+  { name: "YouTube",      abbr: "YT", val: 3.3,  color: "#FF0000", highlight: false, logo: "youtube" },
+  { name: "LinkedIn",     abbr: "Li", val: 3.2,  color: "#0A66C2", highlight: false, logo: "linkedin" },
+  { name: "Pinterest",    abbr: "Pi", val: 2.4,  color: "#E60023", highlight: false, logo: "pinterest" },
+  { name: "Google Play",  abbr: "GP", val: 2.1,  color: "#01875F", highlight: false, logo: "googleplay" },
+  { name: "Facebook",     abbr: "Fb", val: 1.5,  color: "#1877F2", highlight: false, logo: "facebook" },
+  { name: "Yahoo",        abbr: "Ya", val: 1.1,  color: "#720E9E", highlight: false, logo: "yahoo" },
+  { name: "TikTok",       abbr: "Tk", val: 1.0,  color: "#111111", highlight: false, logo: "tiktok" },
+  { name: "ChatGPT",      abbr: "AI", val: 1.0,  color: "#10A37F", highlight: false, logo: "openai" },
+  { name: "Reddit",       abbr: "Re", val: 0.9,  color: "#FF4500", highlight: false, logo: "reddit" },
+  { name: "Bing",         abbr: "Bi", val: 0.6,  color: "#008373", highlight: false, logo: "bing" },
+  { name: "X",            abbr: "X",  val: 0.5,  color: "#111111", highlight: false, logo: "x" },
+  { name: "App Store",    abbr: "AS", val: 0.5,  color: "#0070C9", highlight: false, logo: "appstore" },
 ];
 
 const CHART_H   = 130;
@@ -432,7 +432,20 @@ export default function HomePage() {
                         className="w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-black text-white shrink-0"
                         style={{ background: p.color }}
                       >
-                        {p.abbr.slice(0, 1)}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={`https://cdn.simpleicons.org/${p.logo}/${p.logoColor ?? "ffffff"}`}
+                          alt={p.name}
+                          width={12}
+                          height={12}
+                          className="object-contain"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling as HTMLSpanElement | null;
+                            if (fallback) fallback.style.display = "inline";
+                          }}
+                        />
+                        <span style={{ display: "none" }}>{p.abbr.slice(0, 1)}</span>
                       </div>
                     </div>
                   ))}

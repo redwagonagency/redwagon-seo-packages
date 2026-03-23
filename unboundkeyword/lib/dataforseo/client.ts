@@ -1,4 +1,5 @@
 const DFS_BASE = "https://api.dataforseo.com/v3";
+import { getApiUsageUserId } from "@/lib/api-usage-context";
 
 type DfsRecord = Record<string, unknown>;
 
@@ -15,8 +16,9 @@ function getAuthHeaders() {
 async function logApiCall(endpoint: string, durationMs: number) {
   try {
     const { prisma } = await import("@/lib/prisma");
+    const userId = getApiUsageUserId();
     await prisma.apiQueryLog.create({
-      data: { endpoint, queryKey: endpoint, durationMs },
+      data: { endpoint, queryKey: endpoint, durationMs, userId },
     });
   } catch {
     // logging is best-effort, never block

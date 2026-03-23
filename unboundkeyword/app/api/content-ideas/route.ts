@@ -4,6 +4,9 @@
  */
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { getSelectedSiteIdForUser } from "@/lib/site-context";
+import { runWithApiUsageUserContext } from "@/lib/api-usage-context";
+import { logUserSearch } from "@/lib/search-logger";
 import {
   getKeywordIdeasLabs,
   getContentAnalysisPhraseTrendsLive,
@@ -44,6 +47,7 @@ function detectContentType(url: string | null, title: string | null): string | n
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as { id: string }).id;
 
   const body = (await req.json()) as {
     keyword?: string;
@@ -56,18 +60,23 @@ export async function POST(req: NextRequest) {
   if (!keyword?.trim()) return Response.json({ error: "keyword required" }, { status: 400 });
 
   const seed = keyword.trim();
+  const selectedSiteId = await getSelectedSiteIdForUser(userId).catch(() => null);
 
-  const [ideasResult, trendsResult, serpResult, intentResult] = await Promise.allSettled([
-    getKeywordIdeasLabs(seed, location, language, limit),
-    getContentAnalysisPhraseTrendsLive(seed),
-    getSerpLiveData(seed, location, language, 10),
-    getSearchIntent([seed], location, language),
-  ]);
+  const [ideasResult, trendsResult, serpResult] = await runWithApiUsageUserContext(userId, () =>
+    Promise.allSettled([
+      getKeywordIdeasLabs(seed, location, language, limit),
+      getContentAnalysisPhraseTrendsLive(seed),
+      getSerpLiveData(seed, location, language, 10),
+    ])
+  );
 
   const ideas = ideasResult.status === "fulfilled" ? ideasResult.value : [];
   const trendsRaw = trendsResult.status === "fulfilled" ? trendsResult.value : { items: [] };
   const serpData = serpResult.status === "fulfilled" ? serpResult.value : { organic: [], paa: [] };
-  const intentData = intentResult.status === "fulfilled" ? intentResult.value : [];
+  const topIdeaKeywords = ideas.slice(0, 50).map((idea) => idea.keyword).filter(Boolean);
+  const intentData = topIdeaKeywords.length > 0
+    ? await runWithApiUsageUserContext(userId, () => getSearchIntent(topIdeaKeywords, location, language).catch(() => []))
+    : [];
 
   // Build trend direction map from phrase trends (last 4 periods)
   const trendItems = ((trendsRaw as { items?: { date: string; impressions: number }[] }).items ?? []).slice(-8);
@@ -112,6 +121,15 @@ export async function POST(req: NextRequest) {
       contentType: detectContentType(top?.url ?? null, title),
     };
   }).sort((a, b) => b.volume - a.volume);
+
+  void logUserSearch(userId, seed, "content", {
+    results: contentIdeas.length,
+    pages: topPages.length,
+  }, {
+    siteId: selectedSiteId,
+    source: "content",
+    keywords: contentIdeas.map((item) => ({ keyword: item.keyword, volume: item.volume, cpc: item.cpc })),
+  });
 
   return Response.json({ keyword: seed, ideas: contentIdeas, topPages } satisfies ContentIdeasResponse);
 }

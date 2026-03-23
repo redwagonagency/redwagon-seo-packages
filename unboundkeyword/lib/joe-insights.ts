@@ -9,7 +9,6 @@ type JoeInsightInput = {
   domain: string;
   listCount: number;
   keywordCount: number;
-  discoveryCount: number;
   topKeyword: string | null;
   topKeywordVolume: number;
   avgKeywordCpc: number;
@@ -48,8 +47,8 @@ export function buildJoeInsight(input: JoeInsightInput): JoeInsightResult {
     action = "Go to Settings → Projects";
   } else if (!hasData && input.listCount === 0) {
     headline = `${input.domain} has no keywords tracked yet`;
-    body = `Your keyword engine is ready but has no data to work from yet. Run a discovery session for your top topic now — it takes under 90 seconds and will surface hundreds of question, comparison, and long-tail opportunities.`;
-    action = "Run first Discovery session";
+    body = "Your workspace is ready but has no tracked keywords yet. Create your first keyword list and add your core terms to unlock prioritization, CPC insights, and AI planning.";
+    action = "Create first keyword list";
   } else if (input.listCount > 0 && input.keywordCount < 20) {
     headline = `${input.keywordCount} keywords tracked — build your first real cluster`;
     body = `You have ${input.listCount} list${input.listCount > 1 ? "s" : ""} started. The sweet spot for a first content cluster is 15–30 tightly grouped keywords. Add supporting and long-tail variations around your core topic to unlock the AI Decision Report.`;

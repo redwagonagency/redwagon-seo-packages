@@ -7,6 +7,30 @@ const DASH  = <span className="text-white/25 shrink-0">–</span>;
 
 const PLANS = [
   {
+    name: "Free",
+    price: "$0",
+    tagline: "For testing and light personal use",
+    popular: false,
+    cta: "Create free account",
+    ctaHref: "/register?plan=free",
+    features: [
+      "1 user seat",
+      "1 project · 1 domain",
+      "10 keyword hunts / month",
+      "120 keyword lookups / month",
+      "2 keyword lists",
+      "200 saved keywords",
+      "CSV export",
+      "Community support",
+    ],
+    missing: [
+      "Local keyword research",
+      "Intent analysis",
+      "Google Sheets export",
+      "API access",
+    ],
+  },
+  {
     name: "Solo",
     price: "$25",
     tagline: "For bloggers, freelancers & side projects",
@@ -104,9 +128,9 @@ export default function PricingPage() {
           <span className="ubk-orange-accent">at any scale</span>
         </h1>
         <p className="text-white/60 text-xl max-w-2xl mx-auto mb-4">
-          Start from $25/mo. No hidden fees, no per-seat surprises. Cancel anytime.
+          Start free or scale from $25/mo. No hidden fees, no per-seat surprises. Cancel anytime.
         </p>
-        <p className="text-white/40 text-sm">14-day free trial on all paid plans · No credit card required</p>
+        <p className="text-white/40 text-sm">Free account available · 14-day free trial on all paid plans · No credit card required</p>
       </section>
 
       {/* Pricing Cards */}
@@ -139,7 +163,7 @@ export default function PricingPage() {
                   {plan.price}
                   <span className="text-lg text-white/55 font-normal">/month</span>
                 </div>
-                <p className="text-white/40 text-xs">Save 20% billed annually</p>
+                <p className="text-white/40 text-xs">{plan.name === "Free" ? "No credit card required" : "Save 20% billed annually"}</p>
               </div>
 
               <ul className="space-y-2.5 mb-8 flex-grow">
@@ -167,7 +191,7 @@ export default function PricingPage() {
               >
                 {plan.cta}
               </Link>
-              <p className="text-white/30 text-xs text-center mt-3">14-day free trial · No card needed</p>
+              <p className="text-white/30 text-xs text-center mt-3">{plan.name === "Free" ? "Use free forever with monthly limits" : "14-day free trial · No card needed"}</p>
             </div>
           ))}
         </div>
