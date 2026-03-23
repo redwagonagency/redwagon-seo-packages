@@ -2,7 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
-import { estimateEndpointPrice } from "@/lib/api-pricing";
+import { estimateEndpointPrice, extractDfsCostUsdFromResponse } from "@/lib/api-pricing";
 import SuperadminIndustryStatsManager from "@/components/dashboard/SuperadminIndustryStatsManager";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +11,16 @@ function fmt(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
   return String(n);
+}
+
+function parseLoggedApiCost(responseJson: string | null): number | null {
+  if (!responseJson) return null;
+  try {
+    const parsed = JSON.parse(responseJson) as unknown;
+    return extractDfsCostUsdFromResponse(parsed);
+  } catch {
+    return null;
+  }
 }
 
 export default async function SuperadminPage() {
@@ -76,7 +86,7 @@ export default async function SuperadminPage() {
     }),
     // Group by endpoint to find most-used
     prisma.apiQueryLog.groupBy({
-      by: ["endpoint"],
+      by: ["provider", "endpoint"],
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
       take: 10,
@@ -113,7 +123,7 @@ export default async function SuperadminPage() {
       take: 20,
     }).catch(() => []),
     prisma.apiQueryLog.groupBy({
-      by: ["userId", "endpoint"],
+      by: ["userId", "provider", "endpoint"],
       where: { userId: { not: null } },
       _count: { id: true },
       orderBy: { _count: { id: "desc" } },
@@ -186,14 +196,42 @@ export default async function SuperadminPage() {
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const newUsersThisMonth = users.filter((u) => u.createdAt >= thisMonthStart).length;
 
-  const endpointCostRows = topEndpoints.map((ep) => {
+  const endpointKeys = (topEndpoints as { provider: string; endpoint: string }[]).map((ep) => ep.endpoint);
+  const endpointCostLogs = endpointKeys.length > 0
+    ? await prisma.apiQueryLog.findMany({
+      where: { endpoint: { in: endpointKeys } },
+      select: { endpoint: true, responseJson: true, provider: true },
+    })
+    : [];
+
+  const endpointActualCost = new Map<string, { totalCost: number; pricedCalls: number }>();
+  for (const row of endpointCostLogs) {
+    const cost = parseLoggedApiCost(row.responseJson);
+    if (cost == null) continue;
+    const current = endpointActualCost.get(row.endpoint) ?? { totalCost: 0, pricedCalls: 0 };
+    current.totalCost += cost;
+    current.pricedCalls += 1;
+    endpointActualCost.set(row.endpoint, current);
+  }
+
+  const endpointCostRows = (topEndpoints as Array<{ provider: string; endpoint: string; _count: { id: number } }>).map((ep) => {
     const pricing = estimateEndpointPrice(ep.endpoint);
+    const actual = endpointActualCost.get(ep.endpoint);
+    const pricedCalls = actual?.pricedCalls ?? 0;
+    const unknownCalls = Math.max(ep._count.id - pricedCalls, 0);
+    const estimatedFallback = ep.provider === "dataforseo" ? unknownCalls * pricing.estimatedUsdPerCall : 0;
+    const actualCost = actual?.totalCost ?? 0;
+    const computed = actualCost + estimatedFallback;
     return {
+      provider: ep.provider,
       endpoint: ep.endpoint,
       calls: ep._count.id,
       costPerCall: pricing.estimatedUsdPerCall,
       pricingRule: pricing.matchedRule,
-      estimated: ep._count.id * pricing.estimatedUsdPerCall,
+      pricedCalls,
+      estimated: computed,
+      actualCost,
+      fallbackCost: estimatedFallback,
     };
   });
   const totalEstimatedCost = endpointCostRows.reduce((s, e) => s + e.estimated, 0);
@@ -237,13 +275,28 @@ export default async function SuperadminPage() {
     (searchByUser as { userId: string; _count: { id: number } }[]).map((row) => [row.userId, row._count.id])
   );
 
+  const userCostLogs = await prisma.apiQueryLog.findMany({
+    where: { userId: { not: null } },
+    select: { userId: true, endpoint: true, responseJson: true, provider: true },
+  }).catch(() => []);
+
+  const userActualCostMap = new Map<string, number>();
+  for (const row of userCostLogs) {
+    if (!row.userId) continue;
+    const cost = parseLoggedApiCost(row.responseJson);
+    if (cost == null) continue;
+    userActualCostMap.set(row.userId, (userActualCostMap.get(row.userId) ?? 0) + cost);
+  }
+
   const userCostMap = new Map<string, { calls: number; estimatedCost: number; topEndpoints: string[] }>();
-  for (const row of (apiByUserEndpoint as { userId: string | null; endpoint: string; _count: { id: number } }[])) {
+  for (const row of (apiByUserEndpoint as { userId: string | null; provider: string; endpoint: string; _count: { id: number } }[])) {
     if (!row.userId) continue;
     const pricing = estimateEndpointPrice(row.endpoint);
     const current = userCostMap.get(row.userId) ?? { calls: 0, estimatedCost: 0, topEndpoints: [] };
     current.calls += row._count.id;
-    current.estimatedCost += row._count.id * pricing.estimatedUsdPerCall;
+    if (row.provider === "dataforseo") {
+      current.estimatedCost += row._count.id * pricing.estimatedUsdPerCall;
+    }
     if (current.topEndpoints.length < 3 && !current.topEndpoints.includes(row.endpoint)) {
       current.topEndpoints.push(row.endpoint);
     }
@@ -253,11 +306,12 @@ export default async function SuperadminPage() {
   const perUserUsageRows = users
     .map((user) => {
       const usage = userCostMap.get(user.id) ?? { calls: 0, estimatedCost: 0, topEndpoints: [] };
+      const actualCost = userActualCostMap.get(user.id) ?? 0;
       return {
         id: user.id,
         email: user.email ?? "—",
         calls: usage.calls,
-        estimatedCost: usage.estimatedCost,
+        estimatedCost: actualCost > 0 ? actualCost : usage.estimatedCost,
         searches: searchByUserMap.get(user.id) ?? 0,
         topEndpoints: usage.topEndpoints,
       };
@@ -267,12 +321,18 @@ export default async function SuperadminPage() {
     .slice(0, 50);
 
   return (
-    <div className="p-8 space-y-6 max-w-7xl">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_15%_15%,rgba(241,91,39,0.12),transparent_35%),radial-gradient(circle_at_85%_8%,rgba(20,184,166,0.13),transparent_30%),linear-gradient(180deg,#fafaf9_0%,#f8fafc_52%,#fff7ed_100%)] p-8 space-y-6 max-w-7xl">
       {/* Header */}
-      <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-[#2a1206] p-6 shadow-2xl shadow-[#f15b27]/15">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-800/70 bg-gradient-to-br from-slate-950 via-slate-900 to-[#1b0e07] p-7 shadow-2xl shadow-[#f15b27]/20">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-[#f15b27]/20 blur-3xl" />
+        <div className="pointer-events-none absolute left-8 bottom-0 h-24 w-24 rounded-full bg-teal-400/20 blur-2xl" />
         <p className="text-xs uppercase tracking-[0.2em] text-[#f15b27] font-black">Superadmin</p>
-        <h1 className="mt-2 text-3xl font-black text-white">Data Command Center</h1>
-        <p className="mt-1 text-sm text-slate-300">Full API payload capture, user/domain storage visibility, and use-case level observability.</p>
+        <h1 className="mt-2 text-4xl font-black text-white">Operator War Room</h1>
+        <p className="mt-1 text-sm text-slate-300">Live cost telemetry, payload intelligence, and full-funnel storage observability.</p>
+        <div className="mt-5 flex flex-wrap gap-2 text-[11px]">
+          <span className="rounded-full border border-[#f15b27]/40 bg-[#f15b27]/10 px-3 py-1 text-[#ffb496]">DataForSEO Cost = parsed from response cost fields</span>
+          <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-teal-200">Fallback estimate only when response cost is missing</span>
+        </div>
       </div>
 
       {/* KPI grid */}
@@ -284,9 +344,9 @@ export default async function SuperadminPage() {
           { label: "KW Intelligence", value: fmt(kwIntelCount), sub: "stored records" },
           { label: "API Req Coverage", value: `${requestCoverage.toFixed(1)}%`, sub: `${fmt(apiLogsWithRequest)} / ${fmt(apiLogCount)}` },
           { label: "API Resp Coverage", value: `${responseCoverage.toFixed(1)}%`, sub: `${fmt(apiLogsWithResponse)} / ${fmt(apiLogCount)}`, color: responseCoverage >= 99.9 ? "text-emerald-500" : "text-amber-500" },
-          { label: "API Failures", value: fmt(apiLogsFailed), sub: `~$${totalEstimatedCost.toFixed(2)} est.`, color: apiLogsFailed > 0 ? "text-rose-500" : "text-emerald-500" },
+          { label: "API Failures", value: fmt(apiLogsFailed), sub: `$${totalEstimatedCost.toFixed(2)} modeled`, color: apiLogsFailed > 0 ? "text-rose-500" : "text-emerald-500" },
         ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60">
+          <div key={card.label} className="rounded-2xl border border-slate-200/80 bg-white/85 backdrop-blur p-4 shadow-sm shadow-slate-200/60">
             <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
             <p className="mt-1 text-3xl font-black text-slate-900">{card.value}</p>
             {card.sub && <p className={`text-[11px] mt-1 ${card.color ?? "text-slate-400"}`}>{card.sub}</p>}
@@ -313,7 +373,7 @@ export default async function SuperadminPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Users table */}
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">All Users ({userCount})</h2>
           </div>
@@ -343,7 +403,7 @@ export default async function SuperadminPage() {
         </section>
 
         {/* Projects table */}
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">All Projects ({projectCount})</h2>
           </div>
@@ -396,7 +456,7 @@ export default async function SuperadminPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Domain Storage Coverage</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">Per domain records across keyword and discovery stores.</p>
@@ -425,7 +485,7 @@ export default async function SuperadminPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">API Use Case Capture</h2>
             <p className="text-[11px] text-slate-400 mt-0.5">Every provider call grouped by use case, with success/failure visibility.</p>
@@ -457,7 +517,7 @@ export default async function SuperadminPage() {
 
       {/* Top searched keywords */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top Searched Keywords</h2>
           </div>
@@ -522,7 +582,7 @@ export default async function SuperadminPage() {
       </div>
 
       {/* Keyword Intelligence stored results */}
-      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Keyword Intelligence — Stored Results ({fmt(kwIntelCount)})</h2>
           <p className="text-[11px] text-slate-400 mt-0.5">Full API output saved per user per keyword lookup</p>
@@ -571,10 +631,10 @@ export default async function SuperadminPage() {
       {/* API Usage */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top endpoints with cost */}
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top API Endpoints</h2>
-            <span className="text-xs font-black text-amber-600 bg-amber-50 rounded-lg px-2 py-1">~${totalEstimatedCost.toFixed(2)} total est.</span>
+            <span className="text-xs font-black text-amber-600 bg-amber-50 rounded-lg px-2 py-1">${totalEstimatedCost.toFixed(2)} modeled total</span>
           </div>
           {topEndpoints.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-slate-400">
@@ -585,19 +645,25 @@ export default async function SuperadminPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
                   <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Provider</th>
                     <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Calls</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">$/Call</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Est. Cost</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Priced Calls</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Actual Cost</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Fallback</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Modeled</th>
                   </tr>
                 </thead>
                 <tbody>
                   {endpointCostRows.map((r) => (
-                    <tr key={r.endpoint} className="border-b border-slate-50 hover:bg-slate-50">
+                    <tr key={`${r.provider}-${r.endpoint}`} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-[10px] uppercase font-black text-slate-500">{r.provider}</td>
                       <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all">{r.endpoint}</td>
                       <td className="px-4 py-2.5 text-right text-xs font-black text-[#f15b27] tabular-nums">{r.calls}</td>
-                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">${r.costPerCall.toFixed(4)}</td>
-                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-amber-700">${r.estimated.toFixed(3)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">{r.pricedCalls}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-emerald-700">${r.actualCost.toFixed(3)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">${r.fallbackCost.toFixed(3)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-amber-700 font-black">${r.estimated.toFixed(3)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -607,7 +673,7 @@ export default async function SuperadminPage() {
         </section>
 
         {/* Recent API log */}
-        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Recent API Calls</h2>
           </div>
@@ -621,6 +687,7 @@ export default async function SuperadminPage() {
                 <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
                   <tr>
                     <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Cost</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">ms</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">When</th>
                   </tr>
@@ -629,6 +696,7 @@ export default async function SuperadminPage() {
                   {recentApiLogs.map((log) => (
                     <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all max-w-[260px]">{log.endpoint}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-emerald-700">${parseLoggedApiCost((log as { responseJson?: string | null }).responseJson ?? null)?.toFixed(4) ?? "—"}</td>
                       <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">{log.durationMs ?? "—"}</td>
                       <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(log.createdAt).toLocaleString()}</td>
                     </tr>
@@ -640,7 +708,7 @@ export default async function SuperadminPage() {
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">API Payload Inspector</h2>
           <p className="text-[11px] text-slate-400 mt-0.5">Stored request/response payload previews by user, domain, provider, and use case.</p>
@@ -704,7 +772,7 @@ export default async function SuperadminPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Per-User API Usage &amp; Cost</h2>
           <p className="text-[11px] text-slate-400 mt-0.5">Estimated spend and endpoint usage distribution by user account.</p>
@@ -741,7 +809,7 @@ export default async function SuperadminPage() {
 
       {/* Site management + Industry Stats */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-6">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4">Platform Links</h2>
           <div className="space-y-2 text-sm">
             {[
@@ -760,7 +828,7 @@ export default async function SuperadminPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-6">
           <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4">Industry Stats ({statCount})</h2>
           <SuperadminIndustryStatsManager initialStats={stats} />
         </section>

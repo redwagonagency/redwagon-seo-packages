@@ -4,6 +4,8 @@ export type EndpointPrice = {
   matchedRule: string;
 };
 
+type JsonRecord = Record<string, unknown>;
+
 const PRICING_RULES: Array<{ pattern: RegExp; usd: number; rule: string }> = [
   { pattern: /\/serp\/google\/organic\/live\/advanced/i, usd: 0.0025, rule: "SERP Google Organic Live" },
   { pattern: /\/serp\/google\/autocomplete\/live\/advanced/i, usd: 0.0005, rule: "SERP Google Autocomplete" },
@@ -35,4 +37,37 @@ export function estimateEndpointPrice(endpoint: string): EndpointPrice {
     return { endpoint, estimatedUsdPerCall: 0.001, matchedRule: "Default estimate" };
   }
   return { endpoint, estimatedUsdPerCall: match.usd, matchedRule: match.rule };
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+/**
+ * DataForSEO responses include cost fields at top-level and task-level.
+ * This parser prefers task-level sum, then top-level cost if task-level is unavailable.
+ */
+export function extractDfsCostUsdFromResponse(response: unknown): number | null {
+  if (!response || typeof response !== "object") return null;
+  const root = response as JsonRecord;
+
+  const tasks = Array.isArray(root.tasks) ? (root.tasks as JsonRecord[]) : [];
+  let taskCostSum = 0;
+  let taskCostCount = 0;
+  for (const task of tasks) {
+    const taskCost = asNumber(task.cost);
+    if (taskCost !== null) {
+      taskCostSum += taskCost;
+      taskCostCount += 1;
+    }
+  }
+  if (taskCostCount > 0) return taskCostSum;
+
+  const rootCost = asNumber(root.cost);
+  return rootCost;
 }
