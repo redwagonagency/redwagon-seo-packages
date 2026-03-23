@@ -2203,6 +2203,39 @@ export interface KeywordIdeaItem {
   intent: "commercial" | "transactional" | "informational" | "navigational" | null;
 }
 
+export interface KeywordIdeaGenericItem {
+  keyword: string;
+  searchVolume: number;
+  cpc: number | null;
+  difficulty: number | null;
+  intent: string | null;
+}
+
+/** Generic (engine-agnostic) keyword ideas using DataForSEO Labs proprietary dataset */
+export async function getKeywordIdeasGeneric(
+  seed: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+): Promise<KeywordIdeaGenericItem[]> {
+  const data = await dfsPost("/dataforseo_labs/keyword_ideas/live", [
+    { keyword: seed, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const ki = (i.keyword_info ?? {}) as Record<string, unknown>;
+    const kp = (i.keyword_properties ?? {}) as Record<string, unknown>;
+    const si = (i.search_intent_info ?? {}) as Record<string, unknown>;
+    return {
+      keyword: String(i.keyword ?? ""),
+      searchVolume: typeof ki.search_volume === "number" ? ki.search_volume : 0,
+      cpc: typeof ki.cpc === "number" ? Math.round(ki.cpc * 100) / 100 : null,
+      difficulty: typeof kp.keyword_difficulty === "number" ? kp.keyword_difficulty : null,
+      intent: String(si.main_intent ?? "") || null,
+    };
+  });
+}
+
 export async function getKeywordIdeasLabs(
   seed: string,
   locationCode = 2840,
