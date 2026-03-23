@@ -67,6 +67,116 @@ const QUESTION_PREFIXES = [
   "who is", "who are", "who can", "who does", "who makes", "who uses",
 ];
 
+/**
+ * Build grammatically correct, seed-applied question templates.
+ * Each template places the keyword in the semantically correct position,
+ * matching the AnswerThePublic style of "how to {seed}", "what is {seed}", etc.
+ */
+function buildIntelligentQuestions(seed: string): string[] {
+  const s = seed.trim();
+  return [
+    // ── HOW ────────────────────────────────────
+    `how to ${s}`,
+    `how to do ${s}`,
+    `how to use ${s}`,
+    `how to start ${s}`,
+    `how to learn ${s}`,
+    `how to improve ${s}`,
+    `how to get ${s}`,
+    `how to build ${s}`,
+    `how to run ${s}`,
+    `how to find ${s}`,
+    `how to choose the best ${s}`,
+    `how to hire a ${s} expert`,
+    `how does ${s} work`,
+    `how much does ${s} cost`,
+    `how long does ${s} take`,
+    `how many ${s} are there`,
+    `how difficult is ${s}`,
+    `how effective is ${s}`,
+    // ── WHAT ───────────────────────────────────
+    `what is ${s}`,
+    `what is ${s} used for`,
+    `what is the best ${s}`,
+    `what is a good ${s}`,
+    `what is the difference between ${s}`,
+    `what is a ${s} strategy`,
+    `what are ${s}`,
+    `what are the benefits of ${s}`,
+    `what are the types of ${s}`,
+    `what are ${s} best practices`,
+    `what are the best ${s} tools`,
+    `what does ${s} mean`,
+    `what does ${s} do`,
+    `what does ${s} include`,
+    `what causes ${s}`,
+    `what makes a good ${s}`,
+    `what are ${s} examples`,
+    `what should I know about ${s}`,
+    // ── WHY ────────────────────────────────────
+    `why is ${s} important`,
+    `why use ${s}`,
+    `why does ${s} matter`,
+    `why is ${s} worth it`,
+    `why ${s} fails`,
+    `why learn ${s}`,
+    `why does ${s} work`,
+    `why is ${s} so popular`,
+    `why is ${s} hard`,
+    `why should I invest in ${s}`,
+    `why choose ${s}`,
+    // ── WHERE ──────────────────────────────────
+    `where to learn ${s}`,
+    `where to find ${s}`,
+    `where is ${s} used`,
+    `where to start with ${s}`,
+    `where to get ${s} help`,
+    `where to hire ${s} experts`,
+    `where does ${s} work best`,
+    `where can I practice ${s}`,
+    `where to buy ${s} services`,
+    // ── WHEN ───────────────────────────────────
+    `when to use ${s}`,
+    `when does ${s} work`,
+    `when to start ${s}`,
+    `when is ${s} needed`,
+    `when should I invest in ${s}`,
+    `when is ${s} not recommended`,
+    `when does ${s} take effect`,
+    `when to hire a ${s} professional`,
+    // ── WHO ────────────────────────────────────
+    `who uses ${s}`,
+    `who needs ${s}`,
+    `who should use ${s}`,
+    `who is ${s} for`,
+    `who can help with ${s}`,
+    `who is the best ${s} provider`,
+    `who created ${s}`,
+    `who benefits from ${s}`,
+    `who offers ${s} services`,
+    // ── WHICH ──────────────────────────────────
+    `which ${s} is best`,
+    `which ${s} tool is better`,
+    `which ${s} has the best results`,
+    `which is the most effective ${s}`,
+    // ── MODALS & AUXILIARIES ───────────────────
+    `can ${s} help my business`,
+    `can ${s} be automated`,
+    `can you do ${s} yourself`,
+    `can ${s} replace`,
+    `is ${s} worth it`,
+    `is ${s} hard to learn`,
+    `is ${s} free`,
+    `is ${s} legit`,
+    `does ${s} really work`,
+    `does ${s} help with seo`,
+    `are ${s} services worth it`,
+    `should I use ${s}`,
+    `should I hire a ${s} expert`,
+    `will ${s} work for small business`,
+  ];
+}
+
 const PREPOSITIONS = [
   // Core prepositions
   "for", "with", "without", "near", "to", "into", "onto", "from",
@@ -165,7 +275,8 @@ function normalizeDiscoveryKeywords(items: DiscoveryKeyword[], excludedTerms: st
 }
 
 function buildForcedCandidates(seed: string, extraLocationHints: string[], includeJobs: boolean): string[] {
-  const forcedQuestions = QUESTION_PREFIXES.map((prefix) => `${prefix} ${seed}`);
+  // Use intelligent question templates that place the seed in grammatically correct positions
+  const forcedQuestions = buildIntelligentQuestions(seed);
   const forcedPrepositions = PREPOSITIONS.map((prep) => `${seed} ${prep}`);
   const forcedComparisons = COMPARISON_TERMS.map((term) => `${seed} ${term}`);
   const forcedAlphabetical = ALPHABET.map((letter) => `${seed} ${letter}`).concat(

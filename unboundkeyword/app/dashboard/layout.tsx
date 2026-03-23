@@ -10,6 +10,7 @@ import SiteSwitcher from "@/components/dashboard/SiteSwitcher";
 import ProjectRequiredGate from "@/components/dashboard/ProjectRequiredGate";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
 import JoeInsights from "@/components/dashboard/JoeInsights";
+import PlanUpgradeBanner from "@/components/dashboard/PlanUpgradeBanner";
 
 const NAV_GROUPS = [
   {
@@ -101,6 +102,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
   const userEmail = session?.user?.email ?? "";
+  const userPlan = ((session?.user as { plan?: string })?.plan ?? "free").toLowerCase();
+  const planLabel = { free: "Free", solo: "Solo", growth: "Growth", agency: "Agency" }[userPlan] ?? "Free";
   const canAccessSuperadmin = isJoeSuperAdmin(userEmail);
   const [projectCheckLoading, setProjectCheckLoading] = useState(true);
   const [hasProject, setHasProject] = useState(false);
@@ -227,7 +230,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff3ee] px-3 py-1 text-[11px] font-semibold text-[#f15b27]">
               <span className="w-1.5 h-1.5 rounded-full bg-[#f15b27] animate-pulse" />
-              Pro
+              {planLabel}
             </span>
           </div>
         </header>
@@ -241,6 +244,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               window.location.reload();
             }}
           />
+          {hasProject ? (
+            <div className="px-8 pt-4">
+              <PlanUpgradeBanner />
+            </div>
+          ) : null}
           {hasProject ? children : null}
           {hasProject ? <JoeInsights /> : null}
         </div>

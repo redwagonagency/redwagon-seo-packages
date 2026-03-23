@@ -835,6 +835,57 @@ export default async function SuperadminPage() {
         </section>
       </div>
 
+      {/* Platform Coverage */}
+      <section className="rounded-2xl border border-slate-200 bg-white/90 backdrop-blur p-6">
+        <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-1">Platform Coverage</h2>
+        <p className="text-xs text-slate-500 mb-5">Platforms we advertise vs. platforms with live API data connections. Items marked &quot;No Connection&quot; need integrations built.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { name: "Google",       status: "connected",    note: "DataForSEO — full keyword + autocomplete coverage",   logo: "#EA4335" },
+            { name: "YouTube",      status: "connected",    note: "DataForSEO YouTube autocomplete + keyword ideas",      logo: "#FF0000" },
+            { name: "Amazon",       status: "connected",    note: "DataForSEO Amazon autocomplete + keyword suggestions", logo: "#FF9900" },
+            { name: "Bing",         status: "connected",    note: "DataForSEO Bing autocomplete + keyword volume",        logo: "#008373" },
+            { name: "ChatGPT",      status: "partial",      note: "OpenAI prompt-based only — no keyword volume API",     logo: "#10A37F" },
+            { name: "Instagram",    status: "none",         note: "No public keyword/search API. Scraping required.",     logo: "#C13584" },
+            { name: "Baidu",        status: "none",         note: "DataForSEO has Baidu module — needs activation",       logo: "#2932E1" },
+            { name: "Snapchat",     status: "none",         note: "No advertiser keyword API. Use Meta Ads proxy.",       logo: "#FFCC00", logoText: "#111" },
+            { name: "LinkedIn",     status: "none",         note: "LinkedIn Marketing API — requires partner approval",   logo: "#0A66C2" },
+            { name: "Pinterest",    status: "none",         note: "Pinterest Ads API — keyword data accessible",          logo: "#E60023" },
+            { name: "Google Play",  status: "none",         note: "AppFollow / AppTweak APIs for ASO keywords",           logo: "#01875F" },
+            { name: "Facebook",     status: "none",         note: "Meta Marketing API — audience keyword insights",       logo: "#1877F2" },
+            { name: "Yahoo",        status: "none",         note: "DataForSEO Yahoo module — needs activation",           logo: "#720E9E" },
+            { name: "TikTok",       status: "none",         note: "TikTok Keyword Insights API — available in ads panel", logo: "#111111", logoText: "#fff" },
+            { name: "Reddit",       status: "none",         note: "Reddit Keyword Research API — available via PRAW",     logo: "#FF4500" },
+            { name: "X (Twitter)",  status: "none",         note: "X API v2 — Basic tier has trending/keyword access",    logo: "#111111", logoText: "#fff" },
+            { name: "App Store",    status: "none",         note: "AppFollow / Sensor Tower APIs for ASO keywords",       logo: "#0070C9" },
+          ].map((p) => (
+            <div key={p.name} className={`flex items-start gap-3 rounded-xl border p-3 ${
+              p.status === "connected" ? "border-emerald-200 bg-emerald-50/60" :
+              p.status === "partial"   ? "border-amber-200 bg-amber-50/60" :
+                                         "border-rose-200 bg-rose-50/40"
+            }`}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black mt-0.5"
+                   style={{ background: p.logo, color: p.logoText ?? "#fff" }}>
+                {p.name.slice(0, 1)}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-800">{p.name}</span>
+                  <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                    p.status === "connected" ? "bg-emerald-100 text-emerald-700" :
+                    p.status === "partial"   ? "bg-amber-100 text-amber-700" :
+                                               "bg-rose-100 text-rose-700"
+                  }`}>
+                    {p.status === "connected" ? "✓ Live" : p.status === "partial" ? "~ Partial" : "✗ No Connection"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{p.note}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* AI Monitor */}
       <AiMonitorPanel />
     </div>

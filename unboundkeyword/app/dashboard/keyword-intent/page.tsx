@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
+import PlanGate from "@/components/dashboard/PlanGate";
 
 type IntentType = "informational" | "transactional" | "navigational" | "commercial";
 
@@ -47,7 +48,7 @@ function coerceIntent(raw: string | null | undefined): IntentType {
   return "informational";
 }
 
-export default function KeywordIntentPage() {
+function KeywordIntentInner() {
   const [query, setQuery] = useState("digital marketing");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -258,5 +259,13 @@ export default function KeywordIntentPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function KeywordIntentPage() {
+  return (
+    <PlanGate requiredPlan="growth" feature="Keyword Intent Analysis">
+      <KeywordIntentInner />
+    </PlanGate>
   );
 }

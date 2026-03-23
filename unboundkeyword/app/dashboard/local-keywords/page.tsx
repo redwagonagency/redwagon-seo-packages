@@ -5,6 +5,7 @@ import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 import { US_STATES, US_DMAS } from "@/lib/data/usa-geo";
 import type { LocalKeywordRow, LocalKeywordsResponse } from "@/app/api/local-keywords/route";
+import PlanGate from "@/components/dashboard/PlanGate";
 
 function diffColor(v: number | null) {
   if (v === null) return "bg-slate-100 text-slate-500";
@@ -13,7 +14,7 @@ function diffColor(v: number | null) {
   return "bg-emerald-100 text-emerald-700";
 }
 
-export default function LocalKeywordsPage() {
+function LocalKeywordsInner() {
   const [keyword, setKeyword] = useState("");
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
   const [selectedDmas, setSelectedDmas] = useState<string[]>([]);
@@ -229,5 +230,13 @@ export default function LocalKeywordsPage() {
         <SaveToListModal keywords={saveItems} onClose={() => setShowSave(false)} onSaved={() => { setShowSave(false); setSelected(new Set()); }} />
       )}
     </div>
+  );
+}
+
+export default function LocalKeywordsPageWithGate() {
+  return (
+    <PlanGate requiredPlan="growth" feature="Local Keyword Research">
+      <LocalKeywordsInner />
+    </PlanGate>
   );
 }

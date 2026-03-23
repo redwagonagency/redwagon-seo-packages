@@ -42,14 +42,14 @@ const GRID_VALS = [16, 12, 8, 4] as const;
 
 // ── Spoke wheel sections ──────────────────────────────────────────────────────
 const SPOKE_SECTIONS = [
-  { label: "who",   angle: -90,  color: "#f97316", kws: ["who does seo",    "who needs seo",    "who created seo"   ] },
-  { label: "what",  angle: -45,  color: "#a855f7", kws: ["what is seo",     "what does seo do", "what are keywords" ] },
-  { label: "where", angle:   0,  color: "#ec4899", kws: ["where to learn",  "where to rank",    "where seo helps"   ] },
-  { label: "when",  angle:  45,  color: "#f59e0b", kws: ["when to start",   "when seo works",   "when to hire seo"  ] },
-  { label: "why",   angle:  90,  color: "#10b981", kws: ["why seo matters", "why seo fails",    "why seo is slow"   ] },
-  { label: "how",   angle: 135,  color: "#06b6d4", kws: ["how to do seo",   "how seo works",    "how much seo costs"] },
-  { label: "which", angle: 180,  color: "#8b5cf6", kws: ["which seo tool",  "which seo course", "which seo plugin"  ] },
-  { label: "are",   angle: -135, color: "#f43f5e", kws: ["are tools worth", "are audits needed","are backlinks key" ] },
+  { label: "who",   angle: -90,  color: "#f97316", kws: ["who needs seo",      "who should use seo",   "who is seo for"        ] },
+  { label: "what",  angle: -45,  color: "#a855f7", kws: ["what is seo",        "what does seo do",     "what are seo benefits" ] },
+  { label: "where", angle:   0,  color: "#ec4899", kws: ["where to learn seo", "where is seo used",    "where to get seo help" ] },
+  { label: "when",  angle:  45,  color: "#f59e0b", kws: ["when to start seo",  "when does seo work",   "when is seo needed"    ] },
+  { label: "why",   angle:  90,  color: "#10b981", kws: ["why is seo important","why seo matters",     "why seo fails"         ] },
+  { label: "how",   angle: 135,  color: "#06b6d4", kws: ["how to do seo",      "how does seo work",    "how much does seo cost"] },
+  { label: "which", angle: 180,  color: "#8b5cf6", kws: ["which seo tool",     "which seo course",     "which seo is most effective"] },
+  { label: "are",   angle: -135, color: "#f43f5e", kws: ["are seo tools worth it","are backlinks needed","are seo audits worth it"] },
 ];
 
 // ── Autosuggest preview ───────────────────────────────────────────────────────
@@ -399,13 +399,7 @@ export default function HomePage() {
                       return (
                         <div key={p.name} className="relative flex-1 flex flex-col items-center justify-end group" title={`${p.name}: ${p.val}B`}>
                           <div
-                            className="absolute text-[8px] font-bold text-white rounded px-[3px] leading-tight tabular-nums opacity-0 group-hover:opacity-100 transition"
-                            style={{ bottom: barH + 4, background: "#0b0b18", border: "1px solid rgba(255,255,255,0.15)" }}
-                          >
-                            {p.val}
-                          </div>
-                          <div
-                            className="absolute text-[8px] font-bold text-white rounded px-[3px] leading-tight tabular-nums group-hover:opacity-0 transition"
+                            className="absolute text-[8px] font-bold text-white rounded px-[3px] leading-tight tabular-nums"
                             style={{ bottom: barH + 4, background: "#0b0b18", border: "1px solid rgba(255,255,255,0.15)" }}
                           >
                             {p.val}
@@ -500,7 +494,9 @@ export default function HomePage() {
           </div>
           <div className="ubk-vis-strip rounded-3xl p-4 md:p-6">
             <SpokeWheel keyword="keyword" />
-            <p className="text-center text-white/50 text-xs mt-1">Questions · Prepositions · Comparisons · A–Z</p>
+            <p className="text-center text-white text-xs mt-1 font-semibold tracking-wide">
+              Questions · Prepositions · Comparisons · A–Z · People Also Ask · Related Terms · Competitor Terms
+            </p>
           </div>
           </div>
         </div>

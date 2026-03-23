@@ -6,13 +6,13 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-white/[0.07] bg-slate-950/70 py-14">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-8 mb-12">
+        <div className="grid grid-cols-2 md:grid-cols-8 gap-8 mb-12">
           {/* Brand */}
-          <div className="col-span-2 md:col-span-1">
+          <div className="col-span-2 md:col-span-2">
             <h3 className="text-lg font-black tracking-tight ubk-logo mb-4">
               Unbound<span className="text-white/50">Keyword</span>
             </h3>
-            <p className="text-white/50 text-sm">
+            <p className="text-white/50 text-sm leading-relaxed">
               Cut through the noise and find the keywords that drive revenue.
             </p>
           </div>
