@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import SiteSwitcher from "@/components/dashboard/SiteSwitcher";
 import ProjectRequiredGate from "@/components/dashboard/ProjectRequiredGate";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
-import JoeInsights from "@/components/dashboard/JoeInsights";
 import PlanUpgradeBanner from "@/components/dashboard/PlanUpgradeBanner";
+import PageInsightCard from "@/components/dashboard/PageInsightCard";
 
 const NAV_GROUPS = [
   {
@@ -247,10 +247,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {hasProject ? (
             <div className="px-8 pt-4">
               <PlanUpgradeBanner />
+              <PageInsightCard />
             </div>
           ) : null}
           {hasProject ? children : null}
-          {hasProject ? <JoeInsights /> : null}
         </div>
       </main>
     </div>
