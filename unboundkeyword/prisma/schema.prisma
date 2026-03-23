@@ -29,6 +29,7 @@ model User {
   preferences UserPreference?
   decisionRuns DecisionRun[]
   dailyIntelDigests DailyIntelDigest[]
+  keywordIntelligence KeywordIntelligence[]
 }
 
 model SiteProject {
@@ -283,4 +284,39 @@ model IndustryStat {
 
   @@unique([industry, metricKey])
   @@index([industry])
+}
+
+model KeywordIntelligence {
+  id               String   @id @default(cuid())
+  keyword          String
+  locationCode     Int      @default(2840)
+  languageCode     String   @default("en")
+  searchVolume     Int?
+  cpc              Float?
+  competition      Float?
+  competitionLevel String?
+  difficulty       Int?
+  // Click distribution (SERP-signal-based model)
+  organicClickPct  Int?
+  paidClickPct     Int?
+  aiOverviewPct    Int?
+  featuredSnippetPct Int?
+  noClickPct       Int?
+  // SERP features present at analysis time
+  hasAiOverview    Boolean  @default(false)
+  hasFeaturedSnippet Boolean @default(false)
+  hasLocalPack     Boolean  @default(false)
+  topAdCount       Int      @default(0)
+  hasShopping      Boolean  @default(false)
+  // Intelligence metadata
+  analyzedCount    Int      @default(1)
+  firstAnalyzed    DateTime @default(now())
+  lastAnalyzed     DateTime @default(now()) @updatedAt
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, keyword, locationCode, languageCode])
+  @@index([userId])
+  @@index([keyword])
+  @@index([userId, lastAnalyzed])
 }

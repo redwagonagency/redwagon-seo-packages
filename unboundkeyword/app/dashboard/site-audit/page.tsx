@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import type { LighthouseLiveResult } from "@/lib/dataforseo/client";
 
 function ScoreDial({ label, value }: { label: string; value: number | null }) {
@@ -29,27 +28,42 @@ const IMPACT_COLOR: Record<string, string> = {
 };
 
 export default function SiteAuditPage() {
-  const [url, setUrl] = useState("");
+  const [projectDomain, setProjectDomain] = useState<string | null>(null);
   const [mobile, setMobile] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<LighthouseLiveResult | null>(null);
   const [error, setError] = useState("");
+  const [hasProject, setHasProject] = useState<boolean | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim()) return;
+  useEffect(() => {
+    fetch("/api/sites", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { sites: { id: string; domain: string }[]; selectedSiteId: string | null }) => {
+        const selected = json.sites.find((s) => s.id === json.selectedSiteId);
+        if (selected) {
+          setProjectDomain(selected.domain);
+          setHasProject(true);
+        } else {
+          setHasProject(false);
+        }
+      })
+      .catch(() => setHasProject(false));
+  }, []);
+
+  async function runAudit() {
+    if (!projectDomain) return;
     setLoading(true);
     setError("");
     setData(null);
     try {
-      const cleanUrl = url.trim().startsWith("http") ? url.trim() : `https://${url.trim()}`;
+      const cleanUrl = projectDomain.startsWith("http") ? projectDomain : `https://${projectDomain}`;
       const res = await fetch("/api/site-audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: cleanUrl, forMobile: mobile }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Audit failed");
+      if (!res.ok) throw new Error((json as { error?: string }).error || "Audit failed");
       setData(json as LighthouseLiveResult);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Audit failed");
@@ -75,40 +89,48 @@ export default function SiteAuditPage() {
   return (
     <div className="p-8 max-w-4xl">
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 mb-6">
-        <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black mb-1">
-          Site Audit
-        </div>
-        <h1 className="text-3xl font-black text-slate-900">Lighthouse Audit</h1>
+        <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black mb-1">Site Audit</div>
+        <h1 className="text-3xl font-black text-slate-900">Site Audit</h1>
         <p className="text-sm text-slate-600 mt-1">
-          Run a free live Lighthouse audit — performance, accessibility, best practices, and SEO scores.
+          Performance, accessibility, best practices and SEO scores for your active project domain.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-200 bg-white px-6 py-5 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
-          <Input
-            label="Website URL or domain"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="example.com or https://example.com/page"
-            className="flex-1"
-            required
-          />
-          <label className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap pb-2">
-            <input
-              type="checkbox"
-              checked={mobile}
-              onChange={(e) => setMobile(e.target.checked)}
-              className="rounded border-slate-300"
-            />
-            Mobile
-          </label>
-          <Button type="submit" disabled={loading || !url.trim()}>
-            {loading ? "Auditing…" : "Run Audit"}
-          </Button>
+      {hasProject === null && (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 flex items-center justify-center text-slate-400 text-sm">
+          Loading project…
         </div>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      </form>
+      )}
+
+      {hasProject === false && (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center">
+          <p className="text-slate-600 text-sm mb-3">No project domain selected.</p>
+          <p className="text-slate-400 text-xs">Add a domain in the site switcher at the top of the sidebar, then return here to run your audit.</p>
+        </div>
+      )}
+
+      {hasProject === true && projectDomain && (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <div className="flex-1">
+              <div className="text-xs uppercase tracking-[0.12em] font-black text-slate-400 mb-0.5">Active Project</div>
+              <div className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`https://www.google.com/s2/favicons?domain=${projectDomain}&sz=20`} alt="" width={20} height={20} className="rounded-sm" />
+                <span className="text-lg font-black text-slate-900">{projectDomain}</span>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 whitespace-nowrap">
+              <input type="checkbox" checked={mobile} onChange={(e) => setMobile(e.target.checked)} className="rounded border-slate-300" />
+              Mobile audit
+            </label>
+            <Button onClick={runAudit} disabled={loading}>
+              {loading ? "Auditing…" : data ? "Re-run Audit" : "Run Site Audit"}
+            </Button>
+          </div>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </div>
+      )}
 
       {loading && (
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-14 flex flex-col items-center gap-3 text-slate-400">
@@ -116,8 +138,8 @@ export default function SiteAuditPage() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
           </svg>
-          <p>Running Lighthouse audit…</p>
-          <p className="text-xs text-slate-300">This typically takes 15–30 seconds</p>
+          <p className="font-semibold">Running site audit…</p>
+          <p className="text-xs text-slate-300">Typically takes 15–30 seconds</p>
         </div>
       )}
 
@@ -128,47 +150,33 @@ export default function SiteAuditPage() {
               <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
               <path d="M10.172 13.828a4 4 0 015.656 0l4 4a4 4 0 01-5.656 5.656l-1.102-1.101" />
             </svg>
-            <a href={data.url} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-700 hover:text-[#f15b27] truncate">
-              {data.url}
-            </a>
+            <a href={data.url} target="_blank" rel="noopener noreferrer" className="text-sm text-slate-700 hover:text-[#f15b27] truncate">{data.url}</a>
             {overallScore !== null && (
-              <span className={`ml-auto text-xs font-black px-2.5 py-1 rounded-full ${
-                overallScore >= 90 ? "bg-green-100 text-green-700" :
-                overallScore >= 50 ? "bg-amber-100 text-amber-700" :
-                "bg-red-100 text-red-700"
-              }`}>
+              <span className={`ml-auto text-xs font-black px-2.5 py-1 rounded-full ${overallScore >= 90 ? "bg-green-100 text-green-700" : overallScore >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"}`}>
                 Overall {overallScore}
               </span>
             )}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 px-6 py-8 border-b border-slate-100">
-            {scores.map((s) => (
-              <ScoreDial key={s.label} label={s.label} value={s.value} />
-            ))}
+            {scores.map((s) => <ScoreDial key={s.label} label={s.label} value={s.value} />)}
           </div>
 
           {data.failedAudits.length > 0 ? (
             <div className="px-6 py-5">
-              <h2 className="text-sm font-black uppercase tracking-[0.14em] text-slate-400 mb-4">
-                Top Issues to Fix
-              </h2>
+              <h2 className="text-sm font-black uppercase tracking-[0.14em] text-slate-400 mb-4">Top Issues to Fix</h2>
               <div className="space-y-2">
                 {data.failedAudits.map((audit) => (
                   <div key={audit.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${IMPACT_COLOR[audit.impact] ?? "bg-slate-300"}`} />
                     <span className="flex-1 text-sm text-slate-800">{audit.title}</span>
-                    <span className={`text-xs font-black tabular-nums ${audit.score < 50 ? "text-red-600" : "text-amber-500"}`}>
-                      {audit.score}
-                    </span>
+                    <span className={`text-xs font-black tabular-nums ${audit.score < 50 ? "text-red-600" : "text-amber-500"}`}>{audit.score}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="px-6 py-8 text-center text-slate-400 text-sm">
-              ✓ No significant issues found — great job!
-            </div>
+            <div className="px-6 py-8 text-center text-slate-400 text-sm">✓ No significant issues found — great job!</div>
           )}
         </div>
       )}

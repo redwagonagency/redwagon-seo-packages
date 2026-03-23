@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, Cell,
@@ -11,7 +11,6 @@ import type {
   SerpOrganicResult,
   AutocompleteLetterGroup,
   AiKeywordVolumeItem,
-  LighthouseLiveResult,
   LlmMentionLiveItem,
   PeopleAlsoAskItem,
   MonthlyVolumeItem,
@@ -23,6 +22,8 @@ import type {
   DemographicsData,
   RelatedKwItem,
   ClickDistribution,
+  LocalPackResult,
+  SerpAdResult,
 } from "@/app/api/keyword-overview/route";
 
 // Re-export SerpFeaturesResult shape locally to avoid server import
@@ -48,7 +49,6 @@ interface OverviewData {
   monthlyVolumes: MonthlyVolumeItem[];
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
-  lighthouse: LighthouseLiveResult | null;
   paid: PaidSearchData | null;
   demographics: DemographicsData | null;
   relatedKeywords?: RelatedKwItem[];
@@ -58,26 +58,14 @@ interface OverviewData {
   keywordDifficulty?: number | null;
   serpFeatures?: SerpFeaturesResult | null;
   clickDistribution?: ClickDistribution;
+  ads?: SerpAdResult[];
+  localPack?: LocalPackResult[];
   errors: Record<string, string>;
 }
 
-type IdeasTab = "suggestions" | "related" | "questions" | "prepositions" | "comparisons" | "citations" | "ai" | "llm";
+type IdeasTab = "suggestions" | "related" | "questions" | "paa" | "prepositions" | "comparisons" | "citations" | "ai" | "llm";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-// ─── Score dial (lighthouse) ─────────────────────────────────────────────────
-function ScoreDial({ label, value }: { label: string; value: number | null }) {
-  const pct = value !== null ? Math.round(value * 100) : null;
-  const color = pct === null ? "#94a3b8" : pct >= 90 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="flex h-20 w-20 items-center justify-center rounded-full border-4 text-lg font-black" style={{ borderColor: color, color }}>
-        {pct !== null ? pct : "—"}
-      </div>
-      <span className="text-xs text-slate-500 text-center leading-tight">{label}</span>
-    </div>
-  );
-}
 
 // ─── People Also Ask accordion row ──────────────────────────────────────────
 function PaaRow({ item }: { item: PeopleAlsoAskItem }) {
@@ -180,11 +168,21 @@ function DiffBadge({ value, label }: { value: number | null | undefined; label: 
 
 export default function KeywordOverviewPage() {
   const [keyword, setKeyword] = useState("");
-  const [domain, setDomain] = useState("");
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<OverviewData | null>(null);
   const [error, setError] = useState("");
   const [ideasTab, setIdeasTab] = useState<IdeasTab>("suggestions");
+  const [projectDomain, setProjectDomain] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/sites", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { sites: { id: string; domain: string }[]; selectedSiteId: string | null }) => {
+        const selected = json.sites.find((s) => s.id === json.selectedSiteId);
+        if (selected) setProjectDomain(selected.domain);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -196,7 +194,7 @@ export default function KeywordOverviewPage() {
       const res = await fetch("/api/keyword-overview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim(), domain: domain.trim() || undefined }),
+        body: JSON.stringify({ keyword: keyword.trim(), domain: projectDomain || undefined }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Request failed");
@@ -246,7 +244,8 @@ export default function KeywordOverviewPage() {
     ? [
         { id: "suggestions", label: "Suggestions", count: data.relatedKeywords?.length ?? 0 },
         { id: "related", label: "Related", count: (data.relatedKeywords?.length ?? 0) },
-        { id: "questions", label: "Questions", count: (data.questions?.length ?? 0) + (data.paa?.length ?? 0) },
+        { id: "questions", label: "Questions", count: data.questions?.length ?? 0 },
+        { id: "paa", label: "People Also Ask", count: data.paa?.length ?? 0 },
         { id: "prepositions", label: "Prepositions", count: data.prepositions?.length ?? 0 },
         { id: "comparisons", label: "Comparisons", count: data.comparisons?.length ?? 0 },
         { id: "citations", label: "Top Content", count: data.citations.length },
@@ -264,9 +263,11 @@ export default function KeywordOverviewPage() {
         <form onSubmit={handleSubmit}>
           <div className="flex flex-col sm:flex-row gap-3">
             <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Enter a keyword…" className="flex-1 text-base" required />
-            <Input value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Your domain for Lighthouse (optional)" className="flex-1" />
             <Button type="submit" disabled={loading || !keyword.trim()}>{loading ? "Analyzing…" : "Analyze"}</Button>
           </div>
+          {projectDomain && (
+            <p className="mt-1 text-xs text-slate-400">Using project domain: <span className="font-semibold text-slate-600">{projectDomain}</span> for LLM visibility checks</p>
+          )}
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
           {data && Object.keys(data.errors).length > 0 && (
             <p className="mt-2 text-xs text-amber-600">Partial results — some sections failed: {Object.keys(data.errors).join(", ")}</p>
@@ -559,25 +560,20 @@ export default function KeywordOverviewPage() {
                 <KwTable rows={(data.relatedKeywords ?? []).slice(0, 30)} onSelect={setKeyword} />
               )}
 
-              {/* Questions */}
+              {/* Questions (autocomplete keywords only) */}
               {ideasTab === "questions" && (
-                <div className="space-y-4">
-                  {(data.questions?.length ?? 0) > 0 && (
-                    <div>
-                      <div className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">From Autocomplete ({data.questions!.length})</div>
-                      <SimpleKwList keywords={data.questions!} onSelect={setKeyword} />
-                    </div>
-                  )}
-                  {data.paa?.length > 0 && (
-                    <div>
-                      <div className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2 mt-4">People Also Ask ({data.paa.length})</div>
-                      <div className="space-y-2">
-                        {data.paa.map((item, i) => <PaaRow key={i} item={item} />)}
-                      </div>
-                    </div>
-                  )}
-                  {!(data.questions?.length) && !data.paa?.length && <p className="text-slate-500 text-sm">No question data available.</p>}
-                </div>
+                <SimpleKwList keywords={data.questions ?? []} onSelect={setKeyword} />
+              )}
+
+              {/* People Also Ask */}
+              {ideasTab === "paa" && (
+                (data.paa?.length ?? 0) > 0 ? (
+                  <div className="space-y-2">
+                    {data.paa.map((item, i) => <PaaRow key={i} item={item} />)}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">No People Also Ask data available for this keyword.</p>
+                )
               )}
 
               {/* Prepositions */}
@@ -613,7 +609,10 @@ export default function KeywordOverviewPage() {
               {/* AI Search Volume */}
               {ideasTab === "ai" && (
                 data.aiVolume.length === 0 ? (
-                  <p className="text-slate-500 text-sm">No AI volume data available.</p>
+                  <div>
+                    <p className="text-slate-500 text-sm mb-1">No AI search volume data available for this keyword.</p>
+                    <p className="text-xs text-slate-400">AI search volume data is currently available for a limited set of keywords in DataForSEO&rsquo;s AI volume index.</p>
+                  </div>
                 ) : (
                   <div className="space-y-6">
                     {data.aiVolume.map((item) => (
@@ -641,7 +640,12 @@ export default function KeywordOverviewPage() {
               {/* LLM Mentions */}
               {ideasTab === "llm" && (
                 data.llmMentions.length === 0 ? (
-                  <p className="text-slate-500 text-sm">No LLM mention data.{!data.domain && " Enter a domain above to check if it's mentioned."}</p>
+                  <div>
+                    <p className="text-slate-500 text-sm mb-1">
+                      {projectDomain ? `No LLM mentions found for ${projectDomain} on this keyword.` : "No LLM mention data available."}
+                    </p>
+                    {!projectDomain && <p className="text-xs text-slate-400">Set an active project domain in the site switcher to check LLM brand visibility.</p>}
+                  </div>
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {data.llmMentions.map((m, i) => (
@@ -754,38 +758,56 @@ export default function KeywordOverviewPage() {
             )}
           </div>
 
-          {/* ── 6. LIGHTHOUSE (optional) ── */}
-          {data.domain && (
+          {/* ── 6. LOCAL MAP PACK ── */}
+          {(data.localPack?.length ?? 0) > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-[#f15b27] mb-0.5">Lighthouse Audit</div>
-              <h2 className="text-lg font-black text-slate-900 mb-4">{data.domain}</h2>
-              {!data.lighthouse ? (
-                <p className="text-slate-500 text-sm">Lighthouse data unavailable.{data.errors.lighthouse && <span className="ml-1 text-red-500">{data.errors.lighthouse}</span>}</p>
-              ) : (
-                <div>
-                  <div className="flex flex-wrap gap-8 mb-6">
-                    <ScoreDial label="Performance" value={data.lighthouse.performance} />
-                    <ScoreDial label="Accessibility" value={data.lighthouse.accessibility} />
-                    <ScoreDial label="Best Practices" value={data.lighthouse.bestPractices} />
-                    <ScoreDial label="SEO" value={data.lighthouse.seo} />
+              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-[#f15b27] mb-0.5">Local Map Pack</div>
+              <h2 className="text-lg font-black text-slate-900 mb-4">Local businesses ranking for &ldquo;{data.keyword}&rdquo;</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {data.localPack!.map((biz, i) => (
+                  <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="font-bold text-slate-900 text-sm leading-snug mb-1">{biz.title}</div>
+                    {biz.category && <div className="text-xs text-slate-400 mb-1">{biz.category}</div>}
+                    {biz.rating !== null && (
+                      <div className="flex items-center gap-1 text-xs mb-1">
+                        <span className="text-amber-400">★</span>
+                        <span className="font-bold text-slate-700">{biz.rating.toFixed(1)}</span>
+                        {biz.reviewCount !== null && <span className="text-slate-400">({biz.reviewCount.toLocaleString()} reviews)</span>}
+                      </div>
+                    )}
+                    {biz.address && <div className="text-xs text-slate-500 mb-1">{biz.address}</div>}
+                    {biz.phone && <div className="text-xs text-slate-500">{biz.phone}</div>}
                   </div>
-                  {data.lighthouse.failedAudits.length > 0 && (
-                    <div>
-                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-3">Issues to Fix</h3>
-                      <ul className="space-y-2">
-                        {data.lighthouse.failedAudits.map((a) => (
-                          <li key={a.id} className="flex items-start gap-3 rounded-lg bg-red-50 border border-red-100 px-3 py-2.5">
-                            <span className={`flex-shrink-0 mt-0.5 text-xs font-bold px-1.5 py-0.5 rounded uppercase ${a.impact === "high" ? "bg-red-200 text-red-800" : a.impact === "medium" ? "bg-amber-200 text-amber-800" : "bg-slate-200 text-slate-600"}`}>
-                              {a.impact}
-                            </span>
-                            <span className="text-sm text-slate-800">{a.title}</span>
-                          </li>
-                        ))}
-                      </ul>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── 7. PAID SEARCH ADS ── */}
+          {(data.ads?.length ?? 0) > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
+              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-[#f15b27] mb-0.5">Search Ads</div>
+              <h2 className="text-lg font-black text-slate-900 mb-4">
+                Advertisers bidding on &ldquo;{data.keyword}&rdquo;
+                <span className="ml-2 text-sm font-normal text-slate-400">({data.ads!.filter((a) => a.isTopAd).length} top · {data.ads!.filter((a) => !a.isTopAd).length} bottom)</span>
+              </h2>
+              <div className="space-y-3">
+                {data.ads!.map((ad, i) => (
+                  <div key={i} className={`rounded-xl border px-4 py-3 ${ad.isTopAd ? "border-orange-200 bg-orange-50" : "border-slate-100 bg-slate-50"}`}>
+                    <div className="flex items-start gap-3">
+                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase shrink-0 mt-0.5 ${ad.isTopAd ? "bg-orange-200 text-orange-800" : "bg-slate-200 text-slate-600"}`}>
+                        {ad.isTopAd ? "Top" : "Bot"}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-bold text-slate-900 text-sm leading-snug">{ad.title}</div>
+                        <div className="text-xs text-green-700 mb-0.5">{ad.displayUrl || ad.url}</div>
+                        {ad.description && <p className="text-xs text-slate-600 line-clamp-2">{ad.description}</p>}
+                      </div>
+                      <div className="text-xs text-slate-400 font-medium shrink-0">{ad.domain}</div>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

@@ -4034,6 +4034,26 @@ export interface SerpFeaturesResult {
   hasPeopleAlsoAsk: boolean;
 }
 
+export interface LocalPackItem {
+  title: string;
+  address: string | null;
+  phone: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  website: string | null;
+  category: string | null;
+}
+
+export interface SerpAdsItem {
+  position: number;
+  title: string;
+  description: string | null;
+  domain: string;
+  url: string;
+  displayUrl: string | null;
+  isTopAd: boolean;
+}
+
 export interface MonthlyVolumeItem {
   year: number;
   month: number;
@@ -4053,6 +4073,8 @@ export async function getSerpLiveDataEnhanced(
   organic: SerpOrganicResult[];
   paa: PeopleAlsoAskItem[];
   features: SerpFeaturesResult;
+  localPack: LocalPackItem[];
+  ads: SerpAdsItem[];
 }> {
   const data = await dfsPost("/serp/google/organic/live/advanced", [
     {
@@ -4098,6 +4120,39 @@ export async function getSerpLiveDataEnhanced(
       backlinks: typeof i.backlinks === "number" ? i.backlinks : null,
     }));
 
+  // Extract paid ads
+  const ads: SerpAdsItem[] = [...topAds, ...bottomAds].map((i) => ({
+    position: typeof i.rank_absolute === "number" ? i.rank_absolute : 0,
+    title: typeof i.title === "string" ? i.title : "",
+    description: typeof i.description === "string" ? i.description : null,
+    domain: typeof i.domain === "string" ? i.domain : "",
+    url: typeof i.url === "string" ? i.url : "",
+    displayUrl: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+    isTopAd: (i.rank_absolute as number) <= 4,
+  }));
+
+  // Extract local pack items
+  const localPack: LocalPackItem[] = [];
+  for (const i of items) {
+    if (String(i.type ?? "") === "local_pack") {
+      const subItems = (i.items ?? []) as Record<string, unknown>[];
+      for (const s of subItems) {
+        const ratingObj = (s.rating ?? {}) as Record<string, unknown>;
+        localPack.push({
+          title: typeof s.title === "string" ? s.title : "",
+          address: typeof s.address === "string" ? s.address : null,
+          phone: typeof s.phone === "string" ? s.phone : null,
+          rating: typeof ratingObj.value === "number" ? ratingObj.value : null,
+          reviewCount: typeof ratingObj.votes_count === "number" ? ratingObj.votes_count : null,
+          website: typeof s.url === "string" ? s.url : null,
+          category: typeof s.category === "string" ? s.category : null,
+        });
+      }
+      break;
+    }
+  }
+
+  // PAA extraction — handle both flat elements and container items
   function mapPaaElement(s: Record<string, unknown>): PeopleAlsoAskItem | null {
     const question = typeof s.title === "string" ? s.title.trim() : "";
     if (!question) return null;
@@ -4105,7 +4160,9 @@ export async function getSerpLiveDataEnhanced(
     const box = answerItems[0] as Record<string, unknown> | undefined;
     return {
       question,
-      answer: typeof box?.description === "string" ? box.description : typeof box?.text === "string" ? box.text : null,
+      answer:
+        typeof box?.description === "string" ? box.description :
+        typeof box?.text === "string" ? box.text : null,
       url: typeof box?.url === "string" ? box.url : null,
       domain: typeof box?.domain === "string" ? box.domain : null,
     };
@@ -4127,5 +4184,5 @@ export async function getSerpLiveDataEnhanced(
     }
   }
 
-  return { organic, paa: paa.slice(0, 12), features };
+  return { organic, paa: paa.slice(0, 12), features, localPack, ads };
 }

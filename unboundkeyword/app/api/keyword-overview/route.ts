@@ -2,11 +2,11 @@
  * POST /api/keyword-overview
  * Comprehensive keyword overview: SERP top results, PAA, A-Z autocomplete,
  * content citations, phrase trends, AI search volume, LLM mentions,
- * demographics, paid data, SERP features, monthly volumes, and optional
- * Lighthouse audit (requires domain param).
+ * demographics, paid data, SERP features, monthly volumes.
  */
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   getSerpLiveDataEnhanced,
   getGoogleAutocompleteAZ,
@@ -14,7 +14,6 @@ import {
   getContentAnalysisPhraseTrendsLive,
   getAiKeywordSearchVolume,
   getLlmMentionsSearchLive,
-  getLighthouseLiveJson,
   getKeywordData,
   getDFSTrendsDemography,
   getRelatedKeywords,
@@ -23,7 +22,8 @@ import {
   getKeywordOverviewLabs,
   type SerpOrganicResult,
   type AutocompleteLetterGroup,
-  type LighthouseLiveResult,
+  type LocalPackItem,
+  type SerpAdsItem,
   type AiKeywordVolumeItem,
   type LlmMentionLiveItem,
   type PeopleAlsoAskItem,
@@ -74,10 +74,32 @@ export interface ClickDistribution {
   noClick: number;
 }
 
+export interface LocalPackResult {
+  title: string;
+  address: string | null;
+  phone: string | null;
+  rating: number | null;
+  reviewCount: number | null;
+  website: string | null;
+  category: string | null;
+}
+
+export interface SerpAdResult {
+  position: number;
+  title: string;
+  description: string | null;
+  domain: string;
+  url: string;
+  displayUrl: string | null;
+  isTopAd: boolean;
+}
+
 export interface KeywordOverviewResponse {
   keyword: string;
   domain: string | null;
   serp: SerpOrganicResult[];
+  ads: SerpAdResult[];
+  localPack: LocalPackResult[];
   paa: PeopleAlsoAskItem[];
   autocomplete: AutocompleteLetterGroup[];
   citations: CitationItem[];
@@ -85,7 +107,6 @@ export interface KeywordOverviewResponse {
   monthlyVolumes: MonthlyVolumeItem[];
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
-  lighthouse: LighthouseLiveResult | null;
   paid: PaidSearchData | null;
   demographics: DemographicsData | null;
   relatedKeywords: RelatedKwItem[];
@@ -124,7 +145,6 @@ export async function POST(req: NextRequest) {
     phraseTrendsResult,
     aiVolumeResult,
     llmResult,
-    lighthouseResult,
     paidResult,
     demoResult,
     relatedKwResult,
@@ -138,7 +158,6 @@ export async function POST(req: NextRequest) {
     getContentAnalysisPhraseTrendsLive(seed),
     getAiKeywordSearchVolume([seed], location, language),
     domain ? getLlmMentionsSearchLive(seed, domain, 20) : Promise.resolve([]),
-    domain ? getLighthouseLiveJson(domain) : Promise.resolve(null),
     getKeywordData([seed]),
     getDFSTrendsDemography([seed], location),
     getRelatedKeywords(seed, location, language, 40),
@@ -155,17 +174,18 @@ export async function POST(req: NextRequest) {
     return result.value;
   }
 
-  const serpData = settle(serpResult, "serp", { organic: [], paa: [], features: null as unknown as SerpFeaturesResult });
+  const serpData = settle(serpResult, "serp", { organic: [], paa: [], features: null as unknown as SerpFeaturesResult, localPack: [] as LocalPackItem[], ads: [] as SerpAdsItem[] });
   const serp = serpData.organic;
   const paa = serpData.paa;
   const serpFeatures: SerpFeaturesResult | null = serpData.features ?? null;
+  const localPack = serpData.localPack ?? [];
+  const serpAds = serpData.ads ?? [];
 
   const autocomplete = settle(autocompleteResult, "autocomplete", []);
   const citRaw = settle(citationsResult, "citations", { items: [], result: null, raw: null });
   const trendsRaw = settle(phraseTrendsResult, "phraseTrends", { items: [], result: null, raw: null });
   const aiVolume = settle(aiVolumeResult, "aiVolume", []);
   const llmMentions = settle(llmResult, "llmMentions", []);
-  const lighthouse = settle(lighthouseResult, "lighthouse", null);
   const paidRaw = settle(paidResult, "paid", null);
   const demoRaw = settle(demoResult, "demographics", null);
   const relatedRaw = relatedKwResult.status === "fulfilled" ? relatedKwResult.value : [];
@@ -253,35 +273,50 @@ export async function POST(req: NextRequest) {
   }
   const relatedKeywords = [...relatedMap.values()].sort((a, b) => b.volume - a.volume).slice(0, 60);
 
-  // Extract questions / prepositions / comparisons from autocomplete
+  // Extract questions / prepositions / comparisons — mine autocomplete + suggestions + related
   const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should"];
   const PREPOSITION_WORDS = ["for", "with", "without", "near", "in", "on", "at", "by", "to", "vs", "versus", "like", "after", "before", "during"];
   const COMPARISON_WORDS = ["vs", "versus", "or", "alternative", "alternatives", "compare", "compared", "better", "difference"];
 
   const allAutocomplete: string[] = autocomplete.flatMap((g) => g.suggestions);
+  // Mine all keyword sources for richer preposition/comparison results
+  const allKeywordPool = [...new Set([
+    ...allAutocomplete,
+    ...suggestionsRaw.map((s) => s.keyword).filter(Boolean),
+    ...relatedRaw.map((s) => s.keyword).filter(Boolean),
+  ])].filter((s) => s.toLowerCase() !== seed.toLowerCase());
+
   const questions = allAutocomplete.filter((s) => QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))).slice(0, 50);
-  const prepositions = allAutocomplete.filter((s) => {
+  const prepositions = allKeywordPool.filter((s) => {
     const words = s.toLowerCase().split(/\s+/);
     return PREPOSITION_WORDS.some((w) => words.includes(w));
-  }).filter((s) => !questions.includes(s)).slice(0, 50);
-  const comparisons = allAutocomplete.filter((s) => {
+  }).filter((s) => !questions.includes(s)).slice(0, 60);
+  const comparisons = allKeywordPool.filter((s) => {
     const lower = s.toLowerCase();
     return COMPARISON_WORDS.some((w) => lower.includes(" " + w + " ") || lower.endsWith(" " + w));
-  }).filter((s) => !questions.includes(s) && !prepositions.includes(s)).slice(0, 50);
+  }).filter((s) => !questions.includes(s) && !prepositions.includes(s)).slice(0, 60);
 
-  // Compute click distribution
-  let paidPct = 0, aiOverviewPct = 0, featuredSnippetPct = 0;
-  if (serpFeatures) {
-    paidPct = Math.min(serpFeatures.topAdCount * 3 + serpFeatures.bottomAdCount * 1, 25);
-    if (serpFeatures.hasAiOverview) aiOverviewPct = 18;
-    if (serpFeatures.hasFeaturedSnippet && !serpFeatures.hasAiOverview) featuredSnippetPct = 8;
-  } else {
-    paidPct = Math.round((paidData?.competition ?? 0) * 22);
-  }
+  // Compute click distribution using actual SERP signals (research-backed CTR model)
+  // Top ads absorb ~10% each, bottom ads ~3% each, AI Overview ~20%, Featured Snippet ~8%
+  let paidPct = 0, aiOverviewPct = 0, featuredSnippetPct = 0, localPackPct = 0;
   const comp = paidData?.competition ?? 0;
-  const noClickPct = Math.max(Math.round(35 - comp * 10), 15);
-  const organicPct = Math.max(100 - paidPct - aiOverviewPct - featuredSnippetPct - noClickPct, 5);
-  const rawTotal = organicPct + paidPct + aiOverviewPct + featuredSnippetPct + noClickPct;
+  if (serpFeatures) {
+    // Use actual ad count from SERP as primary signal; fall back to competition index
+    const topAdCtr = serpFeatures.topAdCount > 0 ? Math.min(serpFeatures.topAdCount * 10, 35) : Math.round(comp * 30);
+    const bottomAdCtr = Math.min(serpFeatures.bottomAdCount * 3, 8);
+    paidPct = Math.min(topAdCtr + bottomAdCtr, 40);
+    if (serpFeatures.hasAiOverview) aiOverviewPct = 20;
+    if (serpFeatures.hasFeaturedSnippet && !serpFeatures.hasAiOverview) featuredSnippetPct = 8;
+    if (serpFeatures.hasLocalPack) localPackPct = 15;
+  } else {
+    paidPct = Math.round(comp * 30);
+  }
+  // No-click rate: higher for informational queries, AI Overview, featured snippets
+  const noClickBase = 25;
+  const noClickExtra = (aiOverviewPct > 0 ? 8 : 0) + (featuredSnippetPct > 0 ? 5 : 0);
+  const noClickPct = Math.max(noClickBase + noClickExtra, 15);
+  const organicPct = Math.max(100 - paidPct - aiOverviewPct - featuredSnippetPct - localPackPct - noClickPct, 5);
+  const rawTotal = organicPct + paidPct + aiOverviewPct + featuredSnippetPct + localPackPct + noClickPct;
   const scale = 100 / rawTotal;
   const clickDistribution: ClickDistribution = {
     organic: Math.round(organicPct * scale),
@@ -309,10 +344,56 @@ export async function POST(req: NextRequest) {
     .filter((i) => i.date)
     .slice(0, 52);
 
+  // Auto-save keyword intelligence (fire-and-forget)
+  void prisma.keywordIntelligence.upsert({
+    where: { userId_keyword_locationCode_languageCode: { userId: session.user.id, keyword: seed, locationCode: location, languageCode: language } },
+    update: {
+      searchVolume: paidData?.searchVolume ?? undefined,
+      cpc: paidData?.cpc ?? undefined,
+      competition: paidData?.competition ?? undefined,
+      competitionLevel: paidData?.competitionLevel ?? undefined,
+      difficulty: keywordDifficulty ?? undefined,
+      organicClickPct: clickDistribution.organic,
+      paidClickPct: clickDistribution.paid,
+      aiOverviewPct: clickDistribution.aiOverview,
+      featuredSnippetPct: clickDistribution.featuredSnippet,
+      noClickPct: clickDistribution.noClick,
+      hasAiOverview: serpFeatures?.hasAiOverview ?? false,
+      hasFeaturedSnippet: serpFeatures?.hasFeaturedSnippet ?? false,
+      hasLocalPack: serpFeatures?.hasLocalPack ?? false,
+      topAdCount: serpFeatures?.topAdCount ?? 0,
+      hasShopping: serpFeatures?.hasShopping ?? false,
+      analyzedCount: { increment: 1 },
+    },
+    create: {
+      userId: session.user.id,
+      keyword: seed,
+      locationCode: location,
+      languageCode: language,
+      searchVolume: paidData?.searchVolume ?? undefined,
+      cpc: paidData?.cpc ?? undefined,
+      competition: paidData?.competition ?? undefined,
+      competitionLevel: paidData?.competitionLevel ?? undefined,
+      difficulty: keywordDifficulty ?? undefined,
+      organicClickPct: clickDistribution.organic,
+      paidClickPct: clickDistribution.paid,
+      aiOverviewPct: clickDistribution.aiOverview,
+      featuredSnippetPct: clickDistribution.featuredSnippet,
+      noClickPct: clickDistribution.noClick,
+      hasAiOverview: serpFeatures?.hasAiOverview ?? false,
+      hasFeaturedSnippet: serpFeatures?.hasFeaturedSnippet ?? false,
+      hasLocalPack: serpFeatures?.hasLocalPack ?? false,
+      topAdCount: serpFeatures?.topAdCount ?? 0,
+      hasShopping: serpFeatures?.hasShopping ?? false,
+    },
+  }).catch(() => { /* non-critical */ });
+
   return Response.json({
     keyword: seed,
     domain: domain || null,
     serp,
+    ads: serpAds,
+    localPack,
     paa,
     autocomplete,
     citations,
@@ -320,7 +401,6 @@ export async function POST(req: NextRequest) {
     monthlyVolumes,
     aiVolume,
     llmMentions,
-    lighthouse,
     paid: paidData,
     demographics,
     relatedKeywords,
