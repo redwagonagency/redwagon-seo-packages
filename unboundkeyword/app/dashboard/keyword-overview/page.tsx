@@ -519,6 +519,26 @@ export default function KeywordOverviewPage() {
                     </div>
                   );
                 })()}
+
+                {/* Location / Regional breakdown */}
+                {((data.demographics as DemographicsData & { locationData?: { label: string; index: number }[] }).locationData?.length ?? 0) > 0 && (() => {
+                  const locData = (data.demographics as DemographicsData & { locationData: { label: string; index: number }[] }).locationData;
+                  const maxLoc = Math.max(...locData.map((l) => l.index), 1);
+                  const locChart = locData.map((l) => ({ label: l.label, value: Math.round((l.index / maxLoc) * 100) }));
+                  return (
+                    <div className="mt-4">
+                      <div className="text-xs font-semibold text-slate-500 mb-2">Top Regions</div>
+                      <ResponsiveContainer width="100%" height={Math.max(locChart.length * 30, 100)}>
+                        <BarChart data={locChart} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }}>
+                          <XAxis type="number" hide domain={[0, 100]} />
+                          <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} width={80} />
+                          <Tooltip formatter={(v) => [`${v} (index)`, "Regional interest"]} contentStyle={{ borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }} />
+                          <Bar dataKey="value" fill="#6366f1" radius={[0, 6, 6, 0]} maxBarSize={18} label={{ position: "right", fontSize: 10, fill: "#94a3b8", formatter: (v: unknown) => `${v}` }} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5">

@@ -49,6 +49,7 @@ export interface DemographicsData {
   male: number | null;
   female: number | null;
   ageGroups: { label: string; index: number }[];
+  locationData: { label: string; index: number }[];
 }
 
 export interface PaidSearchData {
@@ -201,6 +202,7 @@ export async function POST(req: NextRequest) {
   if (demoItems.length > 0) {
     const genderItem = demoItems.find((i) => i.type === "gender") as Record<string, unknown> | undefined;
     const ageItem = demoItems.find((i) => i.type === "age") as Record<string, unknown> | undefined;
+    const locationItem = demoItems.find((i) => i.type === "location" || i.type === "geo") as Record<string, unknown> | undefined;
     demographics = {
       male: typeof genderItem?.male_index === "number" ? Math.round(genderItem.male_index) : null,
       female: typeof genderItem?.female_index === "number" ? Math.round(genderItem.female_index) : null,
@@ -209,6 +211,12 @@ export async function POST(req: NextRequest) {
             label: String(a.age_group ?? a.age ?? ""),
             index: typeof a.index === "number" ? Math.round(a.index) : 0,
           }))
+        : [],
+      locationData: Array.isArray(locationItem?.items)
+        ? (locationItem!.items as Record<string, unknown>[]).map((l) => ({
+            label: String(l.location_name ?? l.name ?? l.label ?? ""),
+            index: typeof l.index === "number" ? Math.round(l.index) : 0,
+          })).filter((l) => l.label).slice(0, 10)
         : [],
     };
   }

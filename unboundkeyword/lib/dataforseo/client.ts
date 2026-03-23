@@ -12,7 +12,19 @@ function getAuthHeaders() {
   };
 }
 
+async function logApiCall(endpoint: string, durationMs: number) {
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    await prisma.apiQueryLog.create({
+      data: { endpoint, queryKey: endpoint, durationMs },
+    });
+  } catch {
+    // logging is best-effort, never block
+  }
+}
+
 async function dfsRequest(method: "GET" | "POST", endpoint: string, body?: unknown) {
+  const start = Date.now();
   const res = await fetch(`${DFS_BASE}${endpoint}`, {
     method,
     headers: getAuthHeaders(),
@@ -23,7 +35,10 @@ async function dfsRequest(method: "GET" | "POST", endpoint: string, body?: unkno
     const errorText = await res.text().catch(() => "");
     throw new Error(`DataForSEO ${endpoint} failed: ${res.status}${errorText ? ` ${errorText}` : ""}`);
   }
-  return res.json();
+  const json = await res.json();
+  // Log async — don't await so we don't slow down responses
+  void logApiCall(endpoint, Date.now() - start);
+  return json;
 }
 
 async function dfsPost(endpoint: string, body: unknown) {

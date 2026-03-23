@@ -110,22 +110,29 @@ export default function CompetitorIntelligenceClient() {
   const [projectDomain, setProjectDomain] = useState<string | null>(null);
   const didLoad = useRef(false);
 
-  // Auto-load project domain
+  // Auto-load project domain and saved competitors
   useEffect(() => {
     fetch("/api/sites", { cache: "no-store" })
       .then((r) => r.json())
-      .then((json: { sites: { id: string; domain: string }[]; selectedSiteId: string | null }) => {
+      .then((json: { sites: { id: string; domain: string; competitorList?: string[] }[]; selectedSiteId: string | null }) => {
         const selected = json.sites.find((s) => s.id === json.selectedSiteId);
-        if (selected) setProjectDomain(selected.domain);
+        if (selected) {
+          setProjectDomain(selected.domain);
+          // Pre-fill saved competitors
+          if (selected.competitorList && selected.competitorList.length > 0) {
+            setCompetitorInputs(selected.competitorList);
+          }
+        }
       })
       .catch(() => {});
   }, []);
 
-  // Auto-run when project domain is known
+  // Auto-run when project domain is known (using saved competitors or none)
   useEffect(() => {
     if (projectDomain && !didLoad.current) {
       didLoad.current = true;
-      void runAnalysis(projectDomain, []);
+      // competitorInputs may have been pre-filled; pass them through
+      void runAnalysis(projectDomain, undefined);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectDomain]);

@@ -4,24 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
 import SuperadminIndustryStatsManager from "@/components/dashboard/SuperadminIndustryStatsManager";
 
-type SuperadminCompat = {
-  user: {
-    findMany: (args: unknown) => Promise<Array<{ id: string; name: string | null; email: string | null; createdAt: Date }>>;
-    count: (args?: unknown) => Promise<number>;
-  };
-  siteProject: {
-    count: (args?: unknown) => Promise<number>;
-  };
-  discoveryKeyword: {
-    count: (args?: unknown) => Promise<number>;
-  };
-  industryStat: {
-    count: (args?: unknown) => Promise<number>;
-    findMany: (args: unknown) => Promise<Array<{ industry: string; metricKey: string; metricValue: number; unit: string | null; note: string | null }>>;
-  };
-};
-
 export const dynamic = "force-dynamic";
+
+function fmt(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`;
+  return String(n);
+}
 
 export default async function SuperadminPage() {
   const session = await auth();
@@ -35,86 +24,279 @@ export default async function SuperadminPage() {
     );
   }
 
-  const db = prisma as unknown as SuperadminCompat;
-  const [users, userCount, projectCount, keywordCount, statCount, stats] = await Promise.all([
-    db.user.findMany({
+  // Parallel data fetches
+  const [
+    users,
+    userCount,
+    projectCount,
+    keywordCount,
+    statCount,
+    stats,
+    apiLogCount,
+    recentApiLogs,
+    topEndpoints,
+    projectsWithDomains,
+    recentUsers,
+  ] = await Promise.all([
+    prisma.user.findMany({
       select: { id: true, name: true, email: true, createdAt: true },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 200,
     }),
-    db.user.count(),
-    db.siteProject.count(),
-    db.discoveryKeyword.count(),
-    db.industryStat.count(),
-    db.industryStat.findMany({
+    prisma.user.count(),
+    prisma.siteProject.count(),
+    prisma.keywordInList.count(),
+    prisma.industryStat.count(),
+    prisma.industryStat.findMany({
       orderBy: [{ industry: "asc" }, { metricKey: "asc" }],
       take: 50,
     }),
+    prisma.apiQueryLog.count(),
+    prisma.apiQueryLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+    // Group by endpoint to find most-used
+    prisma.apiQueryLog.groupBy({
+      by: ["endpoint"],
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 10,
+    }),
+    // Projects with user info for per-user breakdown
+    prisma.siteProject.findMany({
+      select: { id: true, domain: true, userId: true, createdAt: true, competitors: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    prisma.user.findMany({
+      select: { id: true, name: true, email: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
   ]);
+
+  // User signup buckets by month (last 6 months)
+  const now = new Date();
+  const monthBuckets: { label: string; count: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    const count = users.filter((u) => u.createdAt >= d && u.createdAt < end).length;
+    monthBuckets.push({ label, count });
+  }
+  const maxMonthCount = Math.max(...monthBuckets.map((b) => b.count), 1);
+
+  // Per-user project counts
+  const projectsByUser = new Map<string, number>();
+  for (const p of projectsWithDomains) {
+    projectsByUser.set(p.userId, (projectsByUser.get(p.userId) ?? 0) + 1);
+  }
+
+  // Users joined this month
+  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const newUsersThisMonth = users.filter((u) => u.createdAt >= thisMonthStart).length;
 
   return (
     <div className="p-8 space-y-6 max-w-7xl">
+      {/* Header */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <p className="text-xs uppercase tracking-[0.18em] text-[#f15b27] font-black">Superadmin</p>
-        <h1 className="mt-2 text-3xl font-black text-slate-900">Joe Control Center</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Manage users, projects, and platform-level SEO intelligence settings.
-        </p>
+        <h1 className="mt-2 text-3xl font-black text-slate-900">SAAS Control Center</h1>
+        <p className="mt-1 text-sm text-slate-500">Platform-wide metrics, users, API usage, and project management</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Users</p>
-          <p className="mt-1 text-3xl font-black text-slate-900">{userCount}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Projects</p>
-          <p className="mt-1 text-3xl font-black text-slate-900">{projectCount}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Tracked Keywords</p>
-          <p className="mt-1 text-3xl font-black text-slate-900">{keywordCount}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Industry Stats</p>
-          <p className="mt-1 text-3xl font-black text-slate-900">{statCount}</p>
+      {/* KPI grid */}
+      <div className="grid gap-4 md:grid-cols-5">
+        {[
+          { label: "Total Users", value: fmt(userCount), sub: `+${newUsersThisMonth} this month`, color: "text-emerald-500" },
+          { label: "Projects", value: fmt(projectCount) },
+          { label: "Tracked Keywords", value: fmt(keywordCount) },
+          { label: "Industry Stats", value: fmt(statCount) },
+          { label: "API Calls Logged", value: fmt(apiLogCount) },
+        ].map((card) => (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
+            <p className="mt-1 text-3xl font-black text-slate-900">{card.value}</p>
+            {card.sub && <p className={`text-[11px] mt-1 ${card.color ?? "text-slate-400"}`}>{card.sub}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* User Growth Chart */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="text-xs uppercase tracking-[0.16em] font-black text-slate-400 mb-4">User Signups — Last 6 Months</div>
+        <div className="flex items-end gap-2 h-24">
+          {monthBuckets.map((b) => (
+            <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
+              <span className="text-[10px] text-slate-400 tabular-nums">{b.count}</span>
+              <div
+                className="w-full bg-[#f15b27] rounded-t-md transition-all"
+                style={{ height: `${Math.max((b.count / maxMonthCount) * 72, b.count > 0 ? 4 : 2)}px` }}
+              />
+              <span className="text-[10px] text-slate-400">{b.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-black text-slate-900 mb-4">Users</h2>
-          <div className="space-y-2 max-h-[460px] overflow-auto pr-1">
-            {users.map((user) => (
-              <div key={user.id} className="rounded-lg border border-slate-200 px-3 py-2">
-                <p className="text-sm font-semibold text-slate-900">{user.name || "Unnamed user"}</p>
-                <p className="text-xs text-slate-600">{user.email || "No email"}</p>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Joined {new Date(user.createdAt).toLocaleDateString()}
-                </p>
-              </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Users table */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">All Users ({userCount})</h2>
+          </div>
+          <div className="overflow-y-auto max-h-[420px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">User</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Projects</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5">
+                      <p className="font-semibold text-slate-800 text-xs">{user.name ?? "—"}</p>
+                      <p className="text-[10px] text-slate-400">{user.email ?? "—"}</p>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-xs text-slate-600 tabular-nums">{projectsByUser.get(user.id) ?? 0}</td>
+                    <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        {/* Projects table */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">All Projects ({projectCount})</h2>
+          </div>
+          <div className="overflow-y-auto max-h-[420px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Domain</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Competitors</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projectsWithDomains.map((p) => {
+                  let compList: string[] = [];
+                  try { compList = JSON.parse(p.competitors ?? "[]") as string[]; } catch { /* empty */ }
+                  return (
+                    <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 font-semibold text-slate-800 text-xs">{p.domain}</td>
+                      <td className="px-4 py-2.5 text-right text-xs text-slate-500">
+                        {compList.length > 0 ? compList.slice(0, 3).join(", ") : <span className="text-slate-300">none</span>}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      {/* API Usage */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top endpoints */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top API Endpoints</h2>
+          </div>
+          {topEndpoints.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-slate-400">
+              No API calls logged yet. Calls are logged as users interact with the platform.
+            </div>
+          ) : (
+            <div className="overflow-y-auto max-h-[320px]">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Calls</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topEndpoints.map((r) => (
+                    <tr key={r.endpoint} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all">{r.endpoint}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-black text-[#f15b27] tabular-nums">{r._count.id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Recent API log */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Recent API Calls</h2>
+          </div>
+          {recentApiLogs.length === 0 ? (
+            <div className="px-6 py-8 text-center text-sm text-slate-400">
+              No API calls logged yet.
+            </div>
+          ) : (
+            <div className="overflow-y-auto max-h-[320px]">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">ms</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentApiLogs.map((log) => (
+                    <tr key={log.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all max-w-[260px]">{log.endpoint}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-500">{log.durationMs ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(log.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Site management + Industry Stats */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4">Platform Links</h2>
+          <div className="space-y-2 text-sm">
+            {[
+              { href: "/blog", label: "Blog" },
+              { href: "/dashboard/decision-engine", label: "Decision Engine" },
+              { href: "/dashboard/discover", label: "Keyword Discovery" },
+              { href: "/dashboard/keyword-overview", label: "Keyword Overview" },
+              { href: "/dashboard/competitor", label: "Competitor Intelligence" },
+              { href: "/dashboard/traffic", label: "Traffic Checker" },
+              { href: "/dashboard/site-audit", label: "Site Audit" },
+            ].map(({ href, label }) => (
+              <Link key={href} href={href} className="block rounded-lg border border-slate-200 px-3 py-2 text-slate-600 hover:border-[#f15b27] hover:text-[#f15b27] transition-colors">
+                {label}
+              </Link>
             ))}
           </div>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-black text-slate-900 mb-4">Website Management</h2>
-          <div className="space-y-3 text-sm">
-            <Link href="/blog" className="block rounded-lg border border-slate-200 px-3 py-2 hover:border-[#f15b27]">
-              Open Blog
-            </Link>
-            <Link href="/dashboard/decision-engine" className="block rounded-lg border border-slate-200 px-3 py-2 hover:border-[#f15b27]">
-              Open Decision Engine
-            </Link>
-            <Link href="/dashboard/discover" className="block rounded-lg border border-slate-200 px-3 py-2 hover:border-[#f15b27]">
-              Open Keyword Discovery
-            </Link>
-          </div>
-
-          <h3 className="mt-6 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Industry Stats</h3>
-          <div className="mt-2">
-            <SuperadminIndustryStatsManager initialStats={stats} />
-          </div>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-4">Industry Stats ({statCount})</h2>
+          <SuperadminIndustryStatsManager initialStats={stats} />
         </section>
       </div>
     </div>

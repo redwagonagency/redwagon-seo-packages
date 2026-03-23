@@ -31,6 +31,14 @@ function diffBand(v: number) {
   return "bg-emerald-300";
 }
 
+type CompetitorTrafficRow = {
+  domain: string;
+  organicTraffic: number;
+  organicKeywords: number;
+  domainRank: number;
+  etv: number;
+};
+
 export default function TrafficPage() {
   const [domain, setDomain] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,6 +46,9 @@ export default function TrafficPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
+  const [projectCompetitors, setProjectCompetitors] = useState<string[]>([]);
+  const [comparisonData, setComparisonData] = useState<CompetitorTrafficRow[]>([]);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
   const [gscData, setGscData] = useState<{ query: string; clicks: number; impressions: number; ctr: number; position: number }[] | null>(null);
   const [ga4Data, setGa4Data] = useState<{ page: string; sessions: number; pageviews: number }[] | null>(null);
   const [gscLoading, setGscLoading] = useState(false);
@@ -67,6 +78,40 @@ export default function TrafficPage() {
   }
 
   useEffect(() => { void runLookup(); }, []);
+
+  // Load saved project competitors and run comparison
+  useEffect(() => {
+    fetch("/api/sites", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { sites: { id: string; domain: string; competitorList?: string[] }[]; selectedSiteId: string | null }) => {
+        const selected = json.sites.find((s) => s.id === json.selectedSiteId);
+        if (selected?.competitorList && selected.competitorList.length > 0) {
+          setProjectCompetitors(selected.competitorList);
+          void loadComparisonData(selected.domain, selected.competitorList);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function loadComparisonData(primaryDomain: string, competitors: string[]) {
+    setComparisonLoading(true);
+    try {
+      const allDomains = [primaryDomain, ...competitors];
+      const res = await fetch("/api/traffic/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domains: allDomains }),
+      });
+      if (!res.ok) return;
+      const json = (await res.json()) as { rows?: CompetitorTrafficRow[] };
+      if (json.rows) setComparisonData(json.rows);
+    } catch {
+      // comparison is optional, ignore errors
+    } finally {
+      setComparisonLoading(false);
+    }
+  }
 
   async function loadGscData() {
     setGscLoading(true);
@@ -200,6 +245,56 @@ export default function TrafficPage() {
           </div>
         ))}
       </div>
+
+      {/* Competitor Comparison (from project saved competitors) */}
+      {(comparisonData.length > 0 || comparisonLoading) && (
+        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400">Project Competitor Comparison</div>
+              <div className="text-sm text-slate-500 mt-0.5">Traffic snapshot across your domain + saved competitors</div>
+            </div>
+            {comparisonLoading && <svg className="animate-spin h-4 w-4 text-slate-300" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>}
+          </div>
+          {comparisonData.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-black uppercase tracking-wider text-slate-500">Domain</th>
+                    <th className="px-5 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Organic Traffic</th>
+                    <th className="px-5 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Keywords</th>
+                    <th className="px-5 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Domain Rank</th>
+                    <th className="px-5 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-500">Est. Traffic Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonData.map((row, i) => (
+                    <tr key={row.domain} className={`border-b border-slate-100 hover:bg-slate-50 ${i === 0 ? "bg-orange-50/40" : ""}`}>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={`https://www.google.com/s2/favicons?domain=${row.domain}&sz=16`} alt="" width={16} height={16} className="rounded-sm" />
+                          <span className="font-semibold text-slate-800">{row.domain}</span>
+                          {i === 0 && <span className="text-[10px] bg-orange-100 text-orange-700 font-black px-1.5 py-0.5 rounded-full uppercase">You</span>}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-slate-800">{formatNumber(row.organicTraffic)}</td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600">{formatNumber(row.organicKeywords)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <span className={`text-xs font-black px-2 py-0.5 rounded-full ${row.domainRank >= 60 ? "bg-emerald-100 text-emerald-700" : row.domainRank >= 30 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                          {row.domainRank > 0 ? row.domainRank : "—"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right tabular-nums text-slate-600">${formatNumber(row.etv)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-4 border-b border-slate-200">

@@ -74,10 +74,23 @@ export async function POST(req: NextRequest) {
       ? body.competitorDomains.map(normalizeDomain).filter(Boolean)
       : [];
 
+    // Load saved competitors from the project if none provided
+    let savedCompetitors: string[] = [];
+    if (customCompetitors.length === 0 && selectedSite) {
+      try {
+        savedCompetitors = (JSON.parse(selectedSite.competitors ?? "[]") as string[])
+          .map(normalizeDomain)
+          .filter(Boolean);
+      } catch {
+        savedCompetitors = [];
+      }
+    }
+
     // Get your domain overview + suggested competitors simultaneously
+    const needSuggested = customCompetitors.length === 0 && savedCompetitors.length === 0;
     const [yourOverviewResult, suggestedResult] = await Promise.allSettled([
       getDomainRankOverview(domain, location, language),
-      customCompetitors.length === 0 ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
+      needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
     ]);
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
@@ -85,7 +98,11 @@ export async function POST(req: NextRequest) {
     const suggestedDomains = suggested.map((s) => normalizeDomain(s.domain)).filter(Boolean);
 
     const chosenCompetitors = (
-      customCompetitors.length > 0 ? customCompetitors : suggestedDomains.slice(0, 8)
+      customCompetitors.length > 0
+        ? customCompetitors
+        : savedCompetitors.length > 0
+          ? savedCompetitors
+          : suggestedDomains.slice(0, 8)
     ).slice(0, 10);
 
     if (chosenCompetitors.length === 0) {

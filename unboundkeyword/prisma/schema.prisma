@@ -33,16 +33,18 @@ model User {
 }
 
 model SiteProject {
-  id         String   @id @default(cuid())
-  userId     String
-  domain     String
-  label      String?
-  location   String   @default("United States")
-  language   String   @default("en")
-  ga4Connected Boolean @default(false)
-  gscConnected Boolean @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  domain      String
+  label       String?
+  location    String   @default("United States")
+  language    String   @default("en")
+  ga4Connected  Boolean @default(false)
+  gscConnected  Boolean @default(false)
+  // Up to 5 competitor domains stored as JSON array string
+  competitors String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   lists KeywordList[]
@@ -321,19 +323,15 @@ model KeywordIntelligence {
   @@index([userId, lastAnalyzed])
 }
 
-// ── Master API Query Cache ────────────────────────────────────────────────────
-// Stores every DataForSEO response so no user query is lost and duplicate
-// API calls are avoided. All research done by any user is captured here.
-model ApiQueryCache {
-  id        String   @id @default(cuid())
-  userId    String?
-  endpoint  String   // DataForSEO endpoint path
-  cacheKey  String   @unique // sha256 of endpoint + sorted JSON params
-  payload   String   // JSON-stringified API response
-  createdAt DateTime @default(now())
-  expiresAt DateTime
+model ApiQueryLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  endpoint    String
+  queryKey    String
+  durationMs  Int?
+  createdAt   DateTime @default(now())
 
-  @@index([cacheKey])
   @@index([userId])
   @@index([endpoint])
+  @@index([createdAt])
 }
