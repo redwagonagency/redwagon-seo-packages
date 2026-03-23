@@ -358,7 +358,7 @@ rm -rf /tmp/ub-repo
 echo "Sync complete"
 """, "Syncing unboundkeyword source code", timeout=120)
 
-run(client, f"cd {APP2_DIR} && npm ci --prefer-offline 2>&1 | tail -5 && echo 'npm OK'", "Installing unboundkeyword dependencies", timeout=300)
+run(client, f"cd {APP2_DIR} && npm ci 2>&1 | tail -5 && echo 'npm OK'", "Installing unboundkeyword dependencies", timeout=300)
 
 run(client, f"""
 mkdir -p {APP2_DIR}/data
