@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
 import { estimateEndpointPrice, extractDfsCostUsdFromResponse } from "@/lib/api-pricing";
 import SuperadminIndustryStatsManager from "@/components/dashboard/SuperadminIndustryStatsManager";
+import AiMonitorPanel from "@/components/dashboard/AiMonitorPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -833,6 +834,9 @@ export default async function SuperadminPage() {
           <SuperadminIndustryStatsManager initialStats={stats} />
         </section>
       </div>
+
+      {/* AI Monitor */}
+      <AiMonitorPanel />
     </div>
   );
 }

@@ -30,6 +30,36 @@ export default function ContentMapPage() {
   const [activeTab, setActiveTab] = useState<"summary" | "clusters" | "plan" | "table">("summary");
   const [expandedCluster, setExpandedCluster] = useState<string | null>(null);
 
+  // Load from list
+  const [lists, setLists] = useState<{ id: string; name: string }[]>([]);
+  const [listsOpen, setListsOpen] = useState(false);
+  const [listsLoading, setListsLoading] = useState(false);
+
+  async function openListPicker() {
+    setListsOpen(true);
+    if (lists.length > 0) return;
+    setListsLoading(true);
+    try {
+      const res = await fetch("/api/lists");
+      const data = await res.json() as { lists?: { id: string; name: string }[] };
+      setLists(data.lists ?? []);
+    } finally {
+      setListsLoading(false);
+    }
+  }
+
+  async function loadList(listId: string) {
+    setListsOpen(false);
+    try {
+      const res = await fetch(`/api/lists/${listId}/keywords`);
+      const data = await res.json() as { keywords?: { keyword: string }[] };
+      const kws = (data.keywords ?? []).map((k) => k.keyword).slice(0, 30);
+      setKeywords(kws.join("\n"));
+    } catch {
+      // ignore
+    }
+  }
+
   async function runAnalysis() {
     const kwList = keywords
       .split(/[\n,]+/)
@@ -81,9 +111,47 @@ export default function ContentMapPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 mb-6">
         <div className="grid gap-4 md:grid-cols-[1fr_280px]">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-              Keywords <span className="text-slate-400 normal-case font-normal">(one per line or comma-separated, max 30)</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Keywords <span className="text-slate-400 normal-case font-normal">(one per line or comma-separated, max 30)</span>
+              </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => void openListPicker()}
+                  className="text-xs font-semibold text-[#f15b27] border border-[#f15b27]/30 rounded-lg px-2.5 py-1 hover:bg-[#f15b27]/5 transition"
+                >
+                  Load from list ↓
+                </button>
+                {listsOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-10 bg-white border border-slate-200 rounded-xl shadow-lg min-w-[200px] py-1">
+                    {listsLoading ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">Loading…</div>
+                    ) : lists.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-slate-400">No saved lists</div>
+                    ) : (
+                      lists.map((l) => (
+                        <button
+                          key={l.id}
+                          type="button"
+                          onClick={() => void loadList(l.id)}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition"
+                        >
+                          {l.name}
+                        </button>
+                      ))
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setListsOpen(false)}
+                      className="w-full text-left px-4 py-2 text-xs text-slate-400 hover:bg-slate-50 border-t border-slate-100 transition"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
             <textarea
               className="w-full h-36 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 placeholder-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-[#f15b27]/30 focus:border-[#f15b27]"
               placeholder={"seo services\nlocal seo for dentists\nbest seo agency near me\nhow to improve google ranking"}

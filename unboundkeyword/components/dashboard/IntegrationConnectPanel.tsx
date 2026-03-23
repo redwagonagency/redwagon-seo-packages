@@ -25,7 +25,7 @@ export default function IntegrationConnectPanel({ ga4Connected, gscConnected }: 
       const data = (await res.json()) as { error?: string; needsGoogleAuth?: boolean };
       if (!res.ok) {
         if (data.needsGoogleAuth) {
-          window.location.href = "/api/auth/signin/google?callbackUrl=/dashboard";
+          window.location.href = `/api/auth/signin/google?callbackUrl=${encodeURIComponent(`/dashboard?autoConnect=${type}`)}`;
           return;
         }
         throw new Error(data.error || "Connection failed");

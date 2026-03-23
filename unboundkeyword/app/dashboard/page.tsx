@@ -1,7 +1,8 @@
 import Link from "next/link";
-import DashboardSearch from "@/components/dashboard/DashboardSearch";
 import IntegrationConnectPanel from "@/components/dashboard/IntegrationConnectPanel";
+import AutoConnectHandler from "@/components/dashboard/AutoConnectHandler";
 import { auth } from "@/lib/auth";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 import { buildJoeInsight, type JoeInsightResult } from "@/lib/joe-insights";
@@ -56,6 +57,10 @@ export default async function DashboardPage() {
   });
 
   return (
+    <>
+    <Suspense fallback={null}>
+      <AutoConnectHandler />
+    </Suspense>
     <div className="p-8 max-w-7xl">
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -101,8 +106,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <DashboardSearch />
-
       <div className="grid gap-4 md:grid-cols-2 mb-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">Keyword Lists</div>
@@ -127,20 +130,6 @@ export default async function DashboardPage() {
             <h2 className="text-base font-black text-slate-900 leading-snug">{joeInsight.headline}</h2>
             <p className="mt-1.5 text-sm leading-6 text-slate-600">{joeInsight.body}</p>
             <div className="mt-3 flex flex-wrap items-center gap-4">
-              <div className="flex gap-4">
-                <div className="text-center">
-                  <div className="text-lg font-black text-slate-900">{joeInsight.metric1.value}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric1.label}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-black text-slate-900">{joeInsight.metric2.value}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric2.label}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-black text-slate-900">{joeInsight.metric3.value}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric3.label}</div>
-                </div>
-              </div>
               <Link
                 href={
                   joeInsight.action === "Run AI Decision Report"
@@ -190,5 +179,6 @@ export default async function DashboardPage() {
 
 
     </div>
+    </>
   );
 }

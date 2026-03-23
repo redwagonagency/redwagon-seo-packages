@@ -4332,3 +4332,177 @@ export async function getCommonKeywords(
   });
   return { count: typeof totalCount === "number" ? totalCount : mapped.length, items: mapped };
 }
+
+// ─── Enhanced Site Audit Metrics (Domain Analytics) ──────────────────────────
+
+export interface EnhancedRankedKeyword {
+  keyword: string;
+  position: number;
+  volume: number | null;
+  difficulty: number | null;
+  cpc: number | null;
+  traffic: number | null; // Estimated organic traffic for this keyword
+  trafficCost: number | null; // Estimated cost if paid
+}
+
+export interface SiteAuditMetricsEnhanced {
+  domainRank: number; // 0-100, DataForSEO authority
+  rankedKeywords: number; // Total keywords ranking in top 100
+  estimatedTraffic: number; // Sum of traffic from ranked keywords
+  topRankedKeywords: EnhancedRankedKeyword[];
+  pagesIndexed: number;
+  spamScore: number;
+  backlinksTotal: number;
+  referringDomains: number;
+}
+
+export async function getSiteAuditMetricsEnhanced(domain: string): Promise<SiteAuditMetricsEnhanced> {
+  const normalizedDomain = normalizeDomainHost(domain);
+
+  // Parallel fetch: ranked keywords, indexed pages, and backlink metrics
+  const [rankedResult, indexedResult, backlinkResult] = await Promise.allSettled([
+    dfsPost("/domain_analytics/ranked_keywords/live", [
+      {
+        target: normalizedDomain,
+        limit: 100,
+        include_serp_info: true,
+        filters: [["rank_group", "<=", 100]], // Top 100 positions
+      },
+    ]),
+    dfsPost("/domain_analytics/page_indexed/live", [
+      { target: normalizedDomain },
+    ]),
+    getBacklinkProfile(domain, 50),
+  ]);
+
+  // Extract ranked keywords
+  let topRanked: EnhancedRankedKeyword[] = [];
+  let totalRanked = 0;
+  let totalTraffic = 0;
+
+  if (rankedResult.status === "fulfilled") {
+    const items = ((rankedResult.value?.tasks?.[0]?.result?.[0]?.items) ?? []) as Record<string, unknown>[];
+    totalRanked = typeof rankedResult.value?.tasks?.[0]?.result?.[0]?.total_count === "number"
+      ? rankedResult.value.tasks[0].result[0].total_count as number
+      : items.length;
+
+    topRanked = items.slice(0, 20).map((item) => {
+      const traffic = typeof item.estimated_traffic === "number" ? item.estimated_traffic : 0;
+      totalTraffic += traffic;
+      return {
+        keyword: String(item.keyword ?? ""),
+        position: typeof item.rank_group === "number" ? item.rank_group : 0,
+        volume: typeof item.search_volume === "number" ? item.search_volume : null,
+        difficulty: typeof item.keyword_difficulty === "number" ? item.keyword_difficulty : null,
+        cpc: typeof item.cpc === "number" ? item.cpc : null,
+        traffic: traffic > 0 ? traffic : null,
+        trafficCost: (traffic ?? 0) * (typeof item.cpc === "number" ? item.cpc : 0),
+      };
+    });
+  }
+
+  // Extract indexed pages
+  let pagesIndexed = 0;
+  if (indexedResult.status === "fulfilled") {
+    const result = (indexedResult.value?.tasks?.[0]?.result?.[0]) as Record<string, unknown> | undefined;
+    pagesIndexed = typeof result?.pages_indexed === "number" ? result.pages_indexed : 0;
+  }
+
+  // Extract backlink metrics
+  let backMetrics = { domainRank: 0, spamScore: 0, backlinksTotal: 0, referringDomains: 0 };
+  if (backlinkResult.status === "fulfilled") {
+    backMetrics = {
+      domainRank: backlinkResult.value.domainRank,
+      spamScore: backlinkResult.value.spamScore,
+      backlinksTotal: backlinkResult.value.backlinksTotal,
+      referringDomains: backlinkResult.value.referringDomains,
+    };
+  }
+
+  return {
+    domainRank: backMetrics.domainRank,
+    rankedKeywords: totalRanked,
+    estimatedTraffic: totalTraffic,
+    topRankedKeywords: topRanked,
+    pagesIndexed,
+    spamScore: backMetrics.spamScore,
+    backlinksTotal: backMetrics.backlinksTotal,
+    referringDomains: backMetrics.referringDomains,
+  };
+}
+
+// ─── SERP Features (Position 0, Rich Snippets, PAA, etc.) ─────────────────────
+
+export interface SerpFeatureItem {
+  keyword: string;
+  feature: "position_zero" | "rich_snippet" | "people_also_ask" | "knowledge_panel" | "review_snippet";
+  url: string;
+  position: number;
+}
+
+export async function getSerpFeaturesForDomain(
+  domain: string,
+  limit: number = 100
+): Promise<SerpFeatureItem[]> {
+  const normalizedDomain = normalizeDomainHost(domain);
+
+  const data = await dfsPost("/domain_analytics/serps/live", [
+    {
+      target: normalizedDomain,
+      limit,
+      include_serp_info: true,
+    },
+  ]);
+
+  const items = ((data?.tasks?.[0]?.result?.[0]?.items) ?? []) as Record<string, unknown>[];
+  const features: SerpFeatureItem[] = [];
+
+  for (const item of items) {
+    const keyword = String(item.keyword ?? "");
+    const serpInfo = (item.serp_info ?? {}) as Record<string, unknown>;
+    const serpFeatures = (serpInfo.serp_features ?? []) as Record<string, unknown>[];
+
+    for (const feature of serpFeatures) {
+      const featureType = String(feature.feature ?? "");
+      features.push({
+        keyword,
+        feature: (featureType as any) ?? "position_zero",
+        url: String(feature.url ?? feature.domain ?? ""),
+        position: typeof feature.rank_group === "number" ? feature.rank_group : 0,
+      });
+    }
+  }
+
+  return features;
+}
+
+// ─── Backlink Anchors (Top linking anchor text) ─────────────────────────────
+
+export interface BacklinkAnchorItem {
+  anchorText: string;
+  frequency: number;
+  dofollow: number;
+  nofollow: number;
+  backlinksCount: number;
+}
+
+export async function getBacklinkAnchorsForDomain(domain: string, limit: number = 50): Promise<BacklinkAnchorItem[]> {
+  const normalizedDomain = normalizeDomainHost(domain);
+
+  const data = await dfsPost("/backlinks/anchors/live", [
+    {
+      target: normalizedDomain,
+      limit,
+      include_subdomains: true,
+    },
+  ]);
+
+  const items = ((data?.tasks?.[0]?.result?.[0]?.items) ?? []) as Record<string, unknown>[];
+  return items.map((item) => ({
+    anchorText: String(item.anchor ?? item.anchor_text ?? ""),
+    frequency: typeof item.frequency === "number" ? item.frequency : 0,
+    dofollow: typeof item.dofollow === "number" ? item.dofollow : 0,
+    nofollow: typeof item.nofollow === "number" ? item.nofollow : 0,
+    backlinksCount: typeof item.backlinks === "number" ? item.backlinks : 0,
+  }));
+}

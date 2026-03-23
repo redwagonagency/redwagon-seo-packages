@@ -27,6 +27,10 @@ interface ListDetail {
   color: string;
 }
 
+type AiCluster = { theme: string; keywords: { keyword: string }[] };
+
+const INTENTS = ["informational", "commercial", "navigational", "transactional"];
+
 export default function ListDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [list, setList] = useState<ListDetail | null>(null);
@@ -36,6 +40,18 @@ export default function ListDetailPage() {
   const [addInput, setAddInput] = useState("");
   const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState("");
+
+  // Filters
+  const [intentFilter, setIntentFilter] = useState<string>("all");
+  const [volMin, setVolMin] = useState("");
+  const [volMax, setVolMax] = useState("");
+  const [kdMax, setKdMax] = useState("");
+
+  // AI grouping
+  const [groupMode, setGroupMode] = useState(false);
+  const [aiClusters, setAiClusters] = useState<AiCluster[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
 
   async function fetchData() {
     const [listRes, kwRes] = await Promise.all([
@@ -108,9 +124,42 @@ export default function ListDetailPage() {
     URL.revokeObjectURL(url);
   }
 
-  const filtered = keywords.filter((k) =>
-    k.keyword.toLowerCase().includes(search.toLowerCase())
-  );
+  async function runAiGrouping() {
+    if (keywords.length === 0) return;
+    setAiLoading(true);
+    setAiError("");
+    try {
+      const kwList = keywords.map((k) => k.keyword).slice(0, 30);
+      const res = await fetch("/api/decision-engine/content-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keywords: kwList }),
+      });
+      const data = await res.json() as { error?: string; clusters?: AiCluster[] };
+      if (!res.ok) throw new Error(data.error ?? "AI grouping failed");
+      setAiClusters(data.clusters ?? []);
+      setGroupMode(true);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI grouping failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function resetGrouping() {
+    setGroupMode(false);
+    setAiClusters([]);
+    setAiError("");
+  }
+
+  const filtered = keywords.filter((k) => {
+    if (!k.keyword.toLowerCase().includes(search.toLowerCase())) return false;
+    if (intentFilter !== "all" && k.intent?.toLowerCase() !== intentFilter) return false;
+    if (volMin && (k.volume ?? 0) < Number(volMin)) return false;
+    if (volMax && (k.volume ?? 0) > Number(volMax)) return false;
+    if (kdMax && (k.difficulty ?? 0) > Number(kdMax)) return false;
+    return true;
+  });
 
   if (loading) return <div className="p-8 text-slate-400">Loading…</div>;
   if (!list) return <div className="p-8 text-red-500">List not found</div>;
@@ -158,23 +207,135 @@ export default function ListDetailPage() {
         </div>
       </form>
 
-      {/* Search */}
-      <div className="mb-4 max-w-xs">
-        <Input
-          placeholder="Filter keywords…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Filters bar */}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Search</label>
+          <Input
+            placeholder="Filter keywords…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-40"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Intent</label>
+          <select
+            value={intentFilter}
+            onChange={(e) => setIntentFilter(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f15b27]/30"
+          >
+            <option value="all">All</option>
+            {INTENTS.map((i) => <option key={i} value={i} className="capitalize">{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Vol min</label>
+          <input
+            type="number"
+            min={0}
+            placeholder="0"
+            value={volMin}
+            onChange={(e) => setVolMin(e.target.value)}
+            className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f15b27]/30"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">Vol max</label>
+          <input
+            type="number"
+            min={0}
+            placeholder="∞"
+            value={volMax}
+            onChange={(e) => setVolMax(e.target.value)}
+            className="w-24 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f15b27]/30"
+          />
+        </div>
+        <div>
+          <label className="block text-[10px] uppercase tracking-wider text-slate-400 mb-1">KD ≤</label>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            placeholder="100"
+            value={kdMax}
+            onChange={(e) => setKdMax(e.target.value)}
+            className="w-20 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#f15b27]/30"
+          />
+        </div>
+        <div className="ml-auto flex gap-2">
+          {groupMode ? (
+            <button
+              type="button"
+              onClick={resetGrouping}
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+            >
+              ✕ Clear Groups
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void runAiGrouping()}
+              disabled={aiLoading || keywords.length === 0}
+              className="rounded-xl bg-[#f15b27] text-white px-4 py-2 text-sm font-bold hover:bg-[#d94e20] transition disabled:opacity-60"
+            >
+              {aiLoading ? "Grouping…" : "✦ Group by AI"}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Keywords table */}
-      {filtered.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
-          {keywords.length === 0 ? "No keywords yet — add some above or discover them" : "No results match your filter"}
+      {aiError && (
+        <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{aiError}</div>
+      )}
+
+      {/* AI Grouped view */}
+      {groupMode && aiClusters.length > 0 && (
+        <div className="space-y-3 mb-6">
+          {aiClusters.map((cluster) => {
+            const clusterKws = cluster.keywords.map((c) => c.keyword);
+            const matchedKws = keywords.filter((k) => clusterKws.includes(k.keyword));
+            if (matchedKws.length === 0) return null;
+            return (
+              <div key={cluster.theme} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-3 bg-slate-50">
+                  <span className="h-2 w-2 rounded-full bg-[#f15b27] shrink-0" />
+                  <span className="font-black text-slate-900 capitalize">{cluster.theme}</span>
+                  <span className="text-xs text-slate-400">{matchedKws.length} keywords</span>
+                </div>
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-slate-50">
+                    {matchedKws.map((kw) => (
+                      <tr key={kw.id} className="hover:bg-slate-50 transition">
+                        <td className="px-4 py-2 text-slate-800 font-medium">{kw.keyword}</td>
+                        <td className="px-4 py-2 text-right text-slate-500 text-xs">{kw.volume != null ? formatNumber(kw.volume) : "—"}</td>
+                        <td className="px-4 py-2 text-center">
+                          {kw.difficulty != null ? (
+                            <span className={cn("text-xs font-bold px-2 py-0.5 rounded", difficultyColor(kw.difficulty))}>{kw.difficulty}</span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {kw.intent ? <Badge variant={intentBadgeVariant(kw.intent)}>{kw.intent}</Badge> : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
+      )}
+
+      {/* Flat Keywords table (shown when not in group mode) */}
+      {!groupMode && (
+        filtered.length === 0 ? (
+          <div className="text-center py-16 text-slate-400">
+            {keywords.length === 0 ? "No keywords yet — add some above or discover them" : "No results match your filter"}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50">
                 <th className="px-4 py-3 text-left w-6">
@@ -237,7 +398,8 @@ export default function ListDetailPage() {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
+        )
       )}
     </div>
   );
