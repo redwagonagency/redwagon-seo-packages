@@ -48,6 +48,13 @@ export default async function SuperadminPage() {
     competitorCacheCount,
     discoveryKeywordCount,
     uncategorizedKeywordsCount,
+    apiLogsWithRequest,
+    apiLogsWithResponse,
+    apiLogsFailed,
+    apiByUseCase,
+    recentApiPayloads,
+    keywordListsBySite,
+    discoveryBySite,
   ] = await Promise.all([
     prisma.user.findMany({
       select: { id: true, name: true, email: true, createdAt: true },
@@ -121,6 +128,37 @@ export default async function SuperadminPage() {
     prisma.keywordInList.count({
       where: { list: { name: "Uncategorized" } },
     }).catch(() => 0),
+    prisma.apiQueryLog.count({ where: { requestJson: { not: null } } }).catch(() => 0),
+    prisma.apiQueryLog.count({ where: { responseJson: { not: null } } }).catch(() => 0),
+    prisma.apiQueryLog.count({ where: { success: false } }).catch(() => 0),
+    prisma.apiQueryLog.groupBy({
+      by: ["provider", "useCase", "success"],
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 200,
+    }).catch(() => []),
+    prisma.apiQueryLog.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      include: {
+        user: { select: { email: true } },
+        site: { select: { domain: true } },
+      },
+    }).catch(() => []),
+    prisma.keywordList.findMany({
+      select: {
+        siteId: true,
+        _count: { select: { keywords: true } },
+      },
+      where: { siteId: { not: null } },
+    }).catch(() => []),
+    prisma.discoveryKeyword.groupBy({
+      by: ["siteId"],
+      _count: { id: true },
+      where: { siteId: { not: null } },
+      orderBy: { _count: { id: "desc" } },
+      take: 500,
+    }).catch(() => []),
   ]);
 
   // User signup buckets by month (last 6 months)
@@ -159,6 +197,41 @@ export default async function SuperadminPage() {
     };
   });
   const totalEstimatedCost = endpointCostRows.reduce((s, e) => s + e.estimated, 0);
+  const requestCoverage = apiLogCount > 0 ? (apiLogsWithRequest / apiLogCount) * 100 : 0;
+  const responseCoverage = apiLogCount > 0 ? (apiLogsWithResponse / apiLogCount) * 100 : 0;
+
+  const useCaseMap = new Map<string, { provider: string; useCase: string; total: number; success: number; failed: number }>();
+  for (const row of (apiByUseCase as { provider: string; useCase: string; success: boolean; _count: { id: number } }[])) {
+    const key = `${row.provider}::${row.useCase}`;
+    const current = useCaseMap.get(key) ?? { provider: row.provider, useCase: row.useCase, total: 0, success: 0, failed: 0 };
+    current.total += row._count.id;
+    if (row.success) current.success += row._count.id;
+    else current.failed += row._count.id;
+    useCaseMap.set(key, current);
+  }
+  const useCaseRows = [...useCaseMap.values()].sort((a, b) => b.total - a.total).slice(0, 40);
+
+  const siteKeywordTotals = new Map<string, number>();
+  for (const row of (keywordListsBySite as { siteId: string | null; _count: { keywords: number } }[])) {
+    if (!row.siteId) continue;
+    siteKeywordTotals.set(row.siteId, (siteKeywordTotals.get(row.siteId) ?? 0) + row._count.keywords);
+  }
+
+  const siteDiscoveryTotals = new Map<string, number>();
+  for (const row of (discoveryBySite as { siteId: string | null; _count: { id: number } }[])) {
+    if (!row.siteId) continue;
+    siteDiscoveryTotals.set(row.siteId, row._count.id);
+  }
+
+  const domainStorageRows = projectsWithDomains
+    .map((project) => ({
+      domain: project.domain,
+      owner: userEmailMap.get(project.userId) ?? "—",
+      keywords: siteKeywordTotals.get(project.id) ?? 0,
+      discovery: siteDiscoveryTotals.get(project.id) ?? 0,
+    }))
+    .sort((a, b) => (b.keywords + b.discovery) - (a.keywords + a.discovery))
+    .slice(0, 50);
 
   const searchByUserMap = new Map(
     (searchByUser as { userId: string; _count: { id: number } }[]).map((row) => [row.userId, row._count.id])
@@ -196,10 +269,10 @@ export default async function SuperadminPage() {
   return (
     <div className="p-8 space-y-6 max-w-7xl">
       {/* Header */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-xs uppercase tracking-[0.18em] text-[#f15b27] font-black">Superadmin</p>
-        <h1 className="mt-2 text-3xl font-black text-slate-900">SAAS Control Center</h1>
-        <p className="mt-1 text-sm text-slate-500">Platform-wide metrics, stored data output, API usage &amp; cost estimates</p>
+      <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-950 via-slate-900 to-[#2a1206] p-6 shadow-2xl shadow-[#f15b27]/15">
+        <p className="text-xs uppercase tracking-[0.2em] text-[#f15b27] font-black">Superadmin</p>
+        <h1 className="mt-2 text-3xl font-black text-white">Data Command Center</h1>
+        <p className="mt-1 text-sm text-slate-300">Full API payload capture, user/domain storage visibility, and use-case level observability.</p>
       </div>
 
       {/* KPI grid */}
@@ -209,11 +282,11 @@ export default async function SuperadminPage() {
           { label: "Projects", value: fmt(projectCount) },
           { label: "Tracked Keywords", value: fmt(keywordCount) },
           { label: "KW Intelligence", value: fmt(kwIntelCount), sub: "stored records" },
-          { label: "Search History", value: fmt(userSearchCount), sub: "user searches" },
-          { label: "Industry Stats", value: fmt(statCount) },
-          { label: "API Calls", value: fmt(apiLogCount), sub: `~$${totalEstimatedCost.toFixed(2)} est.`, color: "text-amber-500" },
+          { label: "API Req Coverage", value: `${requestCoverage.toFixed(1)}%`, sub: `${fmt(apiLogsWithRequest)} / ${fmt(apiLogCount)}` },
+          { label: "API Resp Coverage", value: `${responseCoverage.toFixed(1)}%`, sub: `${fmt(apiLogsWithResponse)} / ${fmt(apiLogCount)}`, color: responseCoverage >= 99.9 ? "text-emerald-500" : "text-amber-500" },
+          { label: "API Failures", value: fmt(apiLogsFailed), sub: `~$${totalEstimatedCost.toFixed(2)} est.`, color: apiLogsFailed > 0 ? "text-rose-500" : "text-emerald-500" },
         ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/60">
             <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
             <p className="mt-1 text-3xl font-black text-slate-900">{card.value}</p>
             {card.sub && <p className={`text-[11px] mt-1 ${card.color ?? "text-slate-400"}`}>{card.sub}</p>}
@@ -320,6 +393,66 @@ export default async function SuperadminPage() {
             <p className="mt-1 text-2xl font-black text-slate-900">{card.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Domain Storage Coverage</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Per domain records across keyword and discovery stores.</p>
+          </div>
+          <div className="overflow-y-auto max-h-[300px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Domain</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Keywords</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Discovery</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Owner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {domainStorageRows.map((row) => (
+                  <tr key={`${row.domain}-${row.owner}`} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-slate-700">{row.domain}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-600">{fmt(row.keywords)}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-600">{fmt(row.discovery)}</td>
+                    <td className="px-4 py-2.5 text-[10px] text-slate-400">{row.owner}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">API Use Case Capture</h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">Every provider call grouped by use case, with success/failure visibility.</p>
+          </div>
+          <div className="overflow-y-auto max-h-[300px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Provider</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Use Case</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Total</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Fail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {useCaseRows.map((row) => (
+                  <tr key={`${row.provider}-${row.useCase}`} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-[10px] font-black uppercase text-slate-500">{row.provider}</td>
+                    <td className="px-4 py-2.5 text-xs font-mono text-slate-700">{row.useCase}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-700">{fmt(row.total)}</td>
+                    <td className={`px-4 py-2.5 text-right text-xs tabular-nums font-black ${row.failed > 0 ? "text-rose-500" : "text-emerald-500"}`}>{fmt(row.failed)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       {/* Top searched keywords */}
@@ -506,6 +639,70 @@ export default async function SuperadminPage() {
           )}
         </section>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">API Payload Inspector</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">Stored request/response payload previews by user, domain, provider, and use case.</p>
+        </div>
+        {recentApiPayloads.length === 0 ? (
+          <div className="px-6 py-8 text-center text-sm text-slate-400">No API payload records available.</div>
+        ) : (
+          <div className="overflow-y-auto max-h-[420px]">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">When</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Use Case</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">User / Domain</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Status</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Payload</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(recentApiPayloads as Array<{
+                  id: string;
+                  createdAt: Date;
+                  provider: string;
+                  useCase: string;
+                  endpoint: string;
+                  statusCode: number | null;
+                  success: boolean;
+                  resultCount: number | null;
+                  requestJson: string | null;
+                  responseJson: string | null;
+                  user?: { email: string | null } | null;
+                  site?: { domain: string } | null;
+                }>).map((row) => (
+                  <tr key={row.id} className="border-b border-slate-50 align-top hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-[10px] text-slate-400">{new Date(row.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="text-[10px] uppercase font-black text-slate-500">{row.provider}</div>
+                      <div className="text-xs font-mono text-slate-700">{row.useCase}</div>
+                      <div className="text-[10px] text-slate-400 max-w-[240px] truncate">{row.endpoint}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-[10px] text-slate-500">
+                      <div>{row.user?.email ?? "—"}</div>
+                      <div>{row.site?.domain ?? "no-site"}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums">
+                      <div className={row.success ? "text-emerald-600 font-black" : "text-rose-500 font-black"}>{row.statusCode ?? "—"}</div>
+                      <div className="text-[10px] text-slate-400">items: {row.resultCount ?? "—"}</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-[10px] text-slate-600 max-w-[420px]">
+                      <details>
+                        <summary className="cursor-pointer text-[#f15b27] font-semibold">View request/response</summary>
+                        <pre className="mt-1 whitespace-pre-wrap break-words bg-slate-50 rounded p-2 border border-slate-200">REQ: {(row.requestJson ?? "null").slice(0, 1200)}</pre>
+                        <pre className="mt-1 whitespace-pre-wrap break-words bg-slate-50 rounded p-2 border border-slate-200">RES: {(row.responseJson ?? "null").slice(0, 1200)}</pre>
+                      </details>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">

@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         Promise.allSettled(
           seeds.map((s) => getKeywordIdeasLabs(s, location, language, 80))
         )
-      );
+      , { siteId: selectedSiteId, useCase: "product_keywords" });
     const allIdeas = ideaResults
       .filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof getKeywordIdeasLabs>>> => result.status === "fulfilled")
       .map((result) => result.value);
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     // Fallback source if primary ideas endpoint returned sparse results
     if (rows.length < 20) {
-      const fallbackSuggestions = await runWithApiUsageUserContext(userId, () => getKeywordSuggestions(keyword, location, language, 120).catch(() => []));
+      const fallbackSuggestions = await runWithApiUsageUserContext(userId, () => getKeywordSuggestions(keyword, location, language, 120).catch(() => []), { siteId: selectedSiteId, useCase: "product_keywords_suggestions" });
       for (const suggestion of fallbackSuggestions) {
         const key = suggestion.keyword.toLowerCase().trim();
         if (!key || seen.has(key)) continue;
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     // Try to get intent data for top 20
     const top50 = rows.slice(0, 50).map((r) => r.keyword);
     try {
-      const intentData = await runWithApiUsageUserContext(userId, () => getSearchIntent(top50, location, language));
+      const intentData = await runWithApiUsageUserContext(userId, () => getSearchIntent(top50, location, language), { siteId: selectedSiteId, useCase: "product_keywords_intent" });
       for (const kw of rows) {
         const match = intentData.find((i) => i.keyword.toLowerCase() === kw.keyword.toLowerCase());
         if (match) kw.intent = match.intent;

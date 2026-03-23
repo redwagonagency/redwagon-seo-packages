@@ -31,6 +31,7 @@ model User {
   dailyIntelDigests DailyIntelDigest[]
   keywordIntelligence KeywordIntelligence[]
   competitorAnalysisCache CompetitorAnalysisCache[]
+  apiQueryLogs ApiQueryLog[]
 }
 
 model SiteProject {
@@ -54,6 +55,7 @@ model SiteProject {
   selectedByPreferences UserPreference[] @relation("SelectedSite")
   decisionRuns DecisionRun[]
   dailyIntelDigests DailyIntelDigest[]
+  apiQueryLogs ApiQueryLog[]
 
   @@index([userId, updatedAt])
   @@unique([userId, domain])
@@ -325,16 +327,34 @@ model KeywordIntelligence {
 }
 
 model ApiQueryLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  endpoint    String
-  queryKey    String
-  durationMs  Int?
-  createdAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  userId          String?
+  siteId          String?
+  provider        String   @default("dataforseo")
+  method          String   @default("POST")
+  endpoint        String
+  queryKey        String
+  useCase         String   @default("unknown")
+  durationMs      Int?
+  statusCode      Int?
+  success         Boolean  @default(true)
+  resultCount     Int?
+  requestJson     String?
+  responseJson    String?
+  errorMessage    String?
+  taskIdsJson     String?
+  createdAt       DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  site SiteProject? @relation(fields: [siteId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([siteId])
+  @@index([provider])
   @@index([endpoint])
+  @@index([useCase])
   @@index([createdAt])
+  @@index([userId, useCase])
 }
 
 // Cached competitor analysis results — stored per user per domain to avoid repeated API calls

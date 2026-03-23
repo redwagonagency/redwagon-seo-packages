@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
         // Keyword suggestions (DataForSEO Labs)
         getKeywordSuggestions(seed, location, language, 30).catch(() => []),
       ])
-    );
+    , { siteId: selectedSite?.id ?? null, useCase: "keyword_ideas" });
 
     const labsItems = labsResult.status === "fulfilled" ? labsResult.value : [];
     const bingKFK = bingKFKResult.status === "fulfilled" ? bingKFKResult.value : [];
@@ -253,7 +253,7 @@ export async function POST(req: NextRequest) {
       .map((k) => k.keyword);
 
     if (topKeywords.length > 0) {
-      const bingPerf = await runWithApiUsageUserContext(userId, () => getBingKeywordPerformanceBatch(topKeywords, location, language).catch(() => []));
+      const bingPerf = await runWithApiUsageUserContext(userId, () => getBingKeywordPerformanceBatch(topKeywords, location, language).catch(() => []), { siteId: selectedSite?.id ?? null, useCase: "keyword_ideas_bing_performance" });
       for (const bp of bingPerf) {
         const k = bp.keyword.toLowerCase();
         const existing = kwMap.get(k);

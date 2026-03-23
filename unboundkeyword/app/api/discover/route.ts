@@ -427,7 +427,7 @@ export async function POST(req: NextRequest) {
           : Promise.resolve([]),
         getGoogleAutocompleteAZ(seedClean, Number(location), String(language)),
       ])
-    );
+    , { siteId: selectedSiteId, useCase: "discover" });
 
     const suggestionsRaw: KeywordSuggestionItem[] =
       suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
@@ -480,7 +480,7 @@ export async function POST(req: NextRequest) {
 
     const intentMap: Record<string, string> = {};
     if (allKeywords.length > 0) {
-      const intentData = await runWithApiUsageUserContext(userId, () => getSearchIntent(allKeywords, location, language).catch(() => []));
+      const intentData = await runWithApiUsageUserContext(userId, () => getSearchIntent(allKeywords, location, language).catch(() => []), { siteId: selectedSiteId, useCase: "discover_intent" });
       for (const item of intentData) {
         if (item.keyword) intentMap[item.keyword.toLowerCase()] = item.intent;
       }

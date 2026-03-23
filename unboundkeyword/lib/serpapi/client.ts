@@ -3,6 +3,8 @@
 // Uses the same DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD as the main client.
 
 const DFS_BASE = "https://api.dataforseo.com/v3";
+import { getApiUsageContext } from "@/lib/api-usage-context";
+import { logApiQuery } from "@/lib/api-query-log";
 
 function getAuthHeaders() {
   const login = process.env.DATAFORSEO_LOGIN ?? "";
@@ -12,6 +14,8 @@ function getAuthHeaders() {
 }
 
 async function dfsPost(endpoint: string, body: unknown) {
+  const startedAt = Date.now();
+  const context = getApiUsageContext();
   const res = await fetch(`${DFS_BASE}${endpoint}`, {
     method: "POST",
     headers: getAuthHeaders(),
@@ -20,9 +24,47 @@ async function dfsPost(endpoint: string, body: unknown) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
+    void logApiQuery({
+      userId: context.userId ?? null,
+      siteId: context.siteId ?? null,
+      provider: "dataforseo",
+      method: "POST",
+      endpoint,
+      queryKey: endpoint,
+      useCase: context.useCase ?? "unknown",
+      durationMs: Date.now() - startedAt,
+      statusCode: res.status,
+      success: false,
+      requestBody: body,
+      responseBody: text ? { error: text } : null,
+      errorMessage: `DataForSEO ${endpoint} error ${res.status}: ${text.slice(0, 200)}`,
+    });
     throw new Error(`DataForSEO ${endpoint} error ${res.status}: ${text.slice(0, 200)}`);
   }
-  return res.json();
+  const json = await res.json();
+  const tasks = Array.isArray((json as { tasks?: unknown[] })?.tasks)
+    ? ((json as { tasks: Array<{ id?: string; result?: Array<{ items?: unknown[] }> }> }).tasks ?? [])
+    : [];
+  const firstItems = tasks[0]?.result?.[0]?.items;
+
+  void logApiQuery({
+    userId: context.userId ?? null,
+    siteId: context.siteId ?? null,
+    provider: "dataforseo",
+    method: "POST",
+    endpoint,
+    queryKey: endpoint,
+    useCase: context.useCase ?? "unknown",
+    durationMs: Date.now() - startedAt,
+    statusCode: res.status,
+    success: true,
+    resultCount: Array.isArray(firstItems) ? firstItems.length : null,
+    requestBody: body,
+    responseBody: json,
+    taskIds: tasks.map((task) => task.id).filter((taskId): taskId is string => Boolean(taskId)),
+  });
+
+  return json;
 }
 
 /** Map a human-readable location string to a DataForSEO location_code. */

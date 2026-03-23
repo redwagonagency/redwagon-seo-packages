@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
         needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
         getRankedKeywords(domain, location, language, 300),
       ])
-    );
+    , { siteId: selectedSite?.id ?? null, useCase: "competitor_intelligence" });
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
     const suggested = suggestedResult.status === "fulfilled" ? suggestedResult.value : [];
@@ -167,13 +167,13 @@ export async function POST(req: NextRequest) {
         getBulkTrafficEstimation(allTargets.map((t) => ({ target: t })), location, language),
         getHistoricalBulkTraffic(allTargets, location, language),
       ])
-    );
+    , { siteId: selectedSite?.id ?? null, useCase: "competitor_intelligence_traffic" });
     // Pre-fetch ranked keywords for all competitors in parallel
     const competitorRankedResults = await runWithApiUsageUserContext(userId, () =>
       Promise.allSettled(
         chosenCompetitors.map((cd) => getRankedKeywords(cd, location, language, 300))
       )
-    );
+    , { siteId: selectedSite?.id ?? null, useCase: "competitor_intelligence_ranked" });
 
     const bulkTraffic = bulkTrafficResult.status === "fulfilled" ? bulkTrafficResult.value : [];
     const bulkTrafficMap = new Map(bulkTraffic.map((b) => [b.target, b]));
@@ -205,7 +205,7 @@ export async function POST(req: NextRequest) {
 
     const competitorRows: CompetitorRow[] = await Promise.all(
       chosenCompetitors.map(async (compDomain, idx): Promise<CompetitorRow> => {
-        const backlinkResult = await runWithApiUsageUserContext(userId, () => getBacklinkTotalSummary(compDomain).catch(() => ({ backlinksTotal: 0, referringDomains: 0, domainRank: 0 })));
+        const backlinkResult = await runWithApiUsageUserContext(userId, () => getBacklinkTotalSummary(compDomain).catch(() => ({ backlinksTotal: 0, referringDomains: 0, domainRank: 0 })), { siteId: selectedSite?.id ?? null, useCase: "competitor_intelligence_backlinks" });
 
         const rankedKws: RankedKwItem[] =
           competitorRankedResults[idx]?.status === "fulfilled"

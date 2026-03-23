@@ -1,5 +1,6 @@
 const DFS_BASE = "https://api.dataforseo.com/v3";
-import { getApiUsageUserId } from "@/lib/api-usage-context";
+import { getApiUsageContext } from "@/lib/api-usage-context";
+import { logApiQuery } from "@/lib/api-query-log";
 
 type DfsRecord = Record<string, unknown>;
 
@@ -13,33 +14,66 @@ function getAuthHeaders() {
   };
 }
 
-async function logApiCall(endpoint: string, durationMs: number) {
-  try {
-    const { prisma } = await import("@/lib/prisma");
-    const userId = getApiUsageUserId();
-    await prisma.apiQueryLog.create({
-      data: { endpoint, queryKey: endpoint, durationMs, userId },
-    });
-  } catch {
-    // logging is best-effort, never block
-  }
+function extractTaskIds(response: unknown): string[] {
+  const tasks = Array.isArray((response as { tasks?: unknown[] })?.tasks)
+    ? ((response as { tasks: Array<{ id?: string }> }).tasks ?? [])
+    : [];
+  return tasks.map((task) => task?.id).filter((id): id is string => Boolean(id));
 }
 
 async function dfsRequest(method: "GET" | "POST", endpoint: string, body?: unknown) {
   const start = Date.now();
+  const context = getApiUsageContext();
   const res = await fetch(`${DFS_BASE}${endpoint}`, {
     method,
     headers: getAuthHeaders(),
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(45000),
   });
+  const durationMs = Date.now() - start;
+
   if (!res.ok) {
     const errorText = await res.text().catch(() => "");
+    void logApiQuery({
+      userId: context.userId ?? null,
+      siteId: context.siteId ?? null,
+      provider: "dataforseo",
+      method,
+      endpoint,
+      queryKey: endpoint,
+      useCase: context.useCase ?? "unknown",
+      durationMs,
+      statusCode: res.status,
+      success: false,
+      requestBody: body,
+      responseBody: errorText ? { error: errorText } : null,
+      errorMessage: `DataForSEO ${endpoint} failed: ${res.status}${errorText ? ` ${errorText}` : ""}`,
+    });
     throw new Error(`DataForSEO ${endpoint} failed: ${res.status}${errorText ? ` ${errorText}` : ""}`);
   }
+
   const json = await res.json();
-  // Log async — don't await so we don't slow down responses
-  void logApiCall(endpoint, Date.now() - start);
+  const firstResult = getFirstTaskResult(json);
+  const resultCount = Array.isArray(firstResult?.items) ? firstResult.items.length : null;
+
+  // Log async — never block the request path.
+  void logApiQuery({
+    userId: context.userId ?? null,
+    siteId: context.siteId ?? null,
+    provider: "dataforseo",
+    method,
+    endpoint,
+    queryKey: endpoint,
+    useCase: context.useCase ?? "unknown",
+    durationMs,
+    statusCode: res.status,
+    success: true,
+    resultCount,
+    requestBody: body,
+    responseBody: json,
+    taskIds: extractTaskIds(json),
+  });
+
   return json;
 }
 

@@ -211,7 +211,7 @@ export async function POST(req: NextRequest) {
       getAutocompleteBatch(comparisonQueries, location, language),
       getPeopleAlsoAskQuestions(seed, location, language, 60),
     ])
-  );
+  , { siteId: selectedSiteId, useCase: "keyword_overview" });
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
     if (result.status === "rejected") {

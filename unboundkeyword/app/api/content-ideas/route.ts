@@ -68,14 +68,14 @@ export async function POST(req: NextRequest) {
       getContentAnalysisPhraseTrendsLive(seed),
       getSerpLiveData(seed, location, language, 10),
     ])
-  );
+  , { siteId: selectedSiteId, useCase: "content_ideas" });
 
   const ideas = ideasResult.status === "fulfilled" ? ideasResult.value : [];
   const trendsRaw = trendsResult.status === "fulfilled" ? trendsResult.value : { items: [] };
   const serpData = serpResult.status === "fulfilled" ? serpResult.value : { organic: [], paa: [] };
   const topIdeaKeywords = ideas.slice(0, 50).map((idea) => idea.keyword).filter(Boolean);
   const intentData = topIdeaKeywords.length > 0
-    ? await runWithApiUsageUserContext(userId, () => getSearchIntent(topIdeaKeywords, location, language).catch(() => []))
+    ? await runWithApiUsageUserContext(userId, () => getSearchIntent(topIdeaKeywords, location, language).catch(() => []), { siteId: selectedSiteId, useCase: "content_ideas_intent" })
     : [];
 
   // Build trend direction map from phrase trends (last 4 periods)
