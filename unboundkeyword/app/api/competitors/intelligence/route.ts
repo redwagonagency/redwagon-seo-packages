@@ -8,6 +8,7 @@ import {
   getHistoricalBulkTraffic,
   getBacklinkTotalSummary,
   getCommonKeywords,
+  getRankedKeywords,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 
@@ -19,6 +20,14 @@ function normalizeDomain(value: string | undefined): string {
     .trim()
     .toLowerCase();
 }
+
+export type RankedKwItem = {
+  keyword: string;
+  position: number;
+  searchVolume: number;
+  cpc: number | null;
+  url: string | null;
+};
 
 export type CompetitorRow = {
   domain: string;
@@ -40,6 +49,7 @@ export type TrafficHistoryPoint = {
 export type CompetitorAnalysisResponse = {
   domain: string;
   yourOverview: { organicTraffic: number; organicKeywords: number; domainRank: number; etv: number } | null;
+  yourRankedKeywords: RankedKwItem[];
   competitors: CompetitorRow[];
   monthlyTraffic: TrafficHistoryPoint[];
   suggestedCompetitors: string[];
@@ -63,6 +73,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         domain: "",
         yourOverview: null,
+        yourRankedKeywords: [],
         competitors: [],
         monthlyTraffic: [],
         suggestedCompetitors: [],
@@ -86,15 +97,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Get your domain overview + suggested competitors simultaneously
+    // Get your domain overview + suggested competitors + your ranked keywords simultaneously
     const needSuggested = customCompetitors.length === 0 && savedCompetitors.length === 0;
-    const [yourOverviewResult, suggestedResult] = await Promise.allSettled([
+    const [yourOverviewResult, suggestedResult, yourRankedResult] = await Promise.allSettled([
       getDomainRankOverview(domain, location, language),
       needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
+      getRankedKeywords(domain, location, language, 100),
     ]);
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
     const suggested = suggestedResult.status === "fulfilled" ? suggestedResult.value : [];
+    const yourRankedKeywords: RankedKwItem[] = yourRankedResult.status === "fulfilled" ? yourRankedResult.value : [];
     const suggestedDomains = suggested.map((s) => normalizeDomain(s.domain)).filter(Boolean);
 
     const chosenCompetitors = (
@@ -109,6 +122,7 @@ export async function POST(req: NextRequest) {
       return Response.json({
         domain,
         yourOverview,
+        yourRankedKeywords,
         competitors: [],
         monthlyTraffic: [],
         suggestedCompetitors: suggestedDomains.slice(0, 15),
@@ -181,6 +195,7 @@ export async function POST(req: NextRequest) {
     return Response.json({
       domain,
       yourOverview,
+      yourRankedKeywords,
       competitors: competitorRows,
       monthlyTraffic,
       suggestedCompetitors: suggestedDomains.slice(0, 15),

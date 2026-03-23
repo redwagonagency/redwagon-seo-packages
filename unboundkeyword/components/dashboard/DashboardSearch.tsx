@@ -21,13 +21,11 @@ export default function DashboardSearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<Array<{ keyword: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; source: string }>>([]);
-  const [aiPhrases, setAiPhrases] = useState<Array<{ phrase: string; category: string; volume: number | null; cpc: number | null; difficulty: number | null; intent: string | null; opportunityScore: number; recommendation: string }>>([]);
-  const [hashtags, setHashtags] = useState<Array<{ keyword: string; hashtag: string; platform: string; estPosts: number; intent: string | null }>>([]);
+const [hashtags, setHashtags] = useState<Array<{ keyword: string; hashtag: string; platform: string; estPosts: number; intent: string | null }>>([]);
 
-  const hasResults = results.length > 0 || aiPhrases.length > 0 || hashtags.length > 0;
+  const hasResults = results.length > 0 || hashtags.length > 0;
 
-  const topResults = useMemo(() => results.slice(0, 30), [results]);
-  const topAiPhrases = useMemo(() => aiPhrases.slice(0, 20), [aiPhrases]);
+  const topResults = useMemo(() => results.slice(0, 50), [results]);
   const topHashtags = useMemo(() => hashtags.slice(0, 24), [hashtags]);
 
   async function runInlineSearch(term: string) {
@@ -53,11 +51,9 @@ export default function DashboardSearch() {
       if (!res.ok) throw new Error(data.error || "Search failed");
 
       setResults(data.results ?? []);
-      setAiPhrases(data.aiPhraseAnalysis ?? []);
       setHashtags(data.hashtagSuggestions ?? []);
     } catch (e) {
       setResults([]);
-      setAiPhrases([]);
       setHashtags([]);
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
@@ -220,29 +216,36 @@ export default function DashboardSearch() {
 
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100">
-              <h3 className="text-sm font-black text-slate-900">AI Query Playbook</h3>
-              <p className="text-xs text-slate-500 mt-1">Ranked conversational prompts with priority score and next-step recommendation.</p>
+              <h3 className="text-sm font-black text-slate-900">Question Keywords</h3>
+              <p className="text-xs text-slate-500 mt-1">Real searcher questions ranked by volume — great for FAQ, featured snippets &amp; blog posts.</p>
             </div>
             <div className="max-h-[360px] overflow-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Phrase</th>
-                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Score</th>
-                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Category</th>
+                    <th className="px-3 py-2 text-left text-[11px] text-slate-500 uppercase tracking-wider">Question</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">Vol</th>
+                    <th className="px-3 py-2 text-right text-[11px] text-slate-500 uppercase tracking-wider">KD</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topAiPhrases.map((row) => (
-                    <tr key={row.phrase} className="border-t border-slate-100">
-                      <td className="px-3 py-2 text-slate-900 font-medium">
-                        <div>{row.phrase}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">{row.recommendation}</div>
+                  {topResults
+                    .filter(r => /^(how|what|why|when|where|who|which|can|is|are|does|do|should|will|would|could)\b/i.test(r.keyword))
+                    .slice(0, 20)
+                    .map((row) => (
+                    <tr key={`q-${row.keyword}`} className="border-t border-slate-100">
+                      <td className="px-3 py-2 text-slate-900 font-medium">{row.keyword}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{row.volume != null ? row.volume.toLocaleString() : "—"}</td>
+                      <td className="px-3 py-2 text-right">
+                        {row.difficulty != null ? (
+                          <span className={`font-bold ${row.difficulty < 30 ? "text-emerald-600" : row.difficulty < 60 ? "text-amber-600" : "text-red-500"}`}>{row.difficulty}</span>
+                        ) : "—"}
                       </td>
-                      <td className="px-3 py-2 text-right text-slate-700 font-bold">{row.opportunityScore}</td>
-                      <td className="px-3 py-2 text-right text-slate-700 capitalize">{row.category}</td>
                     </tr>
                   ))}
+                  {topResults.filter(r => /^(how|what|why|when|where|who|which|can|is|are|does|do|should|will|would|could)\b/i.test(r.keyword)).length === 0 && (
+                    <tr><td colSpan={3} className="px-3 py-8 text-center text-xs text-slate-400">Run a search to see question keywords</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>

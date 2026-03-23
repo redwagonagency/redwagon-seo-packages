@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import SiteSwitcher from "@/components/dashboard/SiteSwitcher";
 import ProjectRequiredGate from "@/components/dashboard/ProjectRequiredGate";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
+import JoeInsights from "@/components/dashboard/JoeInsights";
 
 const NAV_GROUPS = [
   {
@@ -41,6 +42,9 @@ const NAV_GROUPS = [
       { href: "/dashboard/hashtags", label: "Hashtag Research", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
       ) },
+      { href: "/dashboard/seo-toolkit", label: "Keyword Deep Dive", icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+      ) },
     ],
   },
   {
@@ -68,14 +72,6 @@ const NAV_GROUPS = [
       ) },
       { href: "/dashboard/decision-engine/content-map", label: "AI Content Map", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-      ) },
-    ],
-  },
-  {
-    group: "SEO TOOLKIT",
-    items: [
-      { href: "/dashboard/seo-toolkit", label: "Unified SEO Lookup", icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
       ) },
     ],
   },
@@ -246,6 +242,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             }}
           />
           {hasProject ? children : null}
+          {hasProject ? <JoeInsights /> : null}
         </div>
       </main>
     </div>

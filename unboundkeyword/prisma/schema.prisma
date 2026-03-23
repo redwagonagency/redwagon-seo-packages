@@ -335,3 +335,19 @@ model ApiQueryLog {
   @@index([endpoint])
   @@index([createdAt])
 }
+
+// Tracks every keyword/domain search a user runs — full session history
+model UserSearch {
+  id         String   @id @default(cuid())
+  userId     String
+  query      String
+  // Type: keyword | domain | product | content | competitor | local | traffic
+  searchType String   @default("keyword")
+  // JSON blob of result summary (e.g. { volume: 1200, cpc: 1.5, results: 42 })
+  resultMeta String   @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, searchType])
+  @@index([userId, createdAt])
+}

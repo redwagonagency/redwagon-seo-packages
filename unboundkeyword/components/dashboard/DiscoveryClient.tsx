@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -316,9 +317,11 @@ interface UnifiedWheelProps {
 }
 
 function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }: UnifiedWheelProps) {
-  const cx = 480, cy = 480;
-  const MAX_PER_GROUP = 48;
-  const RADII = [130, 185, 240, 295, 350, 405];
+  const cx = 540, cy = 540;
+  const MAX_PER_GROUP = 40;
+  const RADII = [155, 225, 295, 365, 435, 505];
+  const BUBBLE_R = 38;
+  const FONT_SIZE = 10.5;
 
   // Only show non-alphabetical groups in the wheel
   const wheelGroups = groups.filter((g) => g.type !== "alphabetical" && g.keywords.length > 0);
@@ -345,19 +348,16 @@ function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }:
     }
   }
 
-  // Angular position: proportional allocation
   function getAngle(globalIdx: number): number {
     return -90 + (globalIdx / total) * 360;
   }
 
-  // Place items in concentric rings within their group slice
   function getPosition(item: WheelItem): { x: number; y: number } {
     const cols = Math.max(1, Math.ceil(Math.sqrt(item.groupCount * 1.5)));
     const posInGroup = item.globalIdx - item.groupStart;
     const row = Math.floor(posInGroup / cols);
     const col = posInGroup % cols;
     const halfCols = (cols - 1) / 2;
-
     const offsetCols = (col - halfCols) / Math.max(cols, 1);
     const angIdx = item.groupStart + (posInGroup - col + cols / 2) + offsetCols * (cols - 1) * 0.5;
     const ang = getAngle(angIdx + offsetCols * 2);
@@ -366,8 +366,7 @@ function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }:
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
   }
 
-  // Group label positions (at mid-angle of each group, outer ring)
-  const LABEL_R = 455;
+  const LABEL_R = 545;
   const groupLabelPositions = wheelGroups.map((g, gi) => {
     const start = countPerGroup.slice(0, gi).reduce((s, c) => s + c, 0);
     const count = countPerGroup[gi];
@@ -393,20 +392,25 @@ function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }:
               className="text-[10px] font-black px-2.5 py-1 rounded-full border transition"
               style={{ borderColor: GROUP_COLORS[g.type], color: GROUP_COLORS[g.type] }}
             >
-              {g.type === "alphabetical" ? "A-Z" : g.type} ({g.keywords.length})
+              {g.type} ({g.keywords.length})
             </button>
           ))}
         </div>
       </div>
       <div className="overflow-x-auto">
-        <svg viewBox="0 0 960 960" className="w-full" style={{ maxHeight: "580px", minWidth: "520px" }} aria-label="Keyword discovery wheel">
+        <svg viewBox="0 0 1080 1080" className="w-full" style={{ maxHeight: "680px", minWidth: "520px" }} aria-label="Keyword discovery wheel">
+          {/* Dashed reference rings */}
+          {[155, 295, 435].map((r) => (
+            <circle key={r} cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth={0.8} strokeDasharray="4 4" />
+          ))}
+
           {/* Sector background arcs for each group */}
           {wheelGroups.map((g, gi) => {
             const start = countPerGroup.slice(0, gi).reduce((s, c) => s + c, 0);
             const count = countPerGroup[gi];
-            const startAngle = (getAngle(start) - 1) * (Math.PI / 180);
-            const endAngle = (getAngle(start + count) + 1) * (Math.PI / 180);
-            const R = 430;
+            const startAngle = (getAngle(start) - 1.5) * (Math.PI / 180);
+            const endAngle = (getAngle(start + count) + 1.5) * (Math.PI / 180);
+            const R = 525;
             const x1 = cx + R * Math.cos(startAngle), y1 = cy + R * Math.sin(startAngle);
             const x2 = cx + R * Math.cos(endAngle),   y2 = cy + R * Math.sin(endAngle);
             const large = (endAngle - startAngle) > Math.PI ? 1 : 0;
@@ -415,47 +419,31 @@ function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }:
                 key={g.type}
                 d={`M ${cx} ${cy} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`}
                 fill={GROUP_COLORS[g.type]}
-                opacity={0.04}
+                opacity={0.05}
               />
             );
           })}
 
-          {/* Spoke lines from center to each keyword */}
+          {/* Spoke lines */}
           {allItems.map((item) => {
             const { x, y } = getPosition(item);
             return (
-              <line
-                key={`spoke-${item.keyword}`}
-                x1={cx} y1={cy} x2={x} y2={y}
-                stroke={GROUP_COLORS[item.groupType]}
-                strokeWidth={0.3}
-                opacity={0.2}
-              />
+              <line key={`spoke-${item.keyword}`} x1={cx} y1={cy} x2={x} y2={y}
+                stroke={GROUP_COLORS[item.groupType]} strokeWidth={0.5} opacity={0.18} />
             );
           })}
 
-          {/* Group label arcs */}
+          {/* Group label circles */}
           {groupLabelPositions.map(({ x, y, group }) => (
-            <g key={`label-${group.type}`}>
-              <circle cx={x} cy={y} r={32} fill={GROUP_COLORS[group.type]} opacity={0.12} />
-              <text
-                x={x} y={y}
-                textAnchor="middle" dominantBaseline="middle"
-                fill={GROUP_COLORS[group.type]}
-                fontSize={10} fontWeight="800"
-                style={{ cursor: "pointer", userSelect: "none" }}
-                onClick={() => onSelectGroup(group.type)}
-              >
+            <g key={`label-${group.type}`} onClick={() => onSelectGroup(group.type)} style={{ cursor: "pointer" }}>
+              <circle cx={x} cy={y} r={38} fill={GROUP_COLORS[group.type]} opacity={0.15} />
+              <circle cx={x} cy={y} r={38} fill="none" stroke={GROUP_COLORS[group.type]} strokeWidth={1.5} opacity={0.5} />
+              <text x={x} y={y - 5} textAnchor="middle" dominantBaseline="middle"
+                fill={GROUP_COLORS[group.type]} fontSize={11} fontWeight="800" style={{ userSelect: "none" }}>
                 {group.type.charAt(0).toUpperCase() + group.type.slice(1)}
               </text>
-              <text
-                x={x} y={y + 13}
-                textAnchor="middle" dominantBaseline="middle"
-                fill={GROUP_COLORS[group.type]}
-                fontSize={8} fontWeight="600"
-                opacity={0.7}
-                style={{ userSelect: "none" }}
-              >
+              <text x={x} y={y + 10} textAnchor="middle" dominantBaseline="middle"
+                fill={GROUP_COLORS[group.type]} fontSize={9} fontWeight="600" opacity={0.8} style={{ userSelect: "none" }}>
                 {group.keywords.length}
               </text>
             </g>
@@ -466,42 +454,55 @@ function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }:
             const { x, y } = getPosition(item);
             const isSel = selected.has(item.keyword);
             const color = GROUP_COLORS[item.groupType];
-            const label = item.keyword.length > 18 ? item.keyword.slice(0, 16) + "…" : item.keyword;
+            const label = item.keyword.length > 20 ? item.keyword.slice(0, 18) + "…" : item.keyword;
+            // Split label into potentially 2 lines for readability
+            const words = label.split(" ");
+            const lineLen = Math.ceil(label.length / 2);
+            let line1 = label, line2 = "";
+            if (words.length > 1 && label.length > 12) {
+              let cut = 0, best = 0;
+              for (let wi = 0; wi < words.length - 1; wi++) {
+                cut += words[wi].length + 1;
+                if (Math.abs(cut - lineLen) < Math.abs(best - lineLen)) best = cut;
+              }
+              line1 = label.slice(0, best).trim();
+              line2 = label.slice(best).trim();
+            }
             return (
-              <g
-                key={`kw-${item.keyword}`}
-                onClick={() => onToggle(item.keyword)}
-                style={{ cursor: "pointer" }}
-              >
-                <title>{item.keyword}{item.volume ? ` · ${item.volume.toLocaleString()} vol` : ""}{item.cpc != null ? ` · $${item.cpc.toFixed(2)} CPC` : ""}</title>
-                <circle
-                  cx={x} cy={y}
-                  r={isSel ? 36 : 30}
-                  fill={isSel ? color : "white"}
-                  stroke={color}
-                  strokeWidth={isSel ? 2 : 1}
-                  opacity={0.95}
-                />
-                <text
-                  x={x} y={y}
-                  textAnchor="middle" dominantBaseline="middle"
-                  fill={isSel ? "white" : "#334155"}
-                  fontSize={8.5}
-                  fontWeight={isSel ? "700" : "500"}
-                  style={{ userSelect: "none" }}
-                >
-                  {label}
-                </text>
+              <g key={`kw-${item.keyword}`} onClick={() => onToggle(item.keyword)} style={{ cursor: "pointer" }}>
+                <title>{item.keyword}{item.volume ? ` · ${item.volume.toLocaleString()} vol` : ""}${item.cpc != null ? ` · $${item.cpc.toFixed(2)} CPC` : ""}</title>
+                <circle cx={x} cy={y} r={BUBBLE_R + (isSel ? 4 : 0)}
+                  fill={isSel ? color : "white"} stroke={color}
+                  strokeWidth={isSel ? 2.5 : 1.5} opacity={0.95}
+                  filter={isSel ? "drop-shadow(0px 2px 6px rgba(0,0,0,0.18))" : undefined} />
+                {line2 ? (
+                  <>
+                    <text x={x} y={y - 5} textAnchor="middle" dominantBaseline="middle"
+                      fill={isSel ? "white" : "#1e293b"} fontSize={FONT_SIZE} fontWeight={isSel ? "700" : "500"} style={{ userSelect: "none" }}>
+                      {line1}
+                    </text>
+                    <text x={x} y={y + 7} textAnchor="middle" dominantBaseline="middle"
+                      fill={isSel ? "white" : "#1e293b"} fontSize={FONT_SIZE} fontWeight={isSel ? "700" : "500"} style={{ userSelect: "none" }}>
+                      {line2}
+                    </text>
+                  </>
+                ) : (
+                  <text x={x} y={y} textAnchor="middle" dominantBaseline="middle"
+                    fill={isSel ? "white" : "#1e293b"} fontSize={FONT_SIZE} fontWeight={isSel ? "700" : "500"} style={{ userSelect: "none" }}>
+                    {label}
+                  </text>
+                )}
               </g>
             );
           })}
 
           {/* Center seed bubble */}
-          <circle cx={cx} cy={cy} r={52} fill="#0f172a" />
-          <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize={11} fontWeight="800" style={{ userSelect: "none" }}>
+          <circle cx={cx} cy={cy} r={58} fill="#0f172a" />
+          <circle cx={cx} cy={cy} r={58} fill="none" stroke="#f15b27" strokeWidth={2} opacity={0.5} />
+          <text x={cx} y={cy - 8} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize={12} fontWeight="800" style={{ userSelect: "none" }}>
             {seed.length > 14 ? seed.slice(0, 13) + "…" : seed}
           </text>
-          <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle" fill="#94a3b8" fontSize={8} style={{ userSelect: "none" }}>
+          <text x={cx} y={cy + 9} textAnchor="middle" dominantBaseline="middle" fill="#94a3b8" fontSize={9} style={{ userSelect: "none" }}>
             {allItems.length} terms
           </text>
         </svg>
@@ -2214,10 +2215,20 @@ export default function DiscoveryClient() {
             </div>
 
             <div id="content-ideas" className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(145deg,#fffbeb,#fff7ed)] shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-amber-100">
-                <div className="text-xs uppercase tracking-[0.18em] text-amber-700 mb-2">Content Ideas</div>
-                <h3 className="text-xl font-bold text-slate-900">Publish-ready SEO content opportunities</h3>
-                <p className="text-sm text-slate-600 mt-1">Idea briefs generated from your discovery graph and keyword table.</p>
+              <div className="px-6 py-5 border-b border-amber-100 flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-amber-700 mb-2">Content Ideas</div>
+                  <h3 className="text-xl font-bold text-slate-900">Publish-ready SEO content opportunities</h3>
+                  <p className="text-sm text-slate-600 mt-1">Idea briefs generated from your discovery graph and keyword table.</p>
+                </div>
+                {seed && (
+                  <Link
+                    href={`/dashboard/content-ideas?q=${encodeURIComponent(seed)}`}
+                    className="flex-shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-xs font-black text-white hover:bg-amber-600 transition-colors"
+                  >
+                    Open in Content Ideas →
+                  </Link>
+                )}
               </div>
               <div className="p-6 grid gap-3">
                 {contentIdeas.length === 0 ? (

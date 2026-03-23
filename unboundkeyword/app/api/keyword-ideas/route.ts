@@ -4,6 +4,7 @@
  */
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
+import { logUserSearch } from "@/lib/search-logger";
 import {
   getKeywordIdeasLabs,
   getRelatedKeywords,
@@ -264,6 +265,8 @@ export async function POST(req: NextRequest) {
     else if (source === "amazon") keywords = keywords.filter((k) => k.source === "amazon");
 
     keywords = keywords.slice(0, limit);
+
+    void logUserSearch(session.user.id, keyword as string, "keyword", { results: keywords.length });
 
     return Response.json({
       keywords,

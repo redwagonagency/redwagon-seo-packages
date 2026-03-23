@@ -5,12 +5,12 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { formatNumber } from "@/lib/utils";
-import type { CompetitorAnalysisResponse, CompetitorRow } from "@/app/api/competitors/intelligence/route";
+import type { CompetitorAnalysisResponse, CompetitorRow, RankedKwItem } from "@/app/api/competitors/intelligence/route";
 
 // Color palette matching Ubersuggest style
 const COLORS = ["#f15b27", "#22c55e", "#a855f7", "#3b82f6", "#06b6d4", "#f59e0b", "#ec4899", "#14b8a6", "#8b5cf6", "#ef4444"];
 
-type KwModalType = "common" | "gap" | null;
+type KwModalType = "common" | "gap" | "ranked" | "yours" | null;
 
 function formatCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
@@ -19,22 +19,24 @@ function formatCompact(n: number): string {
 }
 
 function KwModal({
-  type, competitor, rows, onClose
+  type, competitor, rows, rankedRows, onClose
 }: {
   type: KwModalType;
   competitor: string;
   rows: { keyword: string; volume: number | null; yourPosition: number | null; competitorPosition: number | null; opportunity?: string }[];
+  rankedRows?: RankedKwItem[];
   onClose: () => void;
 }) {
   if (!type) return null;
+  const isRanked = type === "ranked" || type === "yours";
+  const title = type === "common" ? "Common Keywords" : type === "gap" ? "Keyword Gap" : type === "yours" ? "Your Ranked Keywords" : "Competitor Ranked Keywords";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <div className="text-[10px] uppercase tracking-[0.14em] font-black text-[#f15b27]">
-              {type === "common" ? "Common Keywords" : "Keyword Gap"}
-            </div>
+            <div className="text-[10px] uppercase tracking-[0.14em] font-black text-[#f15b27]">{title}</div>
             <h3 className="text-lg font-black text-slate-900">{competitor}</h3>
           </div>
           <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 text-slate-400">
@@ -42,36 +44,67 @@ function KwModal({
           </button>
         </div>
         <div className="overflow-y-auto flex-1">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Your Pos</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Their Pos</th>
-                {type === "gap" && <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Gap</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">No data available.</td></tr>
-              ) : rows.map((r, i) => (
-                <tr key={`${r.keyword}-${i}`} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{r.keyword}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.volume != null ? formatCompact(r.volume) : "—"}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.yourPosition ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums">{r.competitorPosition ?? "—"}</td>
-                  {type === "gap" && (
-                    <td className="px-4 py-2.5 text-right">
-                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full capitalize ${r.opportunity === "missing" ? "bg-red-100 text-red-700" : r.opportunity === "weak" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                        {r.opportunity ?? "—"}
+          {isRanked ? (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Pos</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">URL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(rankedRows ?? []).length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">No data available.</td></tr>
+                ) : (rankedRows ?? []).map((r, i) => (
+                  <tr key={`${r.keyword}-${i}`} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{r.keyword}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">
+                      <span className={`text-xs font-black px-1.5 py-0.5 rounded-full ${r.position <= 3 ? "bg-emerald-100 text-emerald-700" : r.position <= 10 ? "bg-blue-100 text-blue-700" : r.position <= 20 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500"}`}>
+                        #{r.position}
                       </span>
                     </td>
-                  )}
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.searchVolume > 0 ? formatCompact(r.searchVolume) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.cpc != null ? `$${r.cpc.toFixed(2)}` : "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-slate-400 truncate max-w-[160px]">{r.url ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Your Pos</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Their Pos</th>
+                  {type === "gap" && <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Gap</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">No data available.</td></tr>
+                ) : rows.map((r, i) => (
+                  <tr key={`${r.keyword}-${i}`} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{r.keyword}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.volume != null ? formatCompact(r.volume) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{r.yourPosition ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums">{r.competitorPosition ?? "—"}</td>
+                    {type === "gap" && (
+                      <td className="px-4 py-2.5 text-right">
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full capitalize ${r.opportunity === "missing" ? "bg-red-100 text-red-700" : r.opportunity === "weak" ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                          {r.opportunity ?? "—"}
+                        </span>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
@@ -107,6 +140,7 @@ export default function CompetitorIntelligenceClient() {
   const [data, setData] = useState<CompetitorAnalysisResponse | null>(null);
   const [activeCompetitors, setActiveCompetitors] = useState<Set<string>>(new Set());
   const [modalState, setModalState] = useState<{ type: KwModalType; row: CompetitorRow | null }>({ type: null, row: null });
+  const [yourKwOpen, setYourKwOpen] = useState(false);
   const [projectDomain, setProjectDomain] = useState<string | null>(null);
   const didLoad = useRef(false);
 
@@ -191,6 +225,29 @@ export default function CompetitorIntelligenceClient() {
   const modalRows = useMemo(() => {
     if (!modalState.row) return [];
     return modalState.type === "common" ? modalState.row.commonKeywords : modalState.row.keywordGap;
+  }, [modalState]);
+
+  // For "ranked" type: all keywords the competitor appears for (common + gap), sorted by position
+  const modalRankedRows = useMemo((): RankedKwItem[] => {
+    if (modalState.type !== "ranked" || !modalState.row) return [];
+    const row = modalState.row;
+    const combined: RankedKwItem[] = [
+      ...row.commonKeywords.map((k) => ({
+        keyword: k.keyword,
+        position: k.competitorPosition ?? 999,
+        searchVolume: k.volume ?? 0,
+        cpc: null,
+        url: null,
+      })),
+      ...row.keywordGap.map((k) => ({
+        keyword: k.keyword,
+        position: k.competitorPosition ?? 999,
+        searchVolume: k.volume ?? 0,
+        cpc: null,
+        url: null,
+      })),
+    ];
+    return combined.sort((a, b) => a.position - b.position || b.searchVolume - a.searchVolume);
   }, [modalState]);
 
   return (
@@ -286,12 +343,12 @@ export default function CompetitorIntelligenceClient() {
               {/* Your domain chip */}
               <button
                 type="button"
-                onClick={() => {}}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold bg-white shadow-sm"
+                onClick={() => setYourKwOpen(true)}
+                className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold bg-white shadow-sm hover:bg-[#fff3ee] transition-colors"
                 style={{ borderColor: COLORS[0], color: COLORS[0] }}
               >
                 <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[0] }} />
-                {domain} (you)
+                {domain} (you) — {data.yourRankedKeywords.length > 0 ? `${data.yourRankedKeywords.length} ranked kws` : "View Rankings"}
               </button>
             </div>
           )}
@@ -344,6 +401,10 @@ export default function CompetitorIntelligenceClient() {
                       Keywords Gap
                       <span className="ml-1 text-[9px] text-slate-300 normal-case">(they rank, you don&apos;t)</span>
                     </th>
+                    <th className="px-5 py-3.5 text-center text-xs font-black uppercase tracking-wider text-slate-500">
+                      All Ranked
+                      <span className="ml-1 text-[9px] text-slate-300 normal-case">(individual kws)</span>
+                    </th>
                     <th className="px-5 py-3.5 text-right text-xs font-black uppercase tracking-wider text-slate-500">
                       Estimated
                       <br />Traffic
@@ -354,7 +415,7 @@ export default function CompetitorIntelligenceClient() {
                 <tbody>
                   {activeRows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-400">
                         {data.competitors.length === 0
                           ? "No competitor data found. Try entering competitor domains manually."
                           : "Toggle competitors above to show data."}
@@ -404,6 +465,15 @@ export default function CompetitorIntelligenceClient() {
                               </button>
                             )}
                           </div>
+                        </td>
+                        <td className="px-5 py-3.5 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setModalState({ type: "ranked", row })}
+                            className="rounded border border-slate-300 text-slate-600 text-[11px] font-semibold px-2 py-0.5 hover:border-[#f15b27] hover:text-[#f15b27] transition-colors"
+                          >
+                            {formatCompact(row.commonKeywordsCount + row.keywordGapCount)} kws ↗
+                          </button>
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-slate-800">
                           {formatCompact(row.estimatedTraffic)}
@@ -462,7 +532,18 @@ export default function CompetitorIntelligenceClient() {
           type={modalState.type}
           competitor={modalState.row.domain}
           rows={modalRows}
+          rankedRows={modalRankedRows}
           onClose={() => setModalState({ type: null, row: null })}
+        />
+      )}
+
+      {yourKwOpen && data && (
+        <KwModal
+          type="yours"
+          competitor={domain}
+          rows={[]}
+          rankedRows={data.yourRankedKeywords}
+          onClose={() => setYourKwOpen(false)}
         />
       )}
     </div>

@@ -63,7 +63,7 @@ interface OverviewData {
   errors: Record<string, string>;
 }
 
-type IdeasTab = "suggestions" | "related" | "questions" | "paa" | "prepositions" | "comparisons" | "citations" | "ai" | "llm";
+type IdeasTab = "suggestions" | "questions" | "paa" | "prepositions" | "comparisons" | "citations" | "ai" | "llm";
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -207,24 +207,16 @@ export default function KeywordOverviewPage() {
     }
   }
 
-  // Build dual-line volume chart data (mobile ~60%, desktop ~40% of total)
-  function buildVolumeChartData(d: OverviewData) {
-    const src = d.monthlyVolumes?.length ? d.monthlyVolumes : [];
-    if (!src.length && d.phraseTrends?.length) {
-      // Fallback: use phrase trends impressions normalised to search volume scale
-      const vol = d.paid?.searchVolume ?? 1000;
-      const max = Math.max(...d.phraseTrends.map((t) => t.impressions), 1);
-      return d.phraseTrends.slice(-12).map((t) => ({
-        label: t.date.slice(0, 7),
-        mobile: Math.round((t.impressions / max) * vol * 0.6),
-        desktop: Math.round((t.impressions / max) * vol * 0.4),
+  // Build volume chart data — total monthly search volume per month
+  function buildVolumeChartData(d: OverviewData): { label: string; volume: number; source: "actual" | "trend" }[] {
+    if (d.monthlyVolumes?.length) {
+      return d.monthlyVolumes.slice(-12).map((m) => ({
+        label: `${MONTH_NAMES[m.month - 1]} ${m.year}`,
+        volume: m.volume,
+        source: "actual" as const,
       }));
     }
-    return src.slice(-12).map((m) => ({
-      label: `${MONTH_NAMES[m.month - 1]} ${m.year}`,
-      mobile: Math.round(m.volume * 0.6),
-      desktop: Math.round(m.volume * 0.4),
-    }));
+    return [];
   }
 
   // Build click distribution chart data
@@ -242,8 +234,7 @@ export default function KeywordOverviewPage() {
 
   const IDEAS_TABS: { id: IdeasTab; label: string; count: number }[] = data
     ? [
-        { id: "suggestions", label: "Suggestions", count: data.relatedKeywords?.length ?? 0 },
-        { id: "related", label: "Related", count: (data.relatedKeywords?.length ?? 0) },
+        { id: "suggestions", label: "Keyword Ideas", count: data.relatedKeywords?.length ?? 0 },
         { id: "questions", label: "Questions", count: data.questions?.length ?? 0 },
         { id: "paa", label: "People Also Ask", count: data.paa?.length ?? 0 },
         { id: "prepositions", label: "Prepositions", count: data.prepositions?.length ?? 0 },
@@ -381,17 +372,13 @@ export default function KeywordOverviewPage() {
                     {vol != null ? vol.toLocaleString() : ""} monthly searches for &ldquo;{data.keyword}&rdquo;
                   </h2>
                 </div>
-                <p className="text-xs text-slate-500 mb-4">Mobile vs. Desktop — estimated from monthly data</p>
+                <p className="text-xs text-slate-500 mb-4">Monthly search volume — source: Google Ads keyword data (last 12 months)</p>
                 <ResponsiveContainer width="100%" height={220}>
                   <AreaChart data={chartData} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                     <defs>
-                      <linearGradient id="gradMobile" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="gradVol" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#f15b27" stopOpacity={0.18} />
                         <stop offset="95%" stopColor="#f15b27" stopOpacity={0.02} />
-                      </linearGradient>
-                      <linearGradient id="gradDesktop" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.18} />
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.02} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -399,11 +386,9 @@ export default function KeywordOverviewPage() {
                     <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
                     <Tooltip
                       contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px" }}
-                      formatter={(value) => [typeof value === "number" ? value.toLocaleString() : value]}
+                      formatter={(value) => [typeof value === "number" ? value.toLocaleString() : value, "Searches"]}
                     />
-                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "12px" }} />
-                    <Area type="monotone" dataKey="mobile" name="Mobile" stroke="#f15b27" strokeWidth={2.5} fill="url(#gradMobile)" dot={false} activeDot={{ r: 4 }} />
-                    <Area type="monotone" dataKey="desktop" name="Desktop" stroke="#f59e0b" strokeWidth={2.5} fill="url(#gradDesktop)" dot={false} activeDot={{ r: 4 }} />
+                    <Area type="monotone" dataKey="volume" name="Monthly Searches" stroke="#f15b27" strokeWidth={2.5} fill="url(#gradVol)" dot={false} activeDot={{ r: 4 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -415,13 +400,13 @@ export default function KeywordOverviewPage() {
 
             {/* Left: Click Distribution */}
             <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5">
-              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-0.5">Click Distribution</div>
+              <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-0.5">Click Distribution <span className="text-amber-500 normal-case font-semibold tracking-normal">· Estimated</span></div>
               <div className="text-lg font-black text-slate-900 mb-1">
                 Where do searchers click for &ldquo;{data.keyword}&rdquo;?
               </div>
               {data.paid?.searchVolume && (
                 <p className="text-xs text-slate-500 mb-4">
-                  Estimated from {data.paid.searchVolume.toLocaleString()} monthly searches
+                  Modeled from SERP signals (ad count, AI overview, featured snippets) — not from clickstream data
                   {data.serpFeatures?.hasAiOverview ? " · AI Overview detected" : ""}
                   {data.serpFeatures?.hasFeaturedSnippet ? " · Featured Snippet detected" : ""}
                 </p>
@@ -616,14 +601,9 @@ export default function KeywordOverviewPage() {
             </div>
 
             <div className="p-6">
-              {/* Suggestions — top related keywords with metrics */}
+              {/* Keyword Ideas — related + suggestion keywords with metrics */}
               {ideasTab === "suggestions" && (
                 <KwTable rows={data.relatedKeywords ?? []} onSelect={setKeyword} />
-              )}
-
-              {/* Related — same as suggestions (deduplicated data) */}
-              {ideasTab === "related" && (
-                <KwTable rows={(data.relatedKeywords ?? []).slice(0, 30)} onSelect={setKeyword} />
               )}
 
               {/* Questions (autocomplete keywords only) */}

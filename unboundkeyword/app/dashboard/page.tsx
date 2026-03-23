@@ -65,17 +65,34 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <span className={`px-2.5 py-1 rounded-full border ${googleLinked ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-              Google {googleLinked ? "linked" : "not linked"}
-            </span>
+            {!googleLinked ? (
+              <a
+                href="/api/auth/signin/google"
+                className="px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition font-semibold"
+              >
+                Sign in with Google →
+              </a>
+            ) : (
+              <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">
+                Google linked
+              </span>
+            )}
             {selectedSite ? (
               <>
-                <span className={`px-2.5 py-1 rounded-full border ${selectedSite.ga4Connected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                  GA4 {selectedSite.ga4Connected ? "connected" : "pending"}
-                </span>
-                <span className={`px-2.5 py-1 rounded-full border ${selectedSite.gscConnected ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
-                  GSC {selectedSite.gscConnected ? "connected" : "pending"}
-                </span>
+                {selectedSite.ga4Connected ? (
+                  <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">GA4 connected</span>
+                ) : (
+                  <a href="#connect" className="px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition font-semibold">
+                    GA4 — connect ↓
+                  </a>
+                )}
+                {selectedSite.gscConnected ? (
+                  <span className="px-2.5 py-1 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700">GSC connected</span>
+                ) : (
+                  <a href="#connect" className="px-2.5 py-1 rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition font-semibold">
+                    GSC — connect ↓
+                  </a>
+                )}
               </>
             ) : null}
           </div>
@@ -169,10 +186,12 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        <IntegrationConnectPanel
-          ga4Connected={selectedSite?.ga4Connected ?? false}
-          gscConnected={selectedSite?.gscConnected ?? false}
-        />
+        <div id="connect">
+          <IntegrationConnectPanel
+            ga4Connected={selectedSite?.ga4Connected ?? false}
+            gscConnected={selectedSite?.gscConnected ?? false}
+          />
+        </div>
       </div>
 
 

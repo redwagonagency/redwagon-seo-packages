@@ -7,6 +7,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logUserSearch } from "@/lib/search-logger";
 import {
   getSerpLiveDataEnhanced,
   getGoogleAutocompleteAZ,
@@ -395,6 +396,8 @@ export async function POST(req: NextRequest) {
       hasShopping: serpFeatures?.hasShopping ?? false,
     },
   }).catch(() => { /* non-critical */ });
+
+  void logUserSearch(session.user.id, seed, "keyword", { volume: labsItem?.searchVolume ?? null, domain: domain || null });
 
   return Response.json({
     keyword: seed,

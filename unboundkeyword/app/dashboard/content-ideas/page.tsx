@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 import type { ContentIdea, ContentIdeasResponse } from "@/app/api/content-ideas/route";
@@ -23,16 +24,19 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function ContentIdeasPage() {
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<ContentIdeasResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const didAutoRun = useRef(false);
   const [showSave, setShowSave] = useState(false);
   const [activeTab, setActiveTab] = useState<"ideas" | "pages">("ideas");
 
-  async function runSearch() {
-    if (!query.trim()) return;
+  async function runSearch(kw?: string) {
+    const q = (kw ?? query).trim();
+    if (!q) return;
     setLoading(true);
     setError("");
     setSelected(new Set());
@@ -40,7 +44,7 @@ export default function ContentIdeasPage() {
       const res = await fetch("/api/content-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: query.trim(), limit: 60 }),
+        body: JSON.stringify({ keyword: q, limit: 60 }),
       });
       const json = (await res.json()) as ContentIdeasResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Failed");
@@ -51,6 +55,17 @@ export default function ContentIdeasPage() {
       setLoading(false);
     }
   }
+
+  // Auto-run if ?q= param is present
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !didAutoRun.current) {
+      didAutoRun.current = true;
+      setQuery(q);
+      void runSearch(q);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function toggleRow(kw: string) {
     setSelected((prev) => { const n = new Set(prev); n.has(kw) ? n.delete(kw) : n.add(kw); return n; });
