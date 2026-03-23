@@ -36,7 +36,7 @@ export default function SmallBusinessPage() {
         <Link href="/" className="text-lg font-black tracking-tight ubk-logo">Unbound<span className="text-white/50">Keyword</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">Sign in</Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
         </div>
       </nav>
 
@@ -53,7 +53,7 @@ export default function SmallBusinessPage() {
           You don&apos;t need an agency budget or a full-time SEO team. UnboundKeyword finds the exact keywords your customers are searching — and tells you exactly what to do.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <Link href="/register" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base">Start Free Trial</Link>
+          <Link href="/pricing" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base">Start Free Trial</Link>
           <Link href="/pricing" className="border border-white/20 text-white/80 hover:text-white font-bold px-10 py-4 rounded-full text-base transition">See pricing</Link>
         </div>
         <p className="text-white/30 text-sm mt-6">No credit card required · Cancel anytime</p>
@@ -108,7 +108,7 @@ export default function SmallBusinessPage() {
       <section className="max-w-3xl mx-auto px-6 pb-24 text-center">
         <h2 className="text-4xl font-black mb-4">Your customers are searching. <span className="ubk-orange-accent">Be there when they do.</span></h2>
         <p className="text-white/55 text-lg mb-8">Start finding the keywords that grow your business — without needing an agency, a big budget, or an SEO degree.</p>
-        <Link href="/register" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
+        <Link href="/pricing" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
         <p className="text-white/30 text-sm mt-4">14-day free trial · No credit card required</p>
       </section>
 

@@ -27,7 +27,7 @@ export default function CompetitorResearchPage() {
   function handleSearch(e: FormEvent) {
     e.preventDefault();
     const q = domain.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-    if (q) window.location.href = `/register?competitor=${encodeURIComponent(q)}&tool=competitor`;
+    if (q) window.location.href = `/pricing?competitor=${encodeURIComponent(q)}&tool=competitor`;
   }
 
   return (
@@ -36,7 +36,7 @@ export default function CompetitorResearchPage() {
         <Link href="/" className="text-lg font-black tracking-tight ubk-logo">Unbound<span className="text-white/50">Keyword</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">Sign in</Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
         </div>
       </nav>
 
@@ -125,7 +125,7 @@ export default function CompetitorResearchPage() {
       <section className="max-w-3xl mx-auto px-6 pb-24 text-center">
         <h2 className="text-4xl font-black mb-4">Ready to see what they&apos;re hiding?</h2>
         <p className="text-white/55 text-lg mb-8">Your competitors are ranking for thousands of keywords you haven't considered yet. Start your free trial and find them all.</p>
-        <Link href="/register" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">
+        <Link href="/pricing" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">
           Start Free Trial
         </Link>
         <p className="text-white/30 text-sm mt-4">14-day free trial · No credit card required</p>

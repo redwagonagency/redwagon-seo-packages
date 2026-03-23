@@ -31,7 +31,7 @@ export default function ForAgencies() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -51,7 +51,7 @@ export default function ForAgencies() {
           Depth you can show clients. Speed that scales your agency.
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Start free trial
           </Link>
           <Link href="/pricing" className="border border-white/25 text-white/80 hover:border-white/50 text-base font-bold px-10 py-4 rounded-full inline-block transition">
@@ -134,7 +134,7 @@ export default function ForAgencies() {
               </ul>
             </div>
             <div className="shrink-0">
-              <Link href="/register?plan=agency" className="ubk-btn-primary font-bold px-8 py-3 rounded-full text-sm inline-block whitespace-nowrap">
+              <Link href="/pricing?plan=agency" className="ubk-btn-primary font-bold px-8 py-3 rounded-full text-sm inline-block whitespace-nowrap">
                 Start free trial
               </Link>
               <p className="text-white/35 text-xs text-center mt-2">14 days free · No card needed</p>
@@ -162,7 +162,7 @@ export default function ForAgencies() {
             <span className="ubk-orange-accent">the keyword edge</span>
           </h2>
           <p className="text-white/55 mb-8">14-day free trial. No credit card. Cancel anytime.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Try free for 14 days
           </Link>
         </div>

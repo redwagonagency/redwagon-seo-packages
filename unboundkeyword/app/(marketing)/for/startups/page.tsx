@@ -38,7 +38,7 @@ export default function StartupsPage() {
         <Link href="/" className="text-lg font-black tracking-tight ubk-logo">Unbound<span className="text-white/50">Keyword</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">Sign in</Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
         </div>
       </nav>
 
@@ -55,7 +55,7 @@ export default function StartupsPage() {
           Startups that own SEO early win long-term. UnboundKeyword helps you find the keywords your ICP is already searching — and rank for them before your competitors do.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <Link href="/register" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base">Start Free Trial</Link>
+          <Link href="/pricing" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base">Start Free Trial</Link>
           <Link href="/pricing" className="border border-white/20 text-white/80 hover:text-white font-bold px-10 py-4 rounded-full text-base transition">See pricing</Link>
         </div>
         <p className="text-white/30 text-sm mt-6">No credit card required · Cancel anytime</p>
@@ -118,7 +118,7 @@ export default function StartupsPage() {
       <section className="max-w-3xl mx-auto px-6 pb-24 text-center">
         <h2 className="text-4xl font-black mb-4">SEO is a startup&apos;s best <span className="ubk-orange-accent">long-term bet</span></h2>
         <p className="text-white/55 text-lg mb-8">Start building keyword authority on day one. The startups that win at SEO now will have a moat their competitors can&apos;t buy their way into.</p>
-        <Link href="/register" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
+        <Link href="/pricing" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
         <p className="text-white/30 text-sm mt-4">14-day free trial · No credit card required</p>
       </section>
 

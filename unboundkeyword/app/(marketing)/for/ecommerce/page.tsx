@@ -23,7 +23,7 @@ export default function ForEcommerce() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -42,7 +42,7 @@ export default function ForEcommerce() {
           Discover product keywords, comparison searches, and buyer-intent questions your customers
           type before they buy — across Google, Amazon, YouTube, and more.
         </p>
-        <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+        <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
           Find your buyer keywords
         </Link>
       </section>
@@ -148,7 +148,7 @@ export default function ForEcommerce() {
             <span className="ubk-orange-accent">your buyers are already typing</span>
           </h2>
           <p className="text-white/55 mb-8">Free trial. No credit card. Results in under 60 seconds.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Start for free
           </Link>
         </div>

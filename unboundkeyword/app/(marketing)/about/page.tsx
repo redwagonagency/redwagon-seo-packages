@@ -17,7 +17,7 @@ export default function AboutPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -135,7 +135,7 @@ export default function AboutPage() {
           </h2>
           <p className="text-white/55 mb-8">Try UnboundKeyword free. No credit card required.</p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+            <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
               Get started free
             </Link>
             <Link href="/contact" className="border border-white/25 text-white/80 hover:border-white/50 text-base font-bold px-10 py-4 rounded-full inline-block transition">

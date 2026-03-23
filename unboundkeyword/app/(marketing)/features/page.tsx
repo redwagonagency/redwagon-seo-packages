@@ -116,7 +116,7 @@ export default function FeaturesPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -165,7 +165,7 @@ export default function FeaturesPage() {
             Ready to explore keywords <span className="ubk-orange-accent">your competitors miss</span>?
           </h2>
           <p className="text-white/55 mb-8">No credit card required. Start discovering keywords today.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Get started for free
           </Link>
         </div>

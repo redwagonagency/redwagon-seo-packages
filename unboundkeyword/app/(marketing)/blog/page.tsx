@@ -59,7 +59,7 @@ export default function BlogPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>

@@ -36,7 +36,7 @@ const PLANS = [
     tagline: "For bloggers, freelancers & side projects",
     popular: false,
     cta: "Start free trial",
-    ctaHref: "/register?plan=solo",
+    ctaHref: "/register?plan=solo&requirePayment=1",
     features: [
       "1 user seat",
       "1 project · 1 domain",
@@ -60,7 +60,7 @@ const PLANS = [
     tagline: "For consultants & small agencies",
     popular: true,
     cta: "Start free trial",
-    ctaHref: "/register?plan=growth",
+    ctaHref: "/register?plan=growth&requirePayment=1",
     features: [
       "3 user seats",
       "2 projects · 2 domains",
@@ -83,7 +83,7 @@ const PLANS = [
     tagline: "For agencies managing multiple clients",
     popular: false,
     cta: "Start free trial",
-    ctaHref: "/register?plan=agency",
+    ctaHref: "/register?plan=agency&requirePayment=1",
     features: [
       "10 user seats",
       "5 projects · 5 domains",
@@ -112,7 +112,7 @@ export default function PricingPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -130,7 +130,7 @@ export default function PricingPage() {
         <p className="text-white/60 text-xl max-w-2xl mx-auto mb-4">
           Start free or scale from $25/mo. No hidden fees, no per-seat surprises. Cancel anytime.
         </p>
-        <p className="text-white/40 text-sm">Free account available · 14-day free trial on all paid plans · No credit card required</p>
+        <p className="text-white/40 text-sm">Free account has no payment gate · Paid plans require payment method at signup</p>
       </section>
 
       {/* Pricing Cards */}
@@ -191,7 +191,7 @@ export default function PricingPage() {
               >
                 {plan.cta}
               </Link>
-              <p className="text-white/30 text-xs text-center mt-3">{plan.name === "Free" ? "Use free forever with monthly limits" : "14-day free trial · No card needed"}</p>
+              <p className="text-white/30 text-xs text-center mt-3">{plan.name === "Free" ? "Use free forever with monthly limits" : "Payment required at signup"}</p>
             </div>
           ))}
         </div>
@@ -282,7 +282,7 @@ export default function PricingPage() {
         <h2 className="text-3xl font-bold mb-12 text-center">Questions &amp; Answers</h2>
         <div className="space-y-5">
           {[
-            ["Can I try before I buy?", "Yes — all paid plans include a 14-day free trial. No credit card required. You can also use the free tier indefinitely with limited searches."],
+            ["Can I try before I buy?", "Yes — use the free plan indefinitely with monthly limits. Paid plans require a payment method at signup."],
             ["Can I upgrade or downgrade anytime?", "Absolutely. Changes take effect at your next billing cycle. Upgrades are prorated so you only pay the difference."],
             ["What happens if I hit my monthly limit?", "We'll notify you when you're approaching your limit. You can upgrade immediately or wait for the reset. Your existing lists and saved keywords are never deleted."],
             ["Can I use this for client work?", "Yes. The Growth and Agency plans are built for client work with multiple projects and domains. Each project keeps client data fully separate."],
@@ -304,7 +304,7 @@ export default function PricingPage() {
             Start at <span className="ubk-orange-accent">$25/month</span>
           </h2>
           <p className="text-white/55 mb-8">No credit card required. Cancel anytime. Built for real keyword researchers.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Start your free trial
           </Link>
         </div>

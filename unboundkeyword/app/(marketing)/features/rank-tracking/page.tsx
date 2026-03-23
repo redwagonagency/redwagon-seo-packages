@@ -21,7 +21,7 @@ export default function RankTrackingFeaturePage() {
         <Link href="/" className="text-lg font-black tracking-tight ubk-logo">Unbound<span className="text-white/50">Keyword</span></Link>
         <div className="flex items-center gap-3">
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">Sign in</Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">Get started</Link>
         </div>
       </nav>
 
@@ -37,7 +37,7 @@ export default function RankTrackingFeaturePage() {
         <p className="text-white/60 text-xl max-w-2xl mx-auto mb-10">
           Daily rank tracking with position change alerts, SERP feature monitoring, and automated reporting — so you&apos;re always ahead of what&apos;s happening in search.
         </p>
-        <Link href="/register" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base inline-block">Start Tracking Free</Link>
+        <Link href="/pricing" className="ubk-btn-primary font-black px-10 py-4 rounded-full text-base inline-block">Start Tracking Free</Link>
         <p className="text-white/30 text-sm mt-4">Track up to 50 keywords free · No credit card required</p>
       </section>
 
@@ -84,7 +84,7 @@ export default function RankTrackingFeaturePage() {
       <section className="max-w-3xl mx-auto px-6 pb-24 text-center">
         <h2 className="text-4xl font-black mb-4">Rankings are moving <span className="ubk-orange-accent">right now</span></h2>
         <p className="text-white/55 text-lg mb-8">Don&apos;t find out about ranking drops from an angry client. Set up rank tracking today and get alerts the moment anything changes.</p>
-        <Link href="/register" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
+        <Link href="/pricing" className="ubk-btn-primary font-black px-12 py-5 rounded-full text-lg inline-block">Start Free Trial</Link>
         <p className="text-white/30 text-sm mt-4">14-day free trial · No credit card required</p>
       </section>
 

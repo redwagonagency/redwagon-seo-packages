@@ -18,7 +18,7 @@ export default function TrafficCheckerLandingPage() {
             readOnly
           />
           <Link
-            href="/register"
+            href="/pricing"
             className="inline-flex items-center justify-center rounded-lg bg-[#f15b27] px-6 py-3 text-sm font-black text-white hover:bg-[#d94e1f]"
           >
             CHECK TRAFFIC

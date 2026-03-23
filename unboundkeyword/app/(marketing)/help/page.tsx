@@ -88,7 +88,7 @@ export default function HelpPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -200,7 +200,7 @@ export default function HelpPage() {
           <div className="bg-gradient-to-br from-slate-900/50 to-slate-950 rounded-2xl p-8 border border-white/[0.06]">
             <h3 className="text-2xl font-bold mb-3">Ready to get started?</h3>
             <p className="text-white/60 mb-6">Try UnboundKeyword free for 14 days and see how it can transform your keyword research.</p>
-            <Link href="/register" className="ubk-btn-primary font-bold px-8 py-3 rounded-full inline-block">
+            <Link href="/pricing" className="ubk-btn-primary font-bold px-8 py-3 rounded-full inline-block">
               Start free trial
             </Link>
           </div>

@@ -184,7 +184,7 @@ export default function HomePage() {
   function handleSearch(e: FormEvent) {
     e.preventDefault();
     const q = query.trim();
-    if (q) router.push(`/register?q=${encodeURIComponent(q)}&platform=${activeTab}`);
+    if (q) router.push(`/pricing?q=${encodeURIComponent(q)}&platform=${activeTab}`);
   }
 
   return (
@@ -209,7 +209,7 @@ export default function HomePage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -421,7 +421,7 @@ export default function HomePage() {
               &ldquo;It&rsquo;s a goldmine of consumer insight to create fresh, ultra-useful content
               your customers really want.&rdquo;
             </blockquote>
-            <Link href="/register" className="ubk-btn-primary font-bold px-8 py-3 rounded-full inline-block text-sm">
+            <Link href="/pricing" className="ubk-btn-primary font-bold px-8 py-3 rounded-full inline-block text-sm">
               Start exploring — it&apos;s free
             </Link>
           </div>
@@ -512,7 +512,7 @@ export default function HomePage() {
             Anyone can use UnboundKeyword<br />to create <span className="ubk-orange-accent">better content</span>
           </h2>
           <p className="text-white/55 mb-8">No credit card required. Unlimited searches on the free plan.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Get started for free
           </Link>
         </div>

@@ -92,7 +92,7 @@ export default function IntegrationsPage() {
           <Link href="/login" className="text-white/60 hover:text-white text-sm font-medium transition hidden sm:block">
             Sign in
           </Link>
-          <Link href="/register" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
+          <Link href="/pricing" className="ubk-btn-primary text-sm font-bold px-5 py-2 rounded-full">
             Get started
           </Link>
         </div>
@@ -234,7 +234,7 @@ export default function IntegrationsPage() {
             Connect UnboundKeyword to your <span className="ubk-orange-accent">entire stack</span>
           </h2>
           <p className="text-white/55 mb-8">Sync your keywords, analytics, and rankings with one secure connection.</p>
-          <Link href="/register" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
+          <Link href="/pricing" className="ubk-btn-primary text-base font-bold px-10 py-4 rounded-full inline-block">
             Get started free
           </Link>
         </div>
