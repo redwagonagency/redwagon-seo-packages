@@ -683,28 +683,71 @@ export default function KeywordOverviewPage() {
                       <th className="px-6 pb-2 pt-3 text-left w-10">#</th>
                       <th className="pb-2 pt-3 pr-4 text-left">Domain</th>
                       <th className="pb-2 pt-3 pr-6 text-left">Title &amp; URL</th>
+                      <th className="pb-2 pt-3 pr-4 text-center w-24">Authority</th>
+                      <th className="pb-2 pt-3 pr-6 text-left">Ranking Signals</th>
                       <th className="pb-2 pt-3 pr-6 text-right w-20">ETV</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.serp.map((r) => (
-                      <tr key={r.url} className="border-b border-slate-50 hover:bg-slate-50">
-                        <td className="px-6 py-3 font-mono text-slate-400 text-xs">{r.position}</td>
-                        <td className="py-3 pr-4">
-                          <div className="flex items-center gap-2">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={`https://www.google.com/s2/favicons?domain=${r.domain}&sz=16`} alt="" width={16} height={16} className="rounded-sm shrink-0" />
-                            <span className="font-medium text-slate-700 whitespace-nowrap">{r.domain}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 pr-6">
-                          <div className="font-semibold text-slate-900 leading-snug">{r.title}</div>
-                          <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#f15b27] hover:underline truncate block max-w-lg">{r.url}</a>
-                          {r.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{r.description}</p>}
-                        </td>
-                        <td className="py-3 pr-6 text-right font-mono text-slate-600 text-xs">{r.etv !== null ? r.etv.toLocaleString() : "—"}</td>
-                      </tr>
-                    ))}
+                    {data.serp.map((r) => {
+                      const kw = data.keyword.toLowerCase();
+                      const titleHasKw = r.title.toLowerCase().includes(kw);
+                      const urlHasKw = r.url.toLowerCase().includes(kw.replace(/\s+/g, "-")) || r.url.toLowerCase().includes(kw.replace(/\s+/g, "_")) || r.url.toLowerCase().includes(kw.replace(/\s+/g, "+")) || r.url.toLowerCase().replace(/[^a-z0-9]/g, " ").includes(kw);
+                      const descHasKw = r.description?.toLowerCase().includes(kw) ?? false;
+                      const rankScore = r.domainRank ?? null;
+                      const rankColor = rankScore === null ? "bg-slate-200 text-slate-400" : rankScore >= 70 ? "bg-green-100 text-green-700" : rankScore >= 40 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600";
+                      return (
+                        <tr key={r.url} className="border-b border-slate-50 hover:bg-slate-50 align-top">
+                          <td className="px-6 py-3 font-mono text-slate-400 text-xs pt-4">{r.position}</td>
+                          <td className="py-3 pr-4 pt-4">
+                            <div className="flex items-center gap-2">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={`https://www.google.com/s2/favicons?domain=${r.domain}&sz=16`} alt="" width={16} height={16} className="rounded-sm shrink-0 mt-0.5" />
+                              <span className="font-medium text-slate-700 whitespace-nowrap text-xs">{r.domain}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-6 max-w-xs">
+                            <div className="font-semibold text-slate-900 leading-snug text-sm">{r.title}</div>
+                            <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#f15b27] hover:underline truncate block max-w-xs">{r.url}</a>
+                            {r.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{r.description}</p>}
+                          </td>
+                          <td className="py-3 pr-4 text-center">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${rankColor}`}>
+                              {rankScore !== null ? rankScore : "—"}
+                            </span>
+                            {r.backlinks !== null && (
+                              <div className="text-[10px] text-slate-400 mt-1">{r.backlinks >= 1000 ? `${(r.backlinks / 1000).toFixed(1)}k` : r.backlinks} links</div>
+                            )}
+                          </td>
+                          <td className="py-3 pr-6">
+                            <div className="flex flex-wrap gap-1">
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${titleHasKw ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400"}`}>
+                                {titleHasKw ? "✓" : "✗"} Kw in title
+                              </span>
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${urlHasKw ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400"}`}>
+                                {urlHasKw ? "✓" : "✗"} Kw in URL
+                              </span>
+                              <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${descHasKw ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400"}`}>
+                                {descHasKw ? "✓" : "✗"} Kw in desc
+                              </span>
+                            </div>
+                            <div className="mt-1.5 text-[10px] text-slate-500 leading-relaxed max-w-[200px]">
+                              {[
+                                rankScore !== null && rankScore >= 70 && "High-authority domain",
+                                rankScore !== null && rankScore >= 40 && rankScore < 70 && "Medium authority",
+                                rankScore !== null && rankScore < 40 && "Lower authority domain",
+                                titleHasKw && urlHasKw && "Strong on-page optimization",
+                                titleHasKw && !urlHasKw && "Keyword in title",
+                                !titleHasKw && urlHasKw && "Keyword in URL",
+                                r.backlinks !== null && r.backlinks > 500 && "Strong backlink profile",
+                                r.etv !== null && r.etv > 0 && `~${r.etv.toLocaleString()} est. monthly visits`,
+                              ].filter(Boolean).join(" · ")}
+                            </div>
+                          </td>
+                          <td className="py-3 pr-6 text-right font-mono text-slate-600 text-xs pt-4">{r.etv !== null ? r.etv.toLocaleString() : "—"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

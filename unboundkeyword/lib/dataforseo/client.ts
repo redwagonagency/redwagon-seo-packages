@@ -2373,8 +2373,11 @@ export interface KeywordOverviewItem {
   searchVolume: number;
   cpc: number | null;
   competition: number | null;
+  competitionLevel: string | null;
   seResults: number | null;
   domainRank: number | null;
+  difficulty: number | null;
+  monthlySearches: { year: number; month: number; volume: number }[];
 }
 
 export async function getKeywordOverviewLabs(
@@ -2386,14 +2389,41 @@ export async function getKeywordOverviewLabs(
     { keywords, location_code: locationCode, language_code: languageCode },
   ]);
   const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
-  return items.map((i) => ({
-    keyword: String(i.keyword ?? ""),
-    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
-    cpc: typeof i.cpc === "number" ? i.cpc : null,
-    competition: typeof i.competition === "number" ? i.competition : null,
-    seResults: typeof i.se_results_count === "number" ? i.se_results_count : null,
-    domainRank: typeof i.rank === "number" ? i.rank : null,
-  }));
+  return items.map((i) => {
+    // Labs API nests metrics under keyword_info; fall back to flat fields
+    const ki = (i.keyword_info ?? {}) as Record<string, unknown>;
+    const kp = (i.keyword_properties ?? {}) as Record<string, unknown>;
+    const vol = typeof ki.search_volume === "number" ? ki.search_volume
+              : typeof i.search_volume === "number" ? i.search_volume : 0;
+    const cpc = typeof ki.cpc === "number" ? ki.cpc
+              : typeof i.cpc === "number" ? i.cpc : null;
+    const comp = typeof ki.competition === "number" ? ki.competition
+               : typeof i.competition === "number" ? i.competition : null;
+    const compLevel = String(ki.competition_level ?? i.competition_level ?? "") || null;
+    const diff = typeof kp.keyword_difficulty === "number" ? kp.keyword_difficulty
+               : typeof i.keyword_difficulty === "number" ? i.keyword_difficulty : null;
+    const rawMonthly = Array.isArray(ki.monthly_searches) ? ki.monthly_searches
+                     : Array.isArray(i.monthly_searches) ? i.monthly_searches : [];
+    const monthlySearches = (rawMonthly as Record<string, unknown>[])
+      .filter((m) => typeof m.year === "number" && typeof m.month === "number")
+      .map((m) => ({
+        year: m.year as number,
+        month: m.month as number,
+        volume: typeof m.search_volume === "number" ? m.search_volume : 0,
+      }))
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    return {
+      keyword: String(i.keyword ?? ""),
+      searchVolume: vol,
+      cpc,
+      competition: comp,
+      competitionLevel: compLevel,
+      seResults: typeof i.se_results_count === "number" ? i.se_results_count : null,
+      domainRank: typeof i.rank === "number" ? i.rank : null,
+      difficulty: diff,
+      monthlySearches,
+    };
+  });
 }
 
 export interface BulkKeywordDifficultyItem {
@@ -3698,6 +3728,10 @@ export interface SerpOrganicResult {
   /** DataForSEO estimated traffic to this result */
   etv: number | null;
   breadcrumb: string | null;
+  /** DataForSEO domain authority score (0–100) */
+  domainRank: number | null;
+  /** Backlinks to this specific URL */
+  backlinks: number | null;
 }
 
 /**
@@ -3733,6 +3767,8 @@ export async function getTopOrganicResults(
       domain: typeof i.domain === "string" ? i.domain : "",
       etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
       breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+      domainRank: typeof i.domain_rank === "number" ? i.domain_rank : null,
+      backlinks: typeof i.backlinks === "number" ? i.backlinks : null,
     }));
 }
 
@@ -3779,6 +3815,8 @@ export async function getSerpLiveData(
       domain: typeof i.domain === "string" ? i.domain : "",
       etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
       breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+      domainRank: typeof i.domain_rank === "number" ? i.domain_rank : null,
+      backlinks: typeof i.backlinks === "number" ? i.backlinks : null,
     }));
 
   // PAA: DFS may return PAA as container (type=people_also_ask with sub-items)
@@ -4056,6 +4094,8 @@ export async function getSerpLiveDataEnhanced(
       domain: typeof i.domain === "string" ? i.domain : "",
       etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
       breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+      domainRank: typeof i.domain_rank === "number" ? i.domain_rank : null,
+      backlinks: typeof i.backlinks === "number" ? i.backlinks : null,
     }));
 
   function mapPaaElement(s: Record<string, unknown>): PeopleAlsoAskItem | null {

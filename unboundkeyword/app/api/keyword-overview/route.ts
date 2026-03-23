@@ -20,6 +20,7 @@ import {
   getRelatedKeywords,
   getKeywordSuggestions,
   getBulkKeywordDifficulty,
+  getKeywordOverviewLabs,
   type SerpOrganicResult,
   type AutocompleteLetterGroup,
   type LighthouseLiveResult,
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
     relatedKwResult,
     suggestionsResult,
     difficultyResult,
+    labsResult,
   ] = await Promise.allSettled([
     getSerpLiveDataEnhanced(seed, location, language, 10),
     getGoogleAutocompleteAZ(seed, location, language),
@@ -142,6 +144,7 @@ export async function POST(req: NextRequest) {
     getRelatedKeywords(seed, location, language, 40),
     getKeywordSuggestions(seed, location, language, 30),
     getBulkKeywordDifficulty([seed], location, language),
+    getKeywordOverviewLabs([seed], location, language),
   ]);
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
@@ -168,6 +171,8 @@ export async function POST(req: NextRequest) {
   const relatedRaw = relatedKwResult.status === "fulfilled" ? relatedKwResult.value : [];
   const suggestionsRaw = suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
   const difficultyRaw = difficultyResult.status === "fulfilled" ? difficultyResult.value : [];
+  const labsRaw = labsResult.status === "fulfilled" ? labsResult.value : [];
+  const labsItem = labsRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase()) ?? null;
 
   // Parse demographics
   type DemoRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
@@ -189,8 +194,9 @@ export async function POST(req: NextRequest) {
   }
 
   // Parse paid search data + monthly volumes
-  type PaidRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
-  const paidItems = (paidRaw as PaidRaw)?.tasks?.[0]?.result?.[0]?.items ?? [];
+  // Google Ads API returns tasks[0].result as a direct array of keyword items
+  type PaidRaw = { tasks?: Array<{ result?: Array<Record<string, unknown>> }> };
+  const paidItems = (paidRaw as PaidRaw)?.tasks?.[0]?.result ?? [];
   const paidItem = (paidItems[0] ?? null) as Record<string, unknown> | null;
   const paidData: PaidSearchData | null = paidItem ? {
     searchVolume: typeof paidItem.search_volume === "number" ? paidItem.search_volume : null,
@@ -201,9 +207,14 @@ export async function POST(req: NextRequest) {
     competitionLevel: (["LOW", "MEDIUM", "HIGH"].includes(String(paidItem.competition_level ?? "")))
       ? (paidItem.competition_level as "LOW" | "MEDIUM" | "HIGH")
       : null,
-  } : null;
+  } : (labsItem ? {
+    searchVolume: labsItem.searchVolume,
+    cpc: labsItem.cpc,
+    competition: labsItem.competition,
+    competitionLevel: labsItem.competitionLevel as "LOW" | "MEDIUM" | "HIGH" | null,
+  } : null);
 
-  // Extract monthly volumes from Google Ads monthly_searches field
+  // Extract monthly volumes from Google Ads monthly_searches field (fall back to Labs)
   const monthlyVolumes: MonthlyVolumeItem[] = [];
   if (paidItem && Array.isArray(paidItem.monthly_searches)) {
     for (const m of paidItem.monthly_searches as Record<string, unknown>[]) {
@@ -213,8 +224,13 @@ export async function POST(req: NextRequest) {
     }
     monthlyVolumes.sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
   }
+  if (!monthlyVolumes.length && labsItem?.monthlySearches?.length) {
+    for (const m of labsItem.monthlySearches) {
+      monthlyVolumes.push({ year: m.year, month: m.month, volume: m.volume });
+    }
+  }
 
-  const keywordDifficulty = difficultyRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase())?.difficulty ?? null;
+  const keywordDifficulty = difficultyRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase())?.difficulty ?? labsItem?.difficulty ?? null;
 
   // Merge related + suggestions
   const relatedMap = new Map<string, RelatedKwItem>();
