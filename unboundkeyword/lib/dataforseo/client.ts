@@ -4186,3 +4186,71 @@ export async function getSerpLiveDataEnhanced(
 
   return { organic, paa: paa.slice(0, 12), features, localPack, ads };
 }
+
+// ─── Lightweight backlink summary (totals only, no individual links) ──────────
+export interface BacklinkTotalSummary {
+  backlinksTotal: number;
+  referringDomains: number;
+  domainRank: number;
+}
+
+export async function getBacklinkTotalSummary(target: string): Promise<BacklinkTotalSummary> {
+  const summaryData = await dfsPost("/backlinks/summary/live", [
+    { target, internal_list_limit: 0, external_list_limit: 0, include_subdomains: true },
+  ]);
+  const r = summaryData?.tasks?.[0]?.result?.[0] as Record<string, unknown> | undefined;
+  return {
+    backlinksTotal: typeof r?.backlinks === "number" ? r.backlinks : 0,
+    referringDomains: typeof r?.referring_domains === "number" ? r.referring_domains : 0,
+    domainRank: typeof r?.rank === "number" ? r.rank : 0,
+  };
+}
+
+// ─── Common keywords between two domains (intersection count + list) ─────────
+export interface CommonKeywordItem {
+  keyword: string;
+  volume: number | null;
+  yourPosition: number | null;
+  competitorPosition: number | null;
+}
+
+export async function getCommonKeywords(
+  domain1: string,
+  domain2: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 100
+): Promise<{ count: number; items: CommonKeywordItem[] }> {
+  const norm = (d: string) => d.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
+  const d1 = norm(domain1);
+  const d2 = norm(domain2);
+  const data = await dfsPost("/dataforseo_labs/google/domain_intersection/live", [
+    {
+      targets: [
+        { target: d1, type: "domain" },
+        { target: d2, type: "domain" },
+      ],
+      location_code: locationCode,
+      language_code: languageCode,
+      limit,
+      order_by: ["keyword_data.keyword_info.search_volume,desc"],
+    },
+  ]);
+  const totalCount: number =
+    (data?.tasks?.[0]?.result?.[0] as Record<string, unknown> | undefined)?.total_count as number ?? 0;
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  const mapped: CommonKeywordItem[] = items.map((item) => {
+    const kd = (item.keyword_data as Record<string, unknown>) ?? {};
+    const ki = (kd.keyword_info as Record<string, unknown>) ?? {};
+    const ranked = (item.ranked_elements as Record<string, unknown>[]) ?? [];
+    const d1el = ranked.find((r) => String(r.target ?? r.domain ?? "").toLowerCase().includes(d1));
+    const d2el = ranked.find((r) => String(r.target ?? r.domain ?? "").toLowerCase().includes(d2));
+    return {
+      keyword: String(kd.keyword ?? ""),
+      volume: typeof ki.search_volume === "number" ? ki.search_volume : null,
+      yourPosition: typeof d1el?.rank_absolute === "number" ? d1el.rank_absolute as number : null,
+      competitorPosition: typeof d2el?.rank_absolute === "number" ? d2el.rank_absolute as number : null,
+    };
+  });
+  return { count: typeof totalCount === "number" ? totalCount : mapped.length, items: mapped };
+}

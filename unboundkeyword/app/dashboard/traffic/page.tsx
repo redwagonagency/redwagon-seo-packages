@@ -15,7 +15,7 @@ type TrafficResponse = {
   } | null;
   history: { date: string; organicTraffic: number }[];
   competitors: { domain: string; intersections: number; avgPosition: number | null; etv: number | null }[];
-  keywords: { keyword: string; position: number; searchVolume: number; traffic: number; cpc?: number | null }[];
+  keywords: { keyword: string; url?: string | null; position: number; searchVolume: number; traffic: number; cpc?: number | null }[];
   pages?: { url: string; title: string | null; traffic: number; keywordCount: number }[];
   rankedKeywords?: { keyword: string; position: number; url: string | null; searchVolume: number; cpc: number | null }[];
   bulkTraffic?: { target: string; organicTraffic: number; paidTraffic: number; etv: number }[];
@@ -23,7 +23,7 @@ type TrafficResponse = {
   pageIntersection?: { url: string; domain: string; title: string | null; matchingPages: number }[];
 };
 
-type Tab = "overview" | "ranked" | "traffic-est" | "page-intersection";
+type Tab = "overview" | "ranked" | "traffic-est" | "page-intersection" | "gsc" | "ga4";
 
 function diffBand(v: number) {
   if (v >= 70) return "bg-red-300";
@@ -38,6 +38,12 @@ export default function TrafficPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
+  const [gscData, setGscData] = useState<{ query: string; clicks: number; impressions: number; ctr: number; position: number }[] | null>(null);
+  const [ga4Data, setGa4Data] = useState<{ page: string; sessions: number; pageviews: number }[] | null>(null);
+  const [gscLoading, setGscLoading] = useState(false);
+  const [ga4Loading, setGa4Loading] = useState(false);
+  const [gscError, setGscError] = useState("");
+  const [ga4Error, setGa4Error] = useState("");
 
   async function runLookup(nextDomain?: string) {
     setLoading(true);
@@ -62,6 +68,36 @@ export default function TrafficPage() {
 
   useEffect(() => { void runLookup(); }, []);
 
+  async function loadGscData() {
+    setGscLoading(true);
+    setGscError("");
+    try {
+      const res = await fetch("/api/gsc/data");
+      const json = await res.json() as { rows?: typeof gscData; error?: string; notConnected?: boolean };
+      if (!res.ok || json.error) throw new Error(json.error ?? "GSC fetch failed");
+      setGscData(json.rows ?? []);
+    } catch (e) {
+      setGscError(e instanceof Error ? e.message : "GSC error");
+    } finally {
+      setGscLoading(false);
+    }
+  }
+
+  async function loadGa4Data() {
+    setGa4Loading(true);
+    setGa4Error("");
+    try {
+      const res = await fetch("/api/ga4/data");
+      const json = await res.json() as { rows?: typeof ga4Data; error?: string; notConnected?: boolean };
+      if (!res.ok || json.error) throw new Error(json.error ?? "GA4 fetch failed");
+      setGa4Data(json.rows ?? []);
+    } catch (e) {
+      setGa4Error(e instanceof Error ? e.message : "GA4 error");
+    } finally {
+      setGa4Loading(false);
+    }
+  }
+
   const chartHistory = useMemo(() => {
     const hist = (data?.historicalBulkTraffic?.length ? data.historicalBulkTraffic : data?.history) ?? [];
     if (hist.length === 0) return [] as Array<{ x: number; y: number; value: number; label: string }>;
@@ -77,28 +113,59 @@ export default function TrafficPage() {
 
   const linePath = chartHistory.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
 
+  // Group keywords by their URL (from DataForSEO url field) so we can properly associate them with pages
+  const keywordsByUrl = useMemo(() => {
+    const map = new Map<string, NonNullable<TrafficResponse["keywords"]>>();
+    for (const kw of (data?.keywords ?? [])) {
+      const key = (kw.url ?? "").replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(kw);
+    }
+    return map;
+  }, [data?.keywords]);
+
   const pageRows = useMemo(() => {
-    const pages = data?.pages ?? [];
-    const keywordPool = data?.keywords ?? [];
-    return pages.slice(0, 20).map((page, idx) => {
-      const topKeyword = keywordPool[idx % Math.max(keywordPool.length, 1)] ?? { keyword: "—", searchVolume: 0, position: 0, traffic: 0 };
-      return { rank: idx + 1, traffic: Math.max(0, Math.round(page.traffic)), url: page.url, keywords: page.keywordCount, topKeyword: topKeyword.keyword, topKeywordVolume: topKeyword.searchVolume, topKeywordPosition: topKeyword.position };
+    return (data?.pages ?? []).slice(0, 20).map((page, idx) => {
+      // Match page URL to keyword URL (strip protocol + www + trailing slash)
+      const pageKey = page.url.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "");
+      const pageKws = keywordsByUrl.get(pageKey) ?? [];
+      const topKeyword = pageKws.sort((a, b) => b.traffic - a.traffic)[0];
+      return {
+        rank: idx + 1,
+        traffic: Math.max(0, Math.round(page.traffic)),
+        url: page.url,
+        keywords: page.keywordCount,
+        topKeyword: topKeyword?.keyword ?? "—",
+        topKeywordVolume: topKeyword?.searchVolume ?? 0,
+        topKeywordPosition: topKeyword?.position ?? 0,
+      };
     });
-  }, [data?.pages, data?.keywords]);
+  }, [data?.pages, keywordsByUrl]);
+
+  const selectedPageUrl = pageRows[selectedPageIndex]?.url ?? "";
 
   const selectedKeywordRows = useMemo(() => {
-    const source = data?.keywords ?? [];
-    return source.slice(selectedPageIndex * 8, selectedPageIndex * 8 + 8).map((row, idx) => ({
-      keyword: row.keyword, position: row.position, traffic: row.traffic, volume: row.searchVolume, cpc: row.cpc ?? 0,
+    const pageKey = selectedPageUrl.replace(/^https?:\/\/(?:www\.)?/, "").replace(/\/$/, "");
+    const pageKws = keywordsByUrl.get(pageKey) ?? [];
+    // Fallback: if no URL-matched keywords, show top keywords by traffic
+    const source = pageKws.length > 0 ? pageKws : (data?.keywords ?? []).slice(0, 8);
+    return source.slice(0, 12).map((row, idx) => ({
+      keyword: row.keyword,
+      position: row.position,
+      traffic: row.traffic,
+      volume: row.searchVolume,
+      cpc: row.cpc ?? 0,
       seoDifficulty: Math.max(12, Math.min(88, Math.round(row.position * 1.7 + (idx % 4) * 12))),
     }));
-  }, [data?.keywords, selectedPageIndex]);
+  }, [selectedPageUrl, keywordsByUrl, data?.keywords]);
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "ranked", label: "Ranked Keywords", count: data?.rankedKeywords?.length },
     { id: "traffic-est", label: "Traffic Estimation", count: data?.bulkTraffic?.length },
     { id: "page-intersection", label: "Page Intersection", count: data?.pageIntersection?.length },
+    { id: "gsc", label: "Search Console" },
+    { id: "ga4", label: "GA4 Analytics" },
   ];
 
   return (
@@ -360,6 +427,94 @@ export default function TrafficPage() {
                       <td className="px-4 py-3 text-slate-600 text-sm">{row.domain}</td>
                       <td className="px-4 py-3 text-slate-500 text-xs truncate max-w-xs">{row.title ?? "—"}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{row.matchingPages}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Google Search Console tab */}
+      {activeTab === "gsc" && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Google Search Console</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Real clicks, impressions, CTR and position from your verified Google property.</p>
+            </div>
+            {!gscData && !gscLoading && (
+              <button type="button" onClick={() => void loadGscData()} className="rounded-lg bg-[#f15b27] px-6 py-2 text-sm font-black text-white hover:bg-[#d94e1f]">
+                Load GSC Data
+              </button>
+            )}
+          </div>
+          {gscLoading && <div className="px-6 py-12 text-center text-sm text-slate-400">Loading Search Console data…</div>}
+          {gscError && <div className="px-6 py-4 text-sm text-red-600 bg-red-50 border-b border-red-100">{gscError}</div>}
+          {gscData && gscData.length === 0 && <div className="px-6 py-12 text-center text-sm text-slate-400">No GSC data found. Make sure your site is verified in Google Search Console.</div>}
+          {gscData && gscData.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Query</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Clicks</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Impressions</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CTR</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Avg. Position</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gscData.map((row, idx) => (
+                    <tr key={`${row.query}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-800">{row.query}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{formatNumber(row.clicks)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.impressions)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">{(row.ctr * 100).toFixed(1)}%</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">{row.position.toFixed(1)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* GA4 Analytics tab */}
+      {activeTab === "ga4" && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">GA4 Analytics</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Real sessions and pageviews from your Google Analytics 4 property.</p>
+            </div>
+            {!ga4Data && !ga4Loading && (
+              <button type="button" onClick={() => void loadGa4Data()} className="rounded-lg bg-[#f15b27] px-6 py-2 text-sm font-black text-white hover:bg-[#d94e1f]">
+                Load GA4 Data
+              </button>
+            )}
+          </div>
+          {ga4Loading && <div className="px-6 py-12 text-center text-sm text-slate-400">Loading GA4 data…</div>}
+          {ga4Error && <div className="px-6 py-4 text-sm text-red-600 bg-red-50 border-b border-red-100">{ga4Error}</div>}
+          {ga4Data && ga4Data.length === 0 && <div className="px-6 py-12 text-center text-sm text-slate-400">No GA4 data found. Make sure your GA4 property is connected to your Google account.</div>}
+          {ga4Data && ga4Data.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Page</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Sessions</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Pageviews</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ga4Data.map((row, idx) => (
+                    <tr key={`${row.page}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-[#f15b27] text-xs truncate max-w-sm">{row.page}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{formatNumber(row.sessions)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.pageviews)}</td>
                     </tr>
                   ))}
                 </tbody>
