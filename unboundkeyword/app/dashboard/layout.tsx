@@ -125,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [path]);
 
   return (
-    <div className="flex min-h-screen bg-[#f4f6f8]">
+    <div className="flex min-h-screen bg-[#f4f6f8] text-slate-900">
       {/* Sidebar */}
       <aside className="w-60 shrink-0 bg-white border-r border-slate-100 flex flex-col">
         {/* Logo */}

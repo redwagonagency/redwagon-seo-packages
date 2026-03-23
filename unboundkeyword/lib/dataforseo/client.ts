@@ -3526,3 +3526,198 @@ export async function getRedditPostsForUrls(targets: string[]) {
   }));
 }
 
+// ─── On-Page Lighthouse Live/JSON ─────────────────────────────────────────────
+
+export interface LighthouseLiveResult {
+  url: string;
+  performance: number | null;
+  accessibility: number | null;
+  bestPractices: number | null;
+  seo: number | null;
+  /** Top failing audits with title + score */
+  failedAudits: { id: string; title: string; score: number; impact: string }[];
+}
+
+/**
+ * Run a live Lighthouse audit for a URL using DataForSEO's instant endpoint.
+ * Uses /on_page/lighthouse/live/json which returns scores + full audit data.
+ */
+export async function getLighthouseLiveJson(
+  url: string,
+  forMobile = false
+): Promise<LighthouseLiveResult> {
+  const targetUrl = url.startsWith("http") ? url : `https://${url}`;
+  const data = await dfsPost("/on_page/lighthouse/live/json", [
+    { url: targetUrl, for_mobile: forMobile },
+  ]);
+
+  const item = (
+    data?.tasks?.[0]?.result?.[0]?.items?.[0] ??
+    data?.tasks?.[0]?.result?.[0] ??
+    null
+  ) as Record<string, unknown> | null;
+
+  if (!item) {
+    return { url: targetUrl, performance: null, accessibility: null, bestPractices: null, seo: null, failedAudits: [] };
+  }
+
+  const lh = (item.lighthouse as Record<string, unknown>) ?? item;
+  const cats = (lh.categories as Record<string, unknown>) ?? {};
+  const audits = (lh.audits as Record<string, Record<string, unknown>>) ?? {};
+
+  const getScore = (val: unknown): number | null => {
+    if (typeof val === "number") return Math.round(val * (val <= 1 ? 100 : 1));
+    if (typeof (val as Record<string, unknown> | null)?.score === "number") {
+      const s = (val as Record<string, unknown>).score as number;
+      return Math.round(s * (s <= 1 ? 100 : 1));
+    }
+    return null;
+  };
+
+  const failedAudits = Object.entries(audits)
+    .filter(([, a]) => typeof a.score === "number" && (a.score as number) < 0.9 && a.score !== null)
+    .map(([id, a]) => ({
+      id,
+      title: typeof a.title === "string" ? a.title : id,
+      score: Math.round((a.score as number) * 100),
+      impact: typeof a.details !== "undefined" || (a.score as number) < 0.5 ? "high" : "medium",
+    }))
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 8);
+
+  return {
+    url: targetUrl,
+    performance: getScore(cats.performance),
+    accessibility: getScore(cats.accessibility),
+    bestPractices: getScore(cats["best-practices"] ?? cats.bestPractices),
+    seo: getScore(cats.seo),
+    failedAudits,
+  };
+}
+
+// ─── AI Keyword Search Volume ─────────────────────────────────────────────────
+
+export interface AiKeywordVolumeItem {
+  keyword: string;
+  /** Estimated monthly AI search volume (perplexity, chatgpt, etc.) */
+  searchVolume: number | null;
+  /** Breakdown by AI model if available */
+  breakdown: { model: string; volume: number }[];
+}
+
+/**
+ * Get estimated AI search volume for a list of keywords.
+ * Uses /ai_optimization/ai_keyword_data/keywords_search_volume/live
+ */
+export async function getAiKeywordSearchVolume(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<AiKeywordVolumeItem[]> {
+  const data = await dfsPost("/ai_optimization/ai_keyword_data/keywords_search_volume/live", [
+    { keywords: keywords.slice(0, 100), location_code: locationCode, language_code: languageCode },
+  ]);
+
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const breakdown: { model: string; volume: number }[] = [];
+    if (i.lm_details && typeof i.lm_details === "object") {
+      for (const [model, vol] of Object.entries(i.lm_details as Record<string, unknown>)) {
+        if (typeof vol === "number") breakdown.push({ model, volume: vol });
+      }
+    }
+    return {
+      keyword: String(i.keyword ?? ""),
+      searchVolume: typeof i.search_volume === "number" ? i.search_volume : null,
+      breakdown,
+    };
+  });
+}
+
+// ─── Batch Google Autocomplete (A-Z) ─────────────────────────────────────────
+
+export interface AutocompleteLetterGroup {
+  letter: string;
+  suggestions: string[];
+}
+
+/**
+ * Fetch A-Z autocomplete suggestions for a seed keyword.
+ * Sends all 26 prefix tasks in a single batched POST request.
+ */
+export async function getGoogleAutocompleteAZ(
+  seed: string,
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<AutocompleteLetterGroup[]> {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
+  const tasks = alphabet.map((letter) => ({
+    keyword: `${seed} ${letter}`,
+    location_code: locationCode,
+    language_code: languageCode,
+  }));
+
+  const data = await dfsPost("/serp/google/autocomplete/live/advanced", tasks);
+  const taskResults = (data?.tasks ?? []) as Record<string, unknown>[];
+
+  return alphabet.map((letter, idx) => {
+    const task = taskResults[idx];
+    const resultArr = (task?.result ?? []) as Record<string, unknown>[];
+    const items = ((resultArr[0]?.items ?? []) as Record<string, unknown>[]);
+    const suggestions = items
+      .filter((i) => String(i.type ?? "") === "autocomplete")
+      .map((i) => String(i.suggestion ?? i.keyword ?? ""))
+      .filter(Boolean)
+      .slice(0, 8);
+    return { letter, suggestions };
+  });
+}
+
+// ─── SERP Top Organic Results ─────────────────────────────────────────────────
+
+export interface SerpOrganicResult {
+  position: number;
+  url: string;
+  title: string;
+  description: string | null;
+  domain: string;
+  /** DataForSEO estimated traffic to this result */
+  etv: number | null;
+  breadcrumb: string | null;
+}
+
+/**
+ * Fetch the top organic Google SERP results for a keyword.
+ * Uses /serp/google/organic/live/advanced
+ */
+export async function getTopOrganicResults(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 10
+): Promise<SerpOrganicResult[]> {
+  const data = await dfsPost("/serp/google/organic/live/advanced", [
+    {
+      keyword,
+      location_code: locationCode,
+      language_code: languageCode,
+      device: "desktop",
+      calculate_rectangles: false,
+      depth: limit,
+    },
+  ]);
+
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items
+    .filter((i) => String(i.type ?? "") === "organic")
+    .slice(0, limit)
+    .map((i) => ({
+      position: typeof i.rank_absolute === "number" ? i.rank_absolute : 0,
+      url: typeof i.url === "string" ? i.url : "",
+      title: typeof i.title === "string" ? i.title : "",
+      description: typeof i.description === "string" ? i.description : null,
+      domain: typeof i.domain === "string" ? i.domain : "",
+      etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
+      breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+    }));
+}
