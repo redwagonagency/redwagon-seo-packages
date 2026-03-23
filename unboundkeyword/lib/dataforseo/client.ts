@@ -3043,10 +3043,16 @@ export async function getBingKeywordsForSite(
   locationCode = 2840,
   languageCode = "en",
   limit = 100
-) {
-  return dfsPost("/keywords_data/bing/keywords_for_site/live", [
+): Promise<{ keyword: string; searchVolume: number; cpc: number | null }[]> {
+  const data = await dfsPost("/keywords_data/bing/keywords_for_site/live", [
     { target, location_code: locationCode, language_code: languageCode, limit },
   ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    cpc: typeof i.cpc === "number" ? i.cpc : null,
+  }));
 }
 
 /** Bing keyword performance metrics */

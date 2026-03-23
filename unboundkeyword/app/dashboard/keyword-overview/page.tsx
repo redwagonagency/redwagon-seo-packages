@@ -11,7 +11,7 @@ import type {
   LlmMentionLiveItem,
   PeopleAlsoAskItem,
 } from "@/lib/dataforseo/client";
-import type { CitationItem, PhraseTrendItem, PaidSearchData, DemographicsData } from "@/app/api/keyword-overview/route";
+import type { CitationItem, PhraseTrendItem, PaidSearchData, DemographicsData, RelatedKwItem } from "@/app/api/keyword-overview/route";
 
 interface OverviewData {
   keyword: string;
@@ -26,10 +26,12 @@ interface OverviewData {
   lighthouse: LighthouseLiveResult | null;
   paid: PaidSearchData | null;
   demographics: DemographicsData | null;
+  relatedKeywords?: RelatedKwItem[];
+  keywordDifficulty?: number | null;
   errors: Record<string, string>;
 }
 
-type Tab = "serp" | "paa" | "autocomplete" | "citations" | "trends" | "ai" | "llm" | "lighthouse";
+type Tab = "serp" | "paa" | "autocomplete" | "citations" | "trends" | "ai" | "llm" | "lighthouse" | "related";
 
 function ScoreDial({ label, value }: { label: string; value: number | null }) {
   const pct = value !== null ? Math.round(value * 100) : null;
@@ -132,6 +134,7 @@ export default function KeywordOverviewPage() {
         { id: "serp", label: "Top Results", count: data.serp.length },        { id: "paa", label: "People Also Ask", count: data.paa?.length ?? 0 },        { id: "autocomplete", label: "A–Z Autocomplete", count: data.autocomplete.filter((g) => g.suggestions.length > 0).length },
         { id: "citations", label: "Citations", count: data.citations.length },
         { id: "trends", label: "Phrase Trends", count: data.phraseTrends.length },
+        { id: "related", label: "Related Keywords", count: data.relatedKeywords?.length ?? 0 },
         { id: "ai", label: "AI Volume", count: data.aiVolume.length },
         { id: "llm", label: "LLM Mentions", count: data.llmMentions.length },
         ...(data.domain ? [{ id: "lighthouse" as Tab, label: "Lighthouse" }] : []),
@@ -233,6 +236,24 @@ export default function KeywordOverviewPage() {
                   {data.paid.competitionLevel ?? "—"}
                 </span>
               </div>
+            </div>
+          )}
+          {/* Keyword difficulty hero bar (always shown when data available) */}
+          {data.keywordDifficulty != null && (
+            <div className="mx-6 mt-4 mb-2 flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 px-5 py-3">
+              <div className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400 whitespace-nowrap">SEO Difficulty</div>
+              <div className="flex-1 h-3 rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className={`h-3 rounded-full transition-all ${data.keywordDifficulty >= 70 ? "bg-red-500" : data.keywordDifficulty >= 40 ? "bg-amber-400" : "bg-emerald-500"}`}
+                  style={{ width: `${data.keywordDifficulty}%` }}
+                />
+              </div>
+              <span className={`text-lg font-black tabular-nums w-12 text-right ${data.keywordDifficulty >= 70 ? "text-red-600" : data.keywordDifficulty >= 40 ? "text-amber-500" : "text-emerald-600"}`}>
+                {data.keywordDifficulty}
+              </span>
+              <span className="text-xs font-semibold text-slate-500">
+                {data.keywordDifficulty >= 70 ? "Hard" : data.keywordDifficulty >= 40 ? "Medium" : "Easy"}
+              </span>
             </div>
           )}
           {/* Tabs */}
@@ -494,6 +515,56 @@ export default function KeywordOverviewPage() {
                       <span>{data.phraseTrends[0]?.date?.slice(0, 7)}</span>
                       <span>{data.phraseTrends[data.phraseTrends.length - 1]?.date?.slice(0, 7)}</span>
                     </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Related Keywords Tab ── */}
+            {activeTab === "related" && (
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 mb-4">
+                  Related Keywords for &ldquo;{data.keyword}&rdquo;
+                </h2>
+                {!data.relatedKeywords?.length ? (
+                  <p className="text-slate-500 text-sm">No related keyword data available.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          <th className="pb-2 pr-3 text-left">Keyword</th>
+                          <th className="pb-2 pr-3 text-right w-28">Volume</th>
+                          <th className="pb-2 pr-3 text-right w-24">CPC</th>
+                          <th className="pb-2 pr-3 text-right w-24">Competition</th>
+                          <th className="pb-2 text-right w-28">Difficulty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.relatedKeywords.map((r) => (
+                          <tr key={r.keyword} className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
+                            onClick={() => { setKeyword(r.keyword); void handleSubmit(new Event("submit") as unknown as React.FormEvent); }}>
+                            <td className="py-2.5 pr-3 font-medium text-slate-800">{r.keyword}</td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">
+                              {r.volume > 0 ? r.volume.toLocaleString() : "—"}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">
+                              {r.cpc != null ? `$${r.cpc.toFixed(2)}` : "—"}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">
+                              {r.competition != null ? `${Math.round(r.competition * 100)}%` : "—"}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              {r.difficulty != null ? (
+                                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${r.difficulty >= 70 ? "bg-red-100 text-red-700" : r.difficulty >= 40 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                                  {r.difficulty}
+                                </span>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
               </div>

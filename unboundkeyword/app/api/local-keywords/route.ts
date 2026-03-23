@@ -11,6 +11,7 @@ import {
   US_DMAS,
   generateLocalVariants,
   getStateByAbbr,
+  getDmaZips,
 } from "@/lib/data/usa-geo";
 
 export interface LocalKeywordRow {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
   const seed = keyword.trim().toLowerCase();
 
   // Collect all city entries to generate variants for
-  const cityEntries: { city: string; stateName: string; stateAbbr: string; dmaName: string | null; aliases: Record<string, string> }[] = [];
+  const cityEntries: { city: string; stateName: string; stateAbbr: string; dmaName: string | null; aliases: Record<string, string>; dmaId?: string }[] = [];
 
   // From selected DMAs
   const selectedDmas = US_DMAS.filter((d) => dmaIds.includes(d.id));
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
     const stateInfo = getStateByAbbr(dma.state);
     const stateName = stateInfo?.name ?? dma.state;
     for (const city of dma.cities.slice(0, 10)) {
-      cityEntries.push({ city, stateName, stateAbbr: dma.state, dmaName: dma.name, aliases: dma.aliases });
+      cityEntries.push({ city, stateName, stateAbbr: dma.state, dmaName: dma.name, aliases: dma.aliases, dmaId: dma.id });
     }
   }
 
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
   const variantMap = new Map<string, { city: string; stateName: string; stateAbbr: string; dmaName: string | null }>();
 
   for (const entry of cityEntries) {
-    const variants = generateLocalVariants(seed, entry.city, entry.stateName, entry.stateAbbr, entry.aliases);
+    const variants = generateLocalVariants(seed, entry.city, entry.stateName, entry.stateAbbr, entry.aliases, entry.dmaId ? getDmaZips(entry.dmaId) : undefined);
     for (const v of variants) {
       if (!variantMap.has(v)) {
         variantMap.set(v, { city: entry.city, stateName: entry.stateName, stateAbbr: entry.stateAbbr, dmaName: entry.dmaName });

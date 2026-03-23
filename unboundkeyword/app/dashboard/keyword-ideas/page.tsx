@@ -13,6 +13,7 @@ const SOURCE_COLORS: Record<string, string> = {
   google_trends: "bg-purple-100 text-purple-700",
   bing: "bg-cyan-100 text-cyan-700",
   amazon: "bg-orange-100 text-orange-700",
+  related: "bg-emerald-100 text-emerald-700",
 };
 
 function difficultyCell(v: number | null) {

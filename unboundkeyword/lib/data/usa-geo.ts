@@ -66,6 +66,7 @@ export interface DmaMarket {
   state: string;        // Primary state abbr
   cities: string[];     // Major cities/towns in this DMA
   aliases: Record<string, string>;  // city name → short alias (e.g. Los Angeles → LA)
+  primaryZips?: string[]; // Representative zip codes for this DMA
 }
 
 export const US_DMAS: DmaMarket[] = [
@@ -336,8 +337,66 @@ export function getDmasByState(stateAbbr: string): DmaMarket[] {
   return US_DMAS.filter((d) => d.state === abbr);
 }
 
+/** Representative zip codes for each DMA (2-3 per market) */
+const DMA_ZIPS: Record<string, string[]> = {
+  "501": ["10001", "10036", "11201"],   // New York
+  "803": ["90001", "90024", "90210"],   // Los Angeles
+  "602": ["60601", "60614", "60629"],   // Chicago
+  "504": ["19103", "19107", "19146"],   // Philadelphia
+  "506": ["02101", "02116", "02134"],   // Boston
+  "807": ["94102", "94110", "94117"],   // San Francisco
+  "623": ["75201", "75205", "76102"],   // Dallas
+  "618": ["77001", "77002", "77006"],   // Houston
+  "511": ["20001", "20003", "20036"],   // Washington DC
+  "524": ["30301", "30303", "30309"],   // Atlanta
+  "539": ["33602", "33606", "33629"],   // Tampa
+  "528": ["33101", "33130", "33139"],   // Miami
+  "616": ["55401", "55403", "55415"],   // Minneapolis
+  "535": ["44101", "44103", "44114"],   // Cleveland
+  "508": ["48201", "48215", "48226"],   // Detroit
+  "613": ["85001", "85004", "85013"],   // Phoenix
+  "819": ["98101", "98103", "98115"],   // Seattle
+  "543": ["23219", "23220", "23230"],   // Richmond
+  "527": ["46201", "46204", "46220"],   // Indianapolis
+  "533": ["97201", "97209", "97214"],   // Portland
+  "561": ["28202", "28203", "28206"],   // Charlotte
+  "641": ["92101", "92103", "92115"],   // San Diego
+  "752": ["80203", "80205", "80218"],   // Denver
+  "544": ["23510", "23517", "23601"],   // Norfolk
+  "520": ["21201", "21202", "21218"],   // Baltimore
+  "670": ["70112", "70115", "70119"],   // New Orleans
+  "532": ["95814", "95816", "95825"],   // Sacramento
+  "577": ["45202", "45206", "45219"],   // Cincinnati
+  "596": ["64101", "64105", "64108"],   // Kansas City
+  "548": ["15201", "15203", "15213"],   // Pittsburgh
+  "559": ["84101", "84103", "84111"],   // Salt Lake City
+  "650": ["78701", "78704", "78745"],   // Austin
+  "685": ["78201", "78205", "78209"],   // San Antonio
+  "757": ["37201", "37205", "37215"],   // Nashville
+  "563": ["27601", "27605", "27607"],   // Raleigh
+  "698": ["89101", "89103", "89121"],   // Las Vegas
+  "640": ["38103", "38104", "38120"],   // Memphis
+  "636": ["40202", "40204", "40206"],   // Louisville
+  "605": ["43201", "43204", "43215"],   // Columbus
+  "555": ["32202", "32205", "32207"],   // Jacksonville
+  "617": ["53202", "53203", "53211"],   // Milwaukee
+  "825": ["96813", "96815", "96817"],   // Honolulu
+  "743": ["06101", "06103", "06106"],   // Hartford
+  "566": ["73102", "73103", "73112"],   // Oklahoma City
+  "678": ["87102", "87104", "87110"],   // Albuquerque
+  "657": ["35203", "35205", "35210"],   // Birmingham
+  "612": ["68102", "68104", "68131"],   // Omaha
+  "571": ["29201", "29203", "29205"],   // Columbia SC
+  "687": ["79901", "79902", "79904"],   // El Paso
+  "811": ["99201", "99202", "99207"],   // Spokane
+};
+
+export function getDmaZips(dmaId: string): string[] {
+  return DMA_ZIPS[dmaId] ?? [];
+}
+
 // Generate localized keyword variants for a city
-export function generateLocalVariants(seed: string, city: string, stateName: string, stateAbbr: string, aliases: Record<string, string>): string[] {
+export function generateLocalVariants(seed: string, city: string, stateName: string, stateAbbr: string, aliases: Record<string, string>, zipCodes?: string[]): string[] {
   const variants = new Set<string>();
   const cityAlias = aliases[city];
   const cityLower = city.toLowerCase().trim();
@@ -354,6 +413,11 @@ export function generateLocalVariants(seed: string, city: string, stateName: str
     variants.add(`${seed} in ${alias}`);
     variants.add(`${seed} in ${alias} ${stateAbbr.toLowerCase()}`);
     variants.add(`${seed} ${alias}`);
+  }
+
+  for (const zip of (zipCodes ?? []).slice(0, 2)) {
+    variants.add(`${seed} ${zip}`);
+    variants.add(`${seed} near ${zip}`);
   }
 
   return [...variants];

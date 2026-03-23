@@ -258,8 +258,8 @@ export default function HomePage() {
               </a>
 
               <h1 className="text-5xl sm:text-6xl md:text-[68px] font-black leading-[1.04] tracking-tight mb-5">
-                Discover What People Are<br />
-                <span className="ubk-orange-accent">Searching For</span>…&nbsp;Across Every Major Platform
+                Discover What People Search<br />
+                <span className="ubk-orange-accent">Across Every Platform</span>
               </h1>
 
               <p className="text-white/48 text-lg mb-7 max-w-lg leading-relaxed" style={{ color: "rgba(255,255,255,0.48)" }}>

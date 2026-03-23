@@ -83,23 +83,21 @@ export async function POST(req: NextRequest) {
   // Generate hashtag results — one per platform for meaningful keywords
   const hashtags: HashtagResult[] = [];
 
-  for (const kw of allKeywords) {
+  // Each hashtag appears once per platform so platform-filter views are always populated
+  for (const kw of allKeywords.slice(0, 50)) {
     const vol = volMap.get(kw);
     const trendsValue = trendsMap.get(kw) ?? null;
-
-    // Assign to platforms based on keyword characteristics and round-robin
-    const platformIdx = hashtags.length % PLATFORMS.length;
-    const platform = PLATFORMS[platformIdx];
-
-    hashtags.push({
-      hashtag: toHashtag(kw),
-      keyword: kw,
-      volume: vol?.volume ?? null,
-      cpc: vol?.cpc ?? null,
-      trendsValue,
-      platform,
-      difficulty: vol?.difficulty ?? null,
-    });
+    for (const platform of PLATFORMS) {
+      hashtags.push({
+        hashtag: toHashtag(kw),
+        keyword: kw,
+        volume: vol?.volume ?? null,
+        cpc: vol?.cpc ?? null,
+        trendsValue,
+        platform,
+        difficulty: vol?.difficulty ?? null,
+      });
+    }
   }
 
   // Sort by volume desc

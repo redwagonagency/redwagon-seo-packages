@@ -186,7 +186,7 @@ export default function HashtagsPage() {
                 </thead>
                 <tbody>
                   {filteredRows.map((row) => (
-                    <tr key={row.hashtag} onClick={() => toggleRow(row.hashtag)}
+                    <tr key={`${row.hashtag}-${row.platform}`} onClick={() => toggleRow(row.hashtag)}
                       className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selected.has(row.hashtag) ? "bg-orange-50" : ""}`}>
                       <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(row.hashtag)} onChange={() => toggleRow(row.hashtag)} onClick={(e) => e.stopPropagation()} className="rounded" /></td>
                       <td className="px-4 py-2.5 font-black text-slate-900">{row.hashtag}</td>

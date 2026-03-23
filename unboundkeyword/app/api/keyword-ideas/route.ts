@@ -6,6 +6,8 @@ import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
   getKeywordIdeasLabs,
+  getRelatedKeywords,
+  getKeywordSuggestions,
   getAmazonRelatedKeywords,
   getBingKeywordsForKeywords,
   getBingKeywordsForSite,
@@ -23,7 +25,7 @@ export interface IdeaKeyword {
   difficulty: number | null;
   intent: string | null;
   trendsValue?: number | null;
-  source: "google" | "bing" | "amazon" | "google_ads" | "google_trends";
+  source: "google" | "bing" | "amazon" | "google_ads" | "google_trends" | "related";
 }
 
 export interface KeywordIdeasResponse {
@@ -63,6 +65,8 @@ export async function POST(req: NextRequest) {
       trendsResult,
       amazonResult,
       bingPerfResult,
+      relatedResult,
+      suggestionsResult,
     ] = await Promise.allSettled([
       // Google Labs keyword ideas
       getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => []),
@@ -82,6 +86,10 @@ export async function POST(req: NextRequest) {
       getAmazonRelatedKeywords(seed, location, language, 1, 30).catch(() => []),
       // Placeholder — Bing performance will run after collecting unique keywords
       Promise.resolve([] as { keyword: string; searchVolume: number; cpc: number | null; competition: number | null }[]),
+      // Related keywords (DataForSEO Labs)
+      getRelatedKeywords(seed, location, language, 50).catch(() => []),
+      // Keyword suggestions (DataForSEO Labs)
+      getKeywordSuggestions(seed, location, language, 30).catch(() => []),
     ]);
 
     const labsItems = labsResult.status === "fulfilled" ? labsResult.value : [];
@@ -90,6 +98,8 @@ export async function POST(req: NextRequest) {
     const googleAdsSite = googleAdsSiteResult.status === "fulfilled" ? googleAdsSiteResult.value : [];
     const trends = trendsResult.status === "fulfilled" ? trendsResult.value : [];
     const amazonItems = amazonResult.status === "fulfilled" ? amazonResult.value : [];
+    const relatedItems = relatedResult.status === "fulfilled" ? relatedResult.value : [];
+    const suggestionItems = suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
 
     // Build merged keyword map — Google as primary source
     const kwMap = new Map<string, IdeaKeyword>();
@@ -189,6 +199,45 @@ export async function POST(req: NextRequest) {
           difficulty: null,
           intent: null,
           source: "amazon",
+        });
+      }
+    }
+
+    // Related keywords from DataForSEO Labs
+    for (const item of relatedItems) {
+      const k = item.keyword.toLowerCase();
+      if (!k) continue;
+      const existing = kwMap.get(k);
+      if (existing) {
+        // Enrich volume if we only had a rough estimate
+        if (existing.volume === 0 && item.searchVolume > 0) existing.volume = item.searchVolume;
+      } else {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: item.searchVolume,
+          cpc: item.cpc ?? null,
+          difficulty: null,
+          intent: null,
+          source: "related",
+        });
+      }
+    }
+
+    // Keyword suggestions (may include difficulty scores)
+    for (const item of suggestionItems) {
+      const k = item.keyword.toLowerCase();
+      if (!k) continue;
+      const existing = kwMap.get(k);
+      if (existing) {
+        if (item.difficulty !== null) existing.difficulty = item.difficulty;
+      } else {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: item.searchVolume,
+          cpc: item.cpc ?? null,
+          difficulty: item.difficulty,
+          intent: null,
+          source: "related",
         });
       }
     }

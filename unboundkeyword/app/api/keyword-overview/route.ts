@@ -16,6 +16,9 @@ import {
   getLighthouseLiveJson,
   getKeywordData,
   getDFSTrendsDemography,
+  getRelatedKeywords,
+  getKeywordSuggestions,
+  getBulkKeywordDifficulty,
   type SerpOrganicResult,
   type AutocompleteLetterGroup,
   type LighthouseLiveResult,
@@ -51,6 +54,14 @@ export interface PaidSearchData {
   competitionLevel: "LOW" | "MEDIUM" | "HIGH" | null;
 }
 
+export interface RelatedKwItem {
+  keyword: string;
+  volume: number;
+  cpc: number | null;
+  competition: number | null;
+  difficulty: number | null;
+}
+
 export interface KeywordOverviewResponse {
   keyword: string;
   domain: string | null;
@@ -64,6 +75,8 @@ export interface KeywordOverviewResponse {
   lighthouse: LighthouseLiveResult | null;
   paid: PaidSearchData | null;
   demographics: DemographicsData | null;
+  relatedKeywords: RelatedKwItem[];
+  keywordDifficulty: number | null;
   errors: Record<string, string>;
 }
 
@@ -98,6 +111,9 @@ export async function POST(req: NextRequest) {
     lighthouseResult,
     paidResult,
     demoResult,
+    relatedKwResult,
+    suggestionsResult,
+    difficultyResult,
   ] = await Promise.allSettled([
     // 1. Top organic SERP results + People Also Ask (single call)
     getSerpLiveData(seed, location, language, 10),
@@ -124,6 +140,12 @@ export async function POST(req: NextRequest) {
     getKeywordData([seed]),
     // 9. Demographics
     getDFSTrendsDemography([seed], location),
+    // 10. Related keywords
+    getRelatedKeywords(seed, location, language, 40),
+    // 11. Keyword suggestions with difficulty
+    getKeywordSuggestions(seed, location, language, 30),
+    // 12. Bulk keyword difficulty for the seed
+    getBulkKeywordDifficulty([seed], location, language),
   ]);
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
@@ -145,6 +167,9 @@ export async function POST(req: NextRequest) {
   const lighthouse = settle(lighthouseResult, "lighthouse", null);
   const paidRaw = settle(paidResult, "paid", null);
   const demoRaw = settle(demoResult, "demographics", null);
+  const relatedRaw = relatedKwResult.status === "fulfilled" ? relatedKwResult.value : [];
+  const suggestionsRaw = suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
+  const difficultyRaw = difficultyResult.status === "fulfilled" ? difficultyResult.value : [];
 
   // Parse demographics
   type DemoRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
@@ -180,6 +205,44 @@ export async function POST(req: NextRequest) {
       : null,
   } : null;
 
+
+  // Extract keyword difficulty for the seed keyword
+  const keywordDifficulty = difficultyRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase())?.difficulty ?? null;
+
+  // Merge related keywords and suggestions into one deduplicated list
+  const relatedMap = new Map<string, RelatedKwItem>();
+  for (const item of relatedRaw) {
+    if (!item.keyword) continue;
+    const k = item.keyword.toLowerCase();
+    if (k === seed.toLowerCase()) continue; // skip the seed itself
+    relatedMap.set(k, {
+      keyword: item.keyword,
+      volume: item.searchVolume,
+      cpc: item.cpc ?? null,
+      competition: item.competition ?? null,
+      difficulty: null,
+    });
+  }
+  for (const item of suggestionsRaw) {
+    if (!item.keyword) continue;
+    const k = item.keyword.toLowerCase();
+    if (k === seed.toLowerCase()) continue;
+    const existing = relatedMap.get(k);
+    if (existing) {
+      if (item.difficulty !== null) existing.difficulty = item.difficulty;
+    } else {
+      relatedMap.set(k, {
+        keyword: item.keyword,
+        volume: item.searchVolume,
+        cpc: item.cpc ?? null,
+        competition: null,
+        difficulty: item.difficulty,
+      });
+    }
+  }
+  const relatedKeywords = [...relatedMap.values()]
+    .sort((a, b) => b.volume - a.volume)
+    .slice(0, 60);
 
   // Map citation items
   const citations: CitationItem[] = (
@@ -219,6 +282,8 @@ export async function POST(req: NextRequest) {
     lighthouse,
     paid: paidData,
     demographics,
+    relatedKeywords,
+    keywordDifficulty,
     errors,
   };
 
