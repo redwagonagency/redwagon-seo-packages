@@ -349,7 +349,7 @@ git checkout HEAD -- unboundkeyword 2>/dev/null || git read-tree --prefix=unboun
 rsync -av --delete \\
   --exclude=node_modules \\
   --exclude=.next \\
-  --exclude=data \\
+  --exclude=/data \\
   --exclude=.env.production \\
   --exclude=tsconfig.tsbuildinfo \\
   /tmp/ub-repo/unboundkeyword/ {APP2_DIR}/
