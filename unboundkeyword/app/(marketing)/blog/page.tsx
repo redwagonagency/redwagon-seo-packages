@@ -125,7 +125,7 @@ export default function BlogPage() {
           <p className="text-white/55 text-sm mb-6">
             No fluff, no weekly newsletter. Just useful deep-dives when we publish them — usually 2–3 per month.
           </p>
-          <form className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto" onSubmit={(e) => e.preventDefault()}>
+          <form className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto" action="#">
             <input
               type="email"
               placeholder="your@email.com"
