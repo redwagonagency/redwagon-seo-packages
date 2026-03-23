@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    return Response.json({ results: rows.slice(0, 100) });
+    return Response.json({ results: rows.slice(0, 500), total: rows.length });
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : "Product keyword search failed" },

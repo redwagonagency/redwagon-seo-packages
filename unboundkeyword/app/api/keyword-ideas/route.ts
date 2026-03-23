@@ -16,6 +16,8 @@ import {
   getGoogleAdsKeywordsForSite,
   getGoogleTrendsExplore,
   getBingKeywordPerformanceBatch,
+  getGoogleAutocompleteAZ,
+  getYoutubeOrganicSerpLive,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 
@@ -27,13 +29,18 @@ export interface IdeaKeyword {
   difficulty: number | null;
   intent: string | null;
   trendsValue?: number | null;
-  source: "google" | "bing" | "amazon" | "google_ads" | "google_trends" | "related";
+  source: "google" | "bing" | "amazon" | "google_ads" | "google_trends" | "related" | "youtube" | "google_autocomplete";
 }
 
 export interface KeywordIdeasResponse {
   keywords: IdeaKeyword[];
   trendsData: { keyword: string; value: number }[];
   siteName: string | null;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  availableSources: string[];
 }
 
 export async function POST(req: NextRequest) {
@@ -42,13 +49,31 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json()) as {
     keyword?: string;
-    source?: "google" | "bing" | "amazon" | "all";
+    source?: "google" | "bing" | "amazon" | "youtube" | "all";
     location?: number;
     language?: string;
     limit?: number;
+    page?: number;
+    pageSize?: number;
+    minVolume?: number;
+    maxDifficulty?: number;
+    contains?: string;
+    exclude?: string;
   };
 
-  const { keyword, source = "all", location = 2840, language = "en", limit = 100 } = body;
+  const {
+    keyword,
+    source = "all",
+    location = 2840,
+    language = "en",
+    limit = 2000,
+    page = 1,
+    pageSize = 100,
+    minVolume = 0,
+    maxDifficulty,
+    contains = "",
+    exclude = "",
+  } = body;
   if (!keyword?.trim()) {
     return Response.json({ error: "keyword required" }, { status: 400 });
   }
@@ -59,6 +84,10 @@ export async function POST(req: NextRequest) {
   const siteDomain = selectedSite?.domain ?? "";
 
   try {
+    const cappedLimit = Math.min(Math.max(limit, 50), 5000);
+    const effectivePageSize = Math.min(Math.max(pageSize, 25), 250);
+    const effectivePage = Math.max(page, 1);
+
     const [
       labsResult,
       bingKFKResult,
@@ -69,10 +98,12 @@ export async function POST(req: NextRequest) {
       bingPerfResult,
       relatedResult,
       suggestionsResult,
+      autocompleteResult,
+      youtubeResult,
     ] = await runWithApiUsageUserContext(userId, () =>
       Promise.allSettled([
         // Google Labs keyword ideas
-        getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => []),
+        getKeywordIdeasLabs(seed, location, language, Math.min(Math.ceil(cappedLimit / 2), 1200)).catch(() => []),
         // Bing keywords for keywords
         getBingKeywordsForKeywords([seed], location, language).catch(() => []),
         // Bing keywords for site (only if we have a domain)
@@ -90,9 +121,13 @@ export async function POST(req: NextRequest) {
         // Placeholder — Bing performance will run after collecting unique keywords
         Promise.resolve([] as { keyword: string; searchVolume: number; cpc: number | null; competition: number | null }[]),
         // Related keywords (DataForSEO Labs)
-        getRelatedKeywords(seed, location, language, 50).catch(() => []),
+        getRelatedKeywords(seed, location, language, Math.min(cappedLimit, 1000)).catch(() => []),
         // Keyword suggestions (DataForSEO Labs)
-        getKeywordSuggestions(seed, location, language, 30).catch(() => []),
+        getKeywordSuggestions(seed, location, language, Math.min(cappedLimit, 200)).catch(() => []),
+        // Google autocomplete A-Z expansion for broader long-tail coverage
+        getGoogleAutocompleteAZ(seed, location, language).catch(() => []),
+        // YouTube SERP query ideas based on ranking titles
+        getYoutubeOrganicSerpLive(seed, location, language).catch(() => []),
       ])
     , { siteId: selectedSite?.id ?? null, useCase: "keyword_ideas" });
 
@@ -104,6 +139,8 @@ export async function POST(req: NextRequest) {
     const amazonItems = amazonResult.status === "fulfilled" ? amazonResult.value : [];
     const relatedItems = relatedResult.status === "fulfilled" ? relatedResult.value : [];
     const suggestionItems = suggestionsResult.status === "fulfilled" ? suggestionsResult.value : [];
+    const autocompleteItems = autocompleteResult.status === "fulfilled" ? autocompleteResult.value : [];
+    const youtubeItems = youtubeResult.status === "fulfilled" ? youtubeResult.value : [];
 
     // Build merged keyword map — Google as primary source
     const kwMap = new Map<string, IdeaKeyword>();
@@ -246,6 +283,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Google autocomplete A-Z suggestions for long-tail expansion
+    for (const group of autocompleteItems) {
+      for (const suggestion of group.suggestions ?? []) {
+        const normalized = suggestion.trim();
+        if (!normalized) continue;
+        const k = normalized.toLowerCase();
+        if (!kwMap.has(k)) {
+          kwMap.set(k, {
+            keyword: normalized,
+            volume: 0,
+            cpc: null,
+            difficulty: null,
+            intent: null,
+            source: "google_autocomplete",
+          });
+        }
+      }
+    }
+
+    // YouTube-derived keyword ideas from ranking video titles
+    for (const item of youtubeItems) {
+      if (!item.title || item.type !== "organic") continue;
+      const normalized = item.title.trim().toLowerCase();
+      if (!normalized || normalized.length > 120) continue;
+      if (!kwMap.has(normalized)) {
+        kwMap.set(normalized, {
+          keyword: item.title.trim(),
+          volume: 0,
+          cpc: null,
+          difficulty: null,
+          intent: null,
+          source: "youtube",
+        });
+      }
+    }
+
     // Fetch Bing performance for top Google keywords that don't have bingVolume yet
     const topKeywords = [...kwMap.values()]
       .filter((k) => k.source === "google" && !k.bingVolume)
@@ -266,13 +339,29 @@ export async function POST(req: NextRequest) {
     if (source === "google") keywords = keywords.filter((k) => k.source === "google" || k.source === "google_ads" || k.source === "google_trends");
     else if (source === "bing") keywords = keywords.filter((k) => k.source === "bing");
     else if (source === "amazon") keywords = keywords.filter((k) => k.source === "amazon");
+    else if (source === "youtube") keywords = keywords.filter((k) => k.source === "youtube");
 
-    keywords = keywords.slice(0, limit);
+    const containsNeedle = contains.trim().toLowerCase();
+    const excludeNeedle = exclude.trim().toLowerCase();
+    keywords = keywords.filter((k) => {
+      const kw = k.keyword.toLowerCase();
+      if (containsNeedle && !kw.includes(containsNeedle)) return false;
+      if (excludeNeedle && kw.includes(excludeNeedle)) return false;
+      if ((k.volume ?? 0) < minVolume) return false;
+      if (typeof maxDifficulty === "number" && k.difficulty != null && k.difficulty > maxDifficulty) return false;
+      return true;
+    });
 
-    void logUserSearch(session.user.id, keyword as string, "keyword", { results: keywords.length }, {
+    const total = keywords.length;
+    const totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
+    const safePage = Math.min(effectivePage, totalPages);
+    const start = (safePage - 1) * effectivePageSize;
+    const pagedKeywords = keywords.slice(start, start + effectivePageSize);
+
+    void logUserSearch(session.user.id, keyword as string, "keyword", { results: total }, {
       siteId: selectedSite?.id ?? null,
       source: "keyword",
-      keywords: keywords.map((item) => ({
+      keywords: pagedKeywords.map((item) => ({
         keyword: item.keyword,
         volume: item.volume,
         cpc: item.cpc,
@@ -281,9 +370,14 @@ export async function POST(req: NextRequest) {
     });
 
     return Response.json({
-      keywords,
+      keywords: pagedKeywords,
       trendsData: trends,
       siteName: siteDomain || null,
+      total,
+      page: safePage,
+      pageSize: effectivePageSize,
+      totalPages,
+      availableSources: [...new Set([...kwMap.values()].map((row) => row.source))],
     } satisfies KeywordIdeasResponse);
   } catch (e) {
     return Response.json(

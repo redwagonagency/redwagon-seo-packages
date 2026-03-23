@@ -5,7 +5,7 @@ import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
 import type { IdeaKeyword, KeywordIdeasResponse } from "@/app/api/keyword-ideas/route";
 
-type Source = "all" | "google" | "bing" | "amazon";
+type Source = "all" | "google" | "bing" | "amazon" | "youtube";
 
 const SOURCE_COLORS: Record<string, string> = {
   google: "bg-blue-100 text-blue-700",
@@ -13,6 +13,8 @@ const SOURCE_COLORS: Record<string, string> = {
   google_trends: "bg-purple-100 text-purple-700",
   bing: "bg-cyan-100 text-cyan-700",
   amazon: "bg-orange-100 text-orange-700",
+  youtube: "bg-red-100 text-red-700",
+  google_autocomplete: "bg-teal-100 text-teal-700",
   related: "bg-emerald-100 text-emerald-700",
 };
 
@@ -31,17 +33,34 @@ export default function KeywordIdeasPage() {
   const [data, setData] = useState<KeywordIdeasResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showSave, setShowSave] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [contains, setContains] = useState("");
+  const [exclude, setExclude] = useState("");
+  const [minVolume, setMinVolume] = useState(0);
+  const [maxDifficulty, setMaxDifficulty] = useState("");
 
-  async function runSearch() {
+  async function runSearch(nextPage = 1) {
     if (!query.trim()) return;
     setLoading(true);
     setError("");
     setSelected(new Set());
+    setPage(nextPage);
     try {
       const res = await fetch("/api/keyword-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: query.trim(), source, limit: 150 }),
+        body: JSON.stringify({
+          keyword: query.trim(),
+          source,
+          limit: 5000,
+          page: nextPage,
+          pageSize,
+          minVolume,
+          maxDifficulty: maxDifficulty.trim() ? Number(maxDifficulty) : undefined,
+          contains,
+          exclude,
+        }),
       });
       const json = (await res.json()) as KeywordIdeasResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Failed");
@@ -51,6 +70,12 @@ export default function KeywordIdeasPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function goToPage(nextPage: number) {
+    if (!query.trim() || loading) return;
+    const boundedPage = Math.max(1, Math.min(nextPage, data?.totalPages ?? 1));
+    await runSearch(boundedPage);
   }
 
   function toggleRow(kw: string) {
@@ -73,12 +98,14 @@ export default function KeywordIdeasPage() {
   });
 
   const rows = data?.keywords ?? [];
+  const pageIndexStart = ((data?.page ?? 1) - 1) * (data?.pageSize ?? pageSize) + 1;
+  const pageIndexEnd = Math.min((data?.page ?? 1) * (data?.pageSize ?? pageSize), data?.total ?? rows.length);
 
   return (
     <div className="p-8 max-w-7xl">
       <h1 className="text-4xl font-black text-slate-900 mb-1">Keyword Ideas</h1>
       <p className="text-sm text-slate-500 mb-6">
-        Multi-source suggestions from Google, Bing, Google Ads, Google Trends, and Amazon.
+        Multi-source suggestions from Google, Bing, YouTube, Google Ads, Google Trends, and Amazon.
         {data?.siteName ? ` Site-specific results for ${data.siteName}.` : ""}
       </p>
 
@@ -124,6 +151,44 @@ export default function KeywordIdeasPage() {
         )}
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mb-6">
+        <input
+          value={contains}
+          onChange={(e) => setContains(e.target.value)}
+          placeholder="Must contain"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f15b27]"
+        />
+        <input
+          value={exclude}
+          onChange={(e) => setExclude(e.target.value)}
+          placeholder="Exclude text"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f15b27]"
+        />
+        <input
+          type="number"
+          value={minVolume}
+          onChange={(e) => setMinVolume(Math.max(0, Number(e.target.value || 0)))}
+          placeholder="Min volume"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f15b27]"
+        />
+        <input
+          type="number"
+          value={maxDifficulty}
+          onChange={(e) => setMaxDifficulty(e.target.value)}
+          placeholder="Max difficulty"
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f15b27]"
+        />
+        <select
+          value={pageSize}
+          onChange={(e) => setPageSize(Number(e.target.value))}
+          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#f15b27]"
+        >
+          {[50, 100, 250].map((size) => (
+            <option key={size} value={size}>{size} / page</option>
+          ))}
+        </select>
+      </div>
+
       {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
       {/* Google Trends mini-chart */}
@@ -146,7 +211,9 @@ export default function KeywordIdeasPage() {
       {rows.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <span className="text-sm font-semibold text-slate-700">{formatNumber(rows.length)} keywords</span>
+            <span className="text-sm font-semibold text-slate-700">
+              Showing {formatNumber(pageIndexStart)}-{formatNumber(pageIndexEnd)} of {formatNumber(data?.total ?? rows.length)} keywords
+            </span>
             <button type="button" onClick={() => {
               const csv = ["keyword,volume,bing_volume,cpc,difficulty,source", ...rows.map((r) => `"${r.keyword}",${r.volume},${r.bingVolume ?? ""},${r.cpc ?? ""},${r.difficulty ?? ""},${r.source}`)].join("\n");
               const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "keyword-ideas.csv"; a.click();
@@ -192,6 +259,35 @@ export default function KeywordIdeasPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {data && data.totalPages > 1 && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void goToPage((data.page ?? 1) - 1)}
+            disabled={loading || (data.page ?? 1) <= 1}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-slate-500">
+            Page {data.page} of {data.totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => void goToPage((data.page ?? 1) + 1)}
+            disabled={loading || (data.page ?? 1) >= data.totalPages}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+          >
+            Next
+          </button>
+          {(data.availableSources ?? []).length > 0 && (
+            <span className="ml-auto text-xs text-slate-500">
+              Available sources: {data.availableSources.join(", ")}
+            </span>
+          )}
         </div>
       )}
 
