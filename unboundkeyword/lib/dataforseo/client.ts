@@ -3721,3 +3721,78 @@ export async function getTopOrganicResults(
       breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
     }));
 }
+
+// ─── Combined SERP: organic + People Also Ask ─────────────────────────────────
+
+export interface PeopleAlsoAskItem {
+  question: string;
+  answer: string | null;
+  url: string | null;
+  domain: string | null;
+}
+
+/**
+ * Single /serp/google/organic/live/advanced call that returns both
+ * top organic results AND People Also Ask questions.
+ */
+export async function getSerpLiveData(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 10
+): Promise<{ organic: SerpOrganicResult[]; paa: PeopleAlsoAskItem[] }> {
+  const data = await dfsPost("/serp/google/organic/live/advanced", [
+    {
+      keyword,
+      location_code: locationCode,
+      language_code: languageCode,
+      device: "desktop",
+      calculate_rectangles: false,
+      depth: Math.max(limit + 10, 30), // extra depth so PAA items are included
+    },
+  ]);
+
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+
+  const organic: SerpOrganicResult[] = items
+    .filter((i) => String(i.type ?? "") === "organic")
+    .slice(0, limit)
+    .map((i) => ({
+      position: typeof i.rank_absolute === "number" ? i.rank_absolute : 0,
+      url: typeof i.url === "string" ? i.url : "",
+      title: typeof i.title === "string" ? i.title : "",
+      description: typeof i.description === "string" ? i.description : null,
+      domain: typeof i.domain === "string" ? i.domain : "",
+      etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
+      breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+    }));
+
+  // PAA: top-level item type=people_also_ask contains sub-items
+  const paa: PeopleAlsoAskItem[] = items
+    .filter((i) => String(i.type ?? "") === "people_also_ask")
+    .flatMap((i) => {
+      const subItems = (i.items ?? []) as Record<string, unknown>[];
+      return subItems
+        .filter((s) => String(s.type ?? "") === "people_also_ask_element")
+        .map((s) => {
+          // Answer lives inside s.items[0] (an answer_box / featured_snippet)
+          const answerItems = (s.items ?? []) as Record<string, unknown>[];
+          const box = answerItems[0] as Record<string, unknown> | undefined;
+          return {
+            question: typeof s.title === "string" ? s.title : String(s.title ?? ""),
+            answer:
+              typeof box?.description === "string"
+                ? box.description
+                : typeof box?.text === "string"
+                ? box.text
+                : null,
+            url: typeof box?.url === "string" ? box.url : null,
+            domain: typeof box?.domain === "string" ? box.domain : null,
+          };
+        });
+    })
+    .filter((p) => p.question)
+    .slice(0, 12);
+
+  return { organic, paa };
+}

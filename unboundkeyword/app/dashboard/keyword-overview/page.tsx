@@ -9,6 +9,7 @@ import type {
   AiKeywordVolumeItem,
   LighthouseLiveResult,
   LlmMentionLiveItem,
+  PeopleAlsoAskItem,
 } from "@/lib/dataforseo/client";
 import type { CitationItem, PhraseTrendItem } from "@/app/api/keyword-overview/route";
 
@@ -16,6 +17,7 @@ interface OverviewData {
   keyword: string;
   domain: string | null;
   serp: SerpOrganicResult[];
+  paa: PeopleAlsoAskItem[];
   autocomplete: AutocompleteLetterGroup[];
   citations: CitationItem[];
   phraseTrends: PhraseTrendItem[];
@@ -25,7 +27,7 @@ interface OverviewData {
   errors: Record<string, string>;
 }
 
-type Tab = "serp" | "autocomplete" | "citations" | "trends" | "ai" | "llm" | "lighthouse";
+type Tab = "serp" | "paa" | "autocomplete" | "citations" | "trends" | "ai" | "llm" | "lighthouse";
 
 function ScoreDial({ label, value }: { label: string; value: number | null }) {
   const pct = value !== null ? Math.round(value * 100) : null;
@@ -40,6 +42,52 @@ function ScoreDial({ label, value }: { label: string; value: number | null }) {
         {pct !== null ? pct : "—"}
       </div>
       <span className="text-xs text-slate-500 text-center leading-tight">{label}</span>
+    </div>
+  );
+}
+
+function PaaRow({ item }: { item: PeopleAlsoAskItem }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-slate-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left bg-white hover:bg-slate-50 transition-colors"
+      >
+        <span className="font-medium text-slate-800 text-sm">{item.question}</span>
+        <svg
+          className={`w-4 h-4 text-slate-400 shrink-0 ml-2 transition-transform ${open ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 pt-2 bg-slate-50 border-t border-slate-100">
+          {item.answer && (
+            <p className="text-sm text-slate-700 mb-2 leading-relaxed">{item.answer}</p>
+          )}
+          {item.url && (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-[#f15b27] hover:underline"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`https://www.google.com/s2/favicons?domain=${item.domain}&sz=12`}
+                alt=""
+                width={12}
+                height={12}
+                className="rounded-sm"
+              />
+              {item.domain || item.url}
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -79,8 +127,7 @@ export default function KeywordOverviewPage() {
 
   const tabs: { id: Tab; label: string; count?: number }[] = data
     ? [
-        { id: "serp", label: "Top Results", count: data.serp.length },
-        { id: "autocomplete", label: "A–Z Autocomplete", count: data.autocomplete.filter((g) => g.suggestions.length > 0).length },
+        { id: "serp", label: "Top Results", count: data.serp.length },        { id: "paa", label: "People Also Ask", count: data.paa?.length ?? 0 },        { id: "autocomplete", label: "A–Z Autocomplete", count: data.autocomplete.filter((g) => g.suggestions.length > 0).length },
         { id: "citations", label: "Citations", count: data.citations.length },
         { id: "trends", label: "Phrase Trends", count: data.phraseTrends.length },
         { id: "ai", label: "AI Volume", count: data.aiVolume.length },
@@ -228,6 +275,24 @@ export default function KeywordOverviewPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── People Also Ask Tab ── */}
+            {activeTab === "paa" && (
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 mb-4">
+                  People Also Ask for &ldquo;{data.keyword}&rdquo;
+                </h2>
+                {!data.paa?.length ? (
+                  <p className="text-slate-500 text-sm">No People Also Ask data available.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {data.paa.map((item, i) => (
+                      <PaaRow key={i} item={item} />
+                    ))}
                   </div>
                 )}
               </div>

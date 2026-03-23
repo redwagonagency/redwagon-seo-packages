@@ -7,7 +7,7 @@
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
-  getTopOrganicResults,
+  getSerpLiveData,
   getGoogleAutocompleteAZ,
   getContentAnalysisSearchLive,
   getContentAnalysisPhraseTrendsLive,
@@ -19,6 +19,7 @@ import {
   type LighthouseLiveResult,
   type AiKeywordVolumeItem,
   type LlmMentionLiveItem,
+  type PeopleAlsoAskItem,
 } from "@/lib/dataforseo/client";
 
 export interface CitationItem {
@@ -39,6 +40,7 @@ export interface KeywordOverviewResponse {
   keyword: string;
   domain: string | null;
   serp: SerpOrganicResult[];
+  paa: PeopleAlsoAskItem[];
   autocomplete: AutocompleteLetterGroup[];
   citations: CitationItem[];
   phraseTrends: PhraseTrendItem[];
@@ -78,8 +80,8 @@ export async function POST(req: NextRequest) {
     llmResult,
     lighthouseResult,
   ] = await Promise.allSettled([
-    // 1. Top organic SERP results
-    getTopOrganicResults(seed, location, language, 10),
+    // 1. Top organic SERP results + People Also Ask (single call)
+    getSerpLiveData(seed, location, language, 10),
 
     // 2. A-Z autocomplete (all 26 letters in one batched request)
     getGoogleAutocompleteAZ(seed, location, language),
@@ -108,7 +110,9 @@ export async function POST(req: NextRequest) {
     return result.value;
   }
 
-  const serp = settle(serpResult, "serp", []);
+  const serpData = settle(serpResult, "serp", { organic: [], paa: [] });
+  const serp = serpData.organic;
+  const paa = serpData.paa;
   const autocomplete = settle(autocompleteResult, "autocomplete", []);
   const citRaw = settle(citationsResult, "citations", { items: [], result: null, raw: null });
   const trendsRaw = settle(phraseTrendsResult, "phraseTrends", { items: [], result: null, raw: null });
@@ -145,6 +149,7 @@ export async function POST(req: NextRequest) {
     keyword: seed,
     domain: domain || null,
     serp,
+    paa,
     autocomplete,
     citations,
     phraseTrends,
