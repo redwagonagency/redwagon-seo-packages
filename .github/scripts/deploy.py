@@ -11,6 +11,7 @@ HOST     = os.environ["SERVER_HOST"]
 USER     = os.environ["SERVER_USER"]
 PASSWORD = os.environ["SERVER_PASSWORD"]
 APP_DIR  = "/root/searchauditpro"
+APP2_DIR = "/root/unboundkeyword"
 REPO_URL = "https://github.com/redwagonagency/redwagon-seo-packages.git"
 
 DOMAIN = "searchauditpro.com"
@@ -248,6 +249,27 @@ print("\n>>> Writing config files via SFTP")
 sftp_write(client, f"{APP_DIR}/.env.production", ENV_CONTENT)
 sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG)
 
+# Write unboundkeyword env only if it doesn't already exist
+run(client, f"""
+if [ ! -f "{APP2_DIR}/.env.production" ]; then
+  mkdir -p {APP2_DIR}
+  cat > {APP2_DIR}/.env.production << 'ENVEOF'
+DATABASE_URL="file:{APP2_DIR}/data/prod.db"
+NEXTAUTH_SECRET="ubk-prod-secret-2025-xK9mPq3wL7vN5rTy"
+NEXTAUTH_URL="https://unboundkeyword.com"
+AUTH_URL="https://unboundkeyword.com"
+AUTH_SECRET="ubk-prod-secret-2025-xK9mPq3wL7vN5rTy"
+GOOGLE_CLIENT_ID="{os.environ['GOOGLE_CLIENT_ID']}"
+GOOGLE_CLIENT_SECRET="{os.environ['GOOGLE_CLIENT_SECRET']}"
+DATAFORSEO_LOGIN="{os.environ['DATAFORSEO_LOGIN']}"
+DATAFORSEO_PASSWORD="{os.environ['DATAFORSEO_PASSWORD']}"
+ENVEOF
+  echo "unboundkeyword env written"
+else
+  echo "unboundkeyword env already exists, keeping"
+fi
+""", "Writing unboundkeyword env file")
+
 # ── Enable nginx site (HTTP first, for certbot challenge) ─────────────────────
 sftp_write(client, "/etc/nginx/sites-available/searchauditpro", NGINX_CONFIG_HTTP)
 run(client, """
@@ -315,9 +337,54 @@ pm2 startup systemd -u root --hp /root | tail -1 | bash || true
 echo "PM2 OK"
 """, "Starting app with PM2")
 
+# ── Deploy unboundkeyword app ─────────────────────────────────────────────────
+run(client, f"""
+echo "Syncing unboundkeyword from git repo..."
+git clone --depth 1 --filter=blob:none --no-checkout {REPO_URL} /tmp/ub-repo 2>/dev/null || (cd /tmp/ub-repo && git fetch --depth 1 origin main && git checkout FETCH_HEAD)
+cd /tmp/ub-repo
+git sparse-checkout init --cone
+git sparse-checkout set unboundkeyword
+git checkout HEAD -- unboundkeyword 2>/dev/null || git read-tree --prefix=unboundkeyword -u HEAD:unboundkeyword 2>/dev/null || true
+
+rsync -av --delete \\
+  --exclude=node_modules \\
+  --exclude=.next \\
+  --exclude=data \\
+  --exclude=.env.production \\
+  --exclude=tsconfig.tsbuildinfo \\
+  /tmp/ub-repo/unboundkeyword/ {APP2_DIR}/
+
+rm -rf /tmp/ub-repo
+echo "Sync complete"
+""", "Syncing unboundkeyword source code", timeout=120)
+
+run(client, f"cd {APP2_DIR} && npm ci --prefer-offline 2>&1 | tail -5 && echo 'npm OK'", "Installing unboundkeyword dependencies", timeout=300)
+
+run(client, f"""
+mkdir -p {APP2_DIR}/data
+cd {APP2_DIR}
+DATABASE_URL="file:{APP2_DIR}/data/prod.db" npx prisma db push --accept-data-loss
+DATABASE_URL="file:{APP2_DIR}/data/prod.db" npx prisma generate
+echo "Prisma OK"
+""", "Prisma setup for unboundkeyword", timeout=120)
+
+run(client, f"cd {APP2_DIR} && NODE_ENV=production npm run build", "Building unboundkeyword Next.js app", timeout=900)
+
+run(client, f"""
+cd {APP2_DIR}
+if pm2 describe unboundkeyword > /dev/null 2>&1; then
+  pm2 reload unboundkeyword --update-env
+else
+  pm2 start ecosystem.config.js --only unboundkeyword 2>/dev/null || pm2 start npm --name unboundkeyword -- start -- -p 3001
+fi
+pm2 save
+echo "PM2 unboundkeyword OK"
+""", "Restarting unboundkeyword with PM2")
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 print("\n" + "=" * 60)
 print(f"  Deployment complete!")
-print(f"  App live at: https://searchauditpro.com")
+print(f"  searchauditpro → https://searchauditpro.com")
+print(f"  unboundkeyword → https://unboundkeyword.com")
 print("=" * 60)
 client.close()
