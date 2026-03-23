@@ -200,9 +200,9 @@ export default function HomePage() {
 
         {/* Center nav links */}
         <div className="hidden md:flex items-center gap-6 text-sm text-white/55">
-          {["Features", "Use cases", "Pricing"].map(l => (
-            <Link key={l} href="#" className="hover:text-white transition">{l}</Link>
-          ))}
+          <Link href="/features" className="hover:text-white transition">Features</Link>
+          <Link href="/use-cases" className="hover:text-white transition">Use cases</Link>
+          <Link href="/pricing" className="hover:text-white transition">Pricing</Link>
         </div>
 
         <div className="flex items-center gap-3">
@@ -252,14 +252,13 @@ export default function HomePage() {
 
             {/* ── Left: text + search ─────────────────── */}
             <div className="flex flex-col items-start text-left pb-14">
-              <a href="#" className="ubk-badge inline-flex items-center gap-2 text-xs font-bold px-4 py-1.5 rounded-full mb-6">
+              <div className="ubk-badge inline-flex items-center gap-2 text-xs font-bold px-4 py-1.5 rounded-full mb-6">
                 <span className="ubk-dot" />
                 New: AI Models available
-              </a>
+              </div>
 
               <h1 className="text-5xl sm:text-6xl md:text-[68px] font-black leading-[1.04] tracking-tight mb-5">
-                Discover What People Search<br />
-                <span className="ubk-orange-accent">Across Every Platform</span>
+                Discover What People Search <span className="ubk-orange-accent">Across Every Platform</span>
               </h1>
 
               <p className="text-white/48 text-lg mb-7 max-w-lg leading-relaxed" style={{ color: "rgba(255,255,255,0.48)" }}>

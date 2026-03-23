@@ -100,9 +100,9 @@ export default function ProjectRequiredGate({ loading, hasProject, onProjectCrea
             </p>
           </div>
           <div>
-            <h2 className="mb-2 text-sm font-bold text-slate-900">Find revenue-driving keywords</h2>
+            <h2 className="mb-2 text-sm font-bold text-slate-900">Your keywords should make you money</h2>
             <p className="text-xs leading-6 text-slate-500">
-              Cut through the noise and find your keywords that will drive revenue.
+              Every search is a buying signal. Surface what your audience is already looking for — before they find someone else.
             </p>
           </div>
         </div>
