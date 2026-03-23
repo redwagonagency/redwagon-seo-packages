@@ -1124,7 +1124,7 @@ export async function getDomainRankOverview(
     ]),
   ]);
 
-  const metrics = overviewData?.tasks?.[0]?.result?.[0]?.metrics?.organic as Record<string, unknown> | undefined;
+  const metrics = overviewData?.tasks?.[0]?.result?.[0]?.items?.[0]?.metrics?.organic as Record<string, unknown> | undefined;
   const kwItems = (keywordsData?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
   const compItems = (competitorsData?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
 
@@ -1146,13 +1146,21 @@ export async function getDomainRankOverview(
     rank: typeof i.avg_position === "number" ? Math.round(i.avg_position) : 0,
   }));
 
+  // Compute a rough "domain strength" score from ranked keyword positions (0–100)
+  const pos1  = typeof metrics?.pos_1   === "number" ? (metrics.pos_1  as number) : 0;
+  const pos23 = typeof metrics?.pos_2_3 === "number" ? (metrics.pos_2_3 as number) : 0;
+  const pos410 = typeof metrics?.pos_4_10 === "number" ? (metrics.pos_4_10 as number) : 0;
+  const totalKeywords = typeof metrics?.count === "number" ? (metrics.count as number) : 0;
+  const weightedScore = pos1 * 3 + pos23 * 2 + pos410 * 1;
+  const domainStrength = totalKeywords > 0 ? Math.min(100, Math.round(Math.log10(weightedScore + 1) * 25 + (totalKeywords > 100 ? 20 : totalKeywords > 10 ? 10 : 0))) : 0;
+
   return {
     domain,
-    organicKeywords: typeof metrics?.count === "number" ? metrics.count : 0,
-    organicTraffic: typeof metrics?.etv === "number" ? Math.round(metrics.etv) : 0,
+    organicKeywords: totalKeywords,
+    organicTraffic: typeof metrics?.etv === "number" ? Math.round(metrics.etv as number) : 0,
     paidKeywords: 0,
-    domainRank: typeof metrics?.pos_1 === "number" ? metrics.pos_1 : 0,
-    etv: typeof metrics?.etv === "number" ? Math.round(metrics.etv) : 0,
+    domainRank: domainStrength,
+    etv: typeof metrics?.etv === "number" ? Math.round(metrics.etv as number) : 0,
     topKeywords,
     competitorDomains: competitors,
   };
