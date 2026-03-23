@@ -987,7 +987,7 @@ function KeywordOverviewPanel({
 export default function DiscoveryClient() {
   const searchParams = useSearchParams();
   const [seed, setSeed] = useState(() => searchParams?.get("q") ?? "");
-  const [platform, setPlatform] = useState(() => searchParams?.get("platform") ?? "google");
+  const [platforms, setPlatforms] = useState<string[]>(() => (searchParams?.get("platform") ?? "google").split(",").filter(Boolean));
   const [location, setLocation] = useState("2840");
   const [language, setLanguage] = useState("en");
   const [excludeTerms, setExcludeTerms] = useState("");
@@ -1045,29 +1045,48 @@ export default function DiscoveryClient() {
     setSelected(new Set());
     setActiveGroup(null);
     setTableQuery("");
+    const activePlatforms = platforms.length > 0 ? platforms : ["google"];
     try {
-      const res = await fetch("/api/discover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          seed: seedValue.trim(),
-          platform,
-          location: Number(location),
-          language,
-          deepMode,
-          includeJobs,
-          excludeTerms,
-          locationHints,
-          save: true,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Discovery failed");
-      setResult(data);
+      const fetches = activePlatforms.map((p) =>
+        fetch("/api/discover", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            seed: seedValue.trim(),
+            platform: p,
+            location: Number(location),
+            language,
+            deepMode,
+            includeJobs,
+            excludeTerms,
+            locationHints,
+            save: true,
+          }),
+        }).then((r) => r.json())
+      );
+      const results = await Promise.all(fetches);
+      // Merge all platform results into one
+      const merged = results[0] as DiscoveryResult;
+      for (let i = 1; i < results.length; i++) {
+        const r = results[i] as DiscoveryResult | null;
+        if (r?.groups) {
+          for (const g of r.groups) {
+            const existing = merged.groups.find((mg) => mg.type === g.type && (mg.letter ?? "") === (g.letter ?? ""));
+            if (existing) {
+              const existingKws = new Set(existing.keywords.map((k) => k.keyword));
+              existing.keywords.push(...g.keywords.filter((k) => !existingKws.has(k.keyword)));
+            } else {
+              merged.groups.push(g);
+            }
+          }
+        }
+      }
+      if (!merged?.groups) throw new Error((results[0] as { error?: string })?.error ?? "Discovery failed");
+      setResult(merged);
       if (typeof window !== "undefined") {
         const params = new URLSearchParams(window.location.search);
         params.set("q", seedValue.trim());
-        params.set("platform", platform);
+        params.set("platform", activePlatforms[0]);
         window.history.replaceState({}, "", `/dashboard/discover?${params.toString()}`);
       }
     } catch (err: unknown) {
@@ -1090,7 +1109,7 @@ export default function DiscoveryClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           seed: keyword.trim(),
-          platform,
+          platform: platforms[0] ?? "google",
           location: Number(location),
           language,
           deepMode: false,
@@ -1210,7 +1229,7 @@ export default function DiscoveryClient() {
   });
   const displayedMasterRows = filteredMasterRows.slice(0, visibleTableRows);
   const canLoadMoreTableRows = filteredMasterRows.length > displayedMasterRows.length;
-  const isSocialPlatform = platform === "instagram" || platform === "tiktok" || platform === "facebook" || platform === "pinterest";
+  const isSocialPlatform = platforms.length > 0 && platforms.every((p) => ["instagram", "tiktok", "facebook", "pinterest"].includes(p));
   const socialSeedRows = buildSocialHashtagRows(filteredMasterRows).slice(0, 366);
   const socialRowsWithTab = socialModeTab === "hashtags"
     ? socialSeedRows
@@ -1265,7 +1284,8 @@ export default function DiscoveryClient() {
     setSocialModeTab("hashtags");
     setSocialCpcBand("all");
     setSocialVolumeBand("all");
-  }, [result?.seed, platform]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result?.seed, platforms.join(",")]);
 
   return (
     <div className="p-8 max-w-7xl">
@@ -1288,16 +1308,27 @@ export default function DiscoveryClient() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
-                <label className="text-sm font-medium text-slate-700 block mb-1">Platform</label>
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
+                <label className="text-sm font-medium text-slate-700 block mb-2">Platforms</label>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
                   {PLATFORM_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
+                    <label key={option.value} className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        value={option.value}
+                        checked={platforms.includes(option.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setPlatforms((prev) => [...prev, option.value]);
+                          } else {
+                            setPlatforms((prev) => prev.filter((p) => p !== option.value));
+                          }
+                        }}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
+                      />
+                      <span className="text-sm text-slate-700">{option.label}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700 block mb-1">Market</label>

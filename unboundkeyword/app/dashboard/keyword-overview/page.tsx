@@ -25,7 +25,6 @@ import type {
   LocalPackResult,
   SerpAdResult,
 } from "@/app/api/keyword-overview/route";
-
 // Re-export SerpFeaturesResult shape locally to avoid server import
 interface SerpFeaturesResult {
   hasAiOverview: boolean;
@@ -238,8 +237,7 @@ export default function KeywordOverviewPage() {
         { id: "questions", label: "Questions", count: data.questions?.length ?? 0 },
         { id: "paa", label: "People Also Ask", count: data.paa?.length ?? 0 },
         { id: "prepositions", label: "Prepositions", count: data.prepositions?.length ?? 0 },
-        { id: "comparisons", label: "Comparisons", count: data.comparisons?.length ?? 0 },
-        { id: "citations", label: "Top Content", count: data.citations.length },
+        { id: "comparisons", label: "Comparisons", count: data.comparisons?.length ?? 0 },        { id: "citations", label: "Top Content", count: data.citations.length },
         { id: "ai", label: "AI Search", count: data.aiVolume.length },
         { id: "llm", label: "LLM Mentions", count: data.llmMentions.length },
       ]
@@ -289,6 +287,11 @@ export default function KeywordOverviewPage() {
                 {data.paid?.searchVolume != null ? data.paid.searchVolume.toLocaleString() : "—"}
               </div>
               <div className="text-xs font-semibold text-slate-400 mt-0.5">avg monthly searches</div>
+              {data.paid?.volumeSource && (
+                <div className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold ${data.paid.volumeSource === "google_ads" ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+                  {data.paid.volumeSource === "google_ads" ? "Google Ads" : "DataForSEO Labs"}
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
@@ -296,7 +299,7 @@ export default function KeywordOverviewPage() {
               <div className="text-3xl font-black tabular-nums text-slate-900">
                 {data.paid?.cpc != null ? `$${data.paid.cpc.toFixed(2)}` : "—"}
               </div>
-              <div className="text-xs font-semibold text-slate-400 mt-0.5">cost per click</div>
+              <div className="text-xs font-semibold text-slate-400 mt-0.5">cost per click (Google)</div>
             </div>
 
             <DiffBadge value={data.keywordDifficulty} label="SEO Difficulty" />

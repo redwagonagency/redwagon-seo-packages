@@ -101,7 +101,7 @@ export default async function DashboardPage() {
 
       <DashboardSearch />
 
-      <div className="grid gap-4 md:grid-cols-3 mb-6">
+      <div className="grid gap-4 md:grid-cols-2 mb-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">Keyword Lists</div>
           <div className="text-4xl font-black text-slate-900">{listCount}</div>
@@ -109,10 +109,6 @@ export default async function DashboardPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">Tracked Keywords</div>
           <div className="text-4xl font-black text-slate-900">{keywordCount}</div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">Discovery Sessions</div>
-          <div className="text-4xl font-black text-slate-900">{discoveryCount}</div>
         </div>
       </div>
 

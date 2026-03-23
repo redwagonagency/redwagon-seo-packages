@@ -11,6 +11,7 @@ import { logUserSearch } from "@/lib/search-logger";
 import {
   getSerpLiveDataEnhanced,
   getGoogleAutocompleteAZ,
+  getAutocompleteBatch,
   getContentAnalysisSearchLive,
   getContentAnalysisPhraseTrendsLive,
   getAiKeywordSearchVolume,
@@ -21,6 +22,7 @@ import {
   getKeywordSuggestions,
   getBulkKeywordDifficulty,
   getKeywordOverviewLabs,
+  getPeopleAlsoAskQuestions,
   type SerpOrganicResult,
   type AutocompleteLetterGroup,
   type LocalPackItem,
@@ -58,6 +60,8 @@ export interface PaidSearchData {
   cpc: number | null;
   competition: number | null;
   competitionLevel: "LOW" | "MEDIUM" | "HIGH" | null;
+  /** Which data source provided the volume/cpc figures */
+  volumeSource: "google_ads" | "dataforseo_labs" | null;
 }
 
 export interface RelatedKwItem {
@@ -140,6 +144,12 @@ export async function POST(req: NextRequest) {
   const seed = keyword.trim();
   const errors: Record<string, string> = {};
 
+  // Build question-prefix and preposition-prefix batches for richer autocomplete
+  const QUESTION_PREFIXES_KW = ["what", "how", "why", "where", "when", "who", "which", "can", "is", "are", "will", "should", "does", "do", "how to", "how do", "what is", "what are"];
+  const PREPOSITION_PREFIXES_KW = ["for", "with", "without", "vs", "near", "in", "alternatives to", "like", "instead of", "compared to", "after", "before", "during", "for beginners", "for business"];
+  const questionQueries = QUESTION_PREFIXES_KW.map((p) => `${p} ${seed}`);
+  const prepositionQueries = PREPOSITION_PREFIXES_KW.map((p) => `${seed} ${p}`);
+
   const [
     serpResult,
     autocompleteResult,
@@ -153,6 +163,9 @@ export async function POST(req: NextRequest) {
     suggestionsResult,
     difficultyResult,
     labsResult,
+    questionAutocompleteResult,
+    prepositionAutocompleteResult,
+    deepPaaResult,
   ] = await Promise.allSettled([
     getSerpLiveDataEnhanced(seed, location, language, 10),
     getGoogleAutocompleteAZ(seed, location, language),
@@ -166,6 +179,9 @@ export async function POST(req: NextRequest) {
     getKeywordSuggestions(seed, location, language, 30),
     getBulkKeywordDifficulty([seed], location, language),
     getKeywordOverviewLabs([seed], location, language),
+    getAutocompleteBatch(questionQueries, location, language),
+    getAutocompleteBatch(prepositionQueries, location, language),
+    getPeopleAlsoAskQuestions(seed, location, language, 60),
   ]);
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
@@ -195,31 +211,82 @@ export async function POST(req: NextRequest) {
   const difficultyRaw = difficultyResult.status === "fulfilled" ? difficultyResult.value : [];
   const labsRaw = labsResult.status === "fulfilled" ? labsResult.value : [];
   const labsItem = labsRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase()) ?? null;
+  const questionAutocomplete = questionAutocompleteResult.status === "fulfilled" ? questionAutocompleteResult.value : [];
+  const prepositionAutocomplete = prepositionAutocompleteResult.status === "fulfilled" ? prepositionAutocompleteResult.value : [];
+  const deepPaaItems = deepPaaResult.status === "fulfilled" ? deepPaaResult.value : [];
 
-  // Parse demographics
+  // Parse demographics — DFS Trends Demography uses sub_type="gender"|"age_group"
+  // and stores data in comparisons[*].data[*].breakdown_data[*].{category,value}
   type DemoRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
   const demoItems = (demoRaw as DemoRaw)?.tasks?.[0]?.result?.[0]?.items ?? [];
   let demographics: DemographicsData | null = null;
   if (demoItems.length > 0) {
-    const genderItem = demoItems.find((i) => i.type === "gender") as Record<string, unknown> | undefined;
-    const ageItem = demoItems.find((i) => i.type === "age") as Record<string, unknown> | undefined;
-    const locationItem = demoItems.find((i) => i.type === "location" || i.type === "geo") as Record<string, unknown> | undefined;
-    demographics = {
-      male: typeof genderItem?.male_index === "number" ? Math.round(genderItem.male_index) : null,
-      female: typeof genderItem?.female_index === "number" ? Math.round(genderItem.female_index) : null,
-      ageGroups: Array.isArray(ageItem?.items)
-        ? (ageItem!.items as Record<string, unknown>[]).map((a) => ({
-            label: String(a.age_group ?? a.age ?? ""),
-            index: typeof a.index === "number" ? Math.round(a.index) : 0,
-          }))
-        : [],
-      locationData: Array.isArray(locationItem?.items)
-        ? (locationItem!.items as Record<string, unknown>[]).map((l) => ({
-            label: String(l.location_name ?? l.name ?? l.label ?? ""),
-            index: typeof l.index === "number" ? Math.round(l.index) : 0,
-          })).filter((l) => l.label).slice(0, 10)
-        : [],
-    };
+    // DFS Trends Demography uses sub_type, not type, for gender/age
+    const genderItem = demoItems.find((i) =>
+      i.sub_type === "gender" || i.type === "gender"
+    ) as Record<string, unknown> | undefined;
+    const ageItem = demoItems.find((i) =>
+      i.sub_type === "age_group" || i.sub_type === "age" || i.type === "age"
+    ) as Record<string, unknown> | undefined;
+
+    // Helper: extract avg value across time periods from DFS Trends breakdown_data
+    function extractBreakdown(item: Record<string, unknown>): Map<string, number> {
+      const result = new Map<string, number>();
+      // New DFS Trends structure: item.comparisons[0].data[*].breakdown_data[*]
+      const comparisons = (item.comparisons ?? []) as Record<string, unknown>[];
+      const dataArr = (comparisons[0]?.data ?? []) as Record<string, unknown>[];
+      const sums = new Map<string, number[]>();
+      for (const d of dataArr) {
+        for (const bd of ((d.breakdown_data ?? []) as Record<string, unknown>[])) {
+          const cat = String(bd.category ?? bd.gender ?? bd.age_group ?? "").toLowerCase().trim();
+          const val = typeof bd.value === "number" ? bd.value : 0;
+          if (cat) { if (!sums.has(cat)) sums.set(cat, []); sums.get(cat)!.push(val); }
+        }
+      }
+      for (const [k, vals] of sums) {
+        result.set(k, Math.round(vals.reduce((s, v) => s + v, 0) / vals.length));
+      }
+      // Legacy structure: direct male_index/female_index or items[]
+      if (result.size === 0) {
+        if (typeof item.male_index === "number") result.set("male", Math.round(item.male_index as number));
+        if (typeof item.female_index === "number") result.set("female", Math.round(item.female_index as number));
+      }
+      return result;
+    }
+
+    let maleVal: number | null = null;
+    let femaleVal: number | null = null;
+    if (genderItem) {
+      const genderMap = extractBreakdown(genderItem);
+      maleVal = genderMap.get("male") ?? genderMap.get("m") ?? null;
+      femaleVal = genderMap.get("female") ?? genderMap.get("f") ?? null;
+    }
+
+    const ageGroups: { label: string; index: number }[] = [];
+    if (ageItem) {
+      const ageMap = extractBreakdown(ageItem);
+      if (ageMap.size > 0) {
+        // Sort canonical age ranges
+        const ageOrder = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+        for (const label of ageOrder) {
+          const idx = ageMap.get(label);
+          if (idx !== undefined) ageGroups.push({ label, index: idx });
+        }
+        // Fallback: add any remaining labels we didn't find in ageOrder
+        if (ageGroups.length === 0) {
+          for (const [label, index] of ageMap) ageGroups.push({ label, index });
+        }
+      } else if (Array.isArray(ageItem.items)) {
+        // Very old legacy structure
+        for (const a of (ageItem.items as Record<string, unknown>[])) {
+          ageGroups.push({ label: String(a.age_group ?? a.age ?? ""), index: typeof a.index === "number" ? Math.round(a.index) : 0 });
+        }
+      }
+    }
+
+    if (maleVal !== null || ageGroups.length > 0) {
+      demographics = { male: maleVal, female: femaleVal, ageGroups, locationData: [] };
+    }
   }
 
   // Parse paid search data + monthly volumes
@@ -236,11 +303,13 @@ export async function POST(req: NextRequest) {
     competitionLevel: (["LOW", "MEDIUM", "HIGH"].includes(String(paidItem.competition_level ?? "")))
       ? (paidItem.competition_level as "LOW" | "MEDIUM" | "HIGH")
       : null,
+    volumeSource: "google_ads",
   } : (labsItem ? {
     searchVolume: labsItem.searchVolume,
     cpc: labsItem.cpc,
     competition: labsItem.competition,
     competitionLevel: labsItem.competitionLevel as "LOW" | "MEDIUM" | "HIGH" | null,
+    volumeSource: "dataforseo_labs",
   } : null);
 
   // Extract monthly volumes from Google Ads monthly_searches field (fall back to Labs)
@@ -282,28 +351,53 @@ export async function POST(req: NextRequest) {
   }
   const relatedKeywords = [...relatedMap.values()].sort((a, b) => b.volume - a.volume).slice(0, 60);
 
-  // Extract questions / prepositions / comparisons — mine autocomplete + suggestions + related
-  const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should"];
-  const PREPOSITION_WORDS = ["for", "with", "without", "near", "in", "on", "at", "by", "to", "vs", "versus", "like", "after", "before", "during"];
+  // Extract questions / prepositions / comparisons — mine autocomplete + dedicated question/preposition batches
+  const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should", "do"];
+  const PREPOSITION_WORDS = ["for", "with", "without", "near", "in", "on", "at", "by", "to", "vs", "versus", "like", "after", "before", "during", "alternatives", "instead", "compared"];
   const COMPARISON_WORDS = ["vs", "versus", "or", "alternative", "alternatives", "compare", "compared", "better", "difference"];
 
   const allAutocomplete: string[] = autocomplete.flatMap((g) => g.suggestions);
-  // Mine all keyword sources for richer preposition/comparison results
+  // Combine all keyword sources including dedicated question/preposition autocomplete
   const allKeywordPool = [...new Set([
     ...allAutocomplete,
+    ...questionAutocomplete,
+    ...prepositionAutocomplete,
     ...suggestionsRaw.map((s) => s.keyword).filter(Boolean),
     ...relatedRaw.map((s) => s.keyword).filter(Boolean),
   ])].filter((s) => s.toLowerCase() !== seed.toLowerCase());
 
-  const questions = allAutocomplete.filter((s) => QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))).slice(0, 50);
-  const prepositions = allKeywordPool.filter((s) => {
+  // Questions: prioritize dedicated question-prefix autocomplete results, then filter remainder
+  const questionSet = new Set<string>();
+  for (const s of questionAutocomplete) {
+    if (QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))) questionSet.add(s);
+  }
+  for (const s of allAutocomplete) {
+    if (QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))) questionSet.add(s);
+  }
+  const questions = [...questionSet].slice(0, 80);
+
+  // Prepositions: prioritize dedicated preposition autocomplete
+  const prepositionSet = new Set<string>();
+  for (const s of prepositionAutocomplete) prepositionSet.add(s);
+  for (const s of allKeywordPool) {
     const words = s.toLowerCase().split(/\s+/);
-    return PREPOSITION_WORDS.some((w) => words.includes(w));
-  }).filter((s) => !questions.includes(s)).slice(0, 60);
+    if (PREPOSITION_WORDS.some((w) => words.includes(w))) prepositionSet.add(s);
+  }
+  const prepositions = [...prepositionSet].filter((s) => !questionSet.has(s)).slice(0, 80);
+
   const comparisons = allKeywordPool.filter((s) => {
     const lower = s.toLowerCase();
     return COMPARISON_WORDS.some((w) => lower.includes(" " + w + " ") || lower.endsWith(" " + w));
-  }).filter((s) => !questions.includes(s) && !prepositions.includes(s)).slice(0, 60);
+  }).filter((s) => !questionSet.has(s) && !prepositionSet.has(s)).slice(0, 60);
+
+  // Merge deep PAA with SERP PAA, deduplicate by question text
+  const paaMap = new Map<string, PeopleAlsoAskItem>();
+  for (const item of paa) paaMap.set(item.question.toLowerCase(), item);
+  for (const item of deepPaaItems) {
+    const key = item.keyword.toLowerCase();
+    if (!paaMap.has(key)) paaMap.set(key, { question: item.keyword, answer: null, url: null, domain: null } as unknown as PeopleAlsoAskItem);
+  }
+  const mergedPaa = [...paaMap.values()].slice(0, 50);
 
   // Compute click distribution using actual SERP signals (research-backed CTR model)
   // Top ads absorb ~10% each, bottom ads ~3% each, AI Overview ~20%, Featured Snippet ~8%
@@ -405,7 +499,7 @@ export async function POST(req: NextRequest) {
     serp,
     ads: serpAds,
     localPack,
-    paa,
+    paa: mergedPaa,
     autocomplete,
     citations,
     phraseTrends,

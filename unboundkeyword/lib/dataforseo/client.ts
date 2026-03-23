@@ -3701,6 +3701,33 @@ export interface AutocompleteLetterGroup {
 }
 
 /**
+ * Batch autocomplete for arbitrary query list — all in one POST.
+ * Returns flat deduplicated suggestion strings.
+ */
+export async function getAutocompleteBatch(
+  queries: string[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<string[]> {
+  if (!queries.length) return [];
+  const tasks = queries.map((keyword) => ({ keyword, location_code: locationCode, language_code: languageCode }));
+  const data = await dfsPost("/serp/google/autocomplete/live/advanced", tasks);
+  const taskResults = (data?.tasks ?? []) as Record<string, unknown>[];
+  const out: string[] = [];
+  for (const task of taskResults) {
+    const resultArr = (task?.result ?? []) as Record<string, unknown>[];
+    const items = ((resultArr[0]?.items ?? []) as Record<string, unknown>[]);
+    out.push(
+      ...items
+        .filter((i) => String(i.type ?? "") === "autocomplete")
+        .map((i) => String(i.suggestion ?? i.keyword ?? ""))
+        .filter(Boolean)
+    );
+  }
+  return [...new Set(out)];
+}
+
+/**
  * Fetch A-Z autocomplete suggestions for a seed keyword.
  * Sends all 26 prefix tasks in a single batched POST request.
  */

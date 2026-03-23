@@ -37,6 +37,11 @@ export default async function SuperadminPage() {
     topEndpoints,
     projectsWithDomains,
     recentUsers,
+    kwIntelCount,
+    recentKwIntel,
+    recentSearchHistory,
+    userSearchCount,
+    topSearchedKws,
   ] = await Promise.all([
     prisma.user.findMany({
       select: { id: true, name: true, email: true, createdAt: true },
@@ -74,6 +79,26 @@ export default async function SuperadminPage() {
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
+    // Keyword intelligence stored results
+    prisma.keywordIntelligence.count(),
+    prisma.keywordIntelligence.findMany({
+      orderBy: { lastAnalyzed: "desc" },
+      take: 50,
+      include: { user: { select: { email: true } } },
+    }),
+    // User search history
+    prisma.userSearch.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }).catch(() => []),
+    prisma.userSearch.count().catch(() => 0),
+    // Most searched keywords
+    prisma.userSearch.groupBy({
+      by: ["query"],
+      _count: { id: true },
+      orderBy: { _count: { id: "desc" } },
+      take: 20,
+    }).catch(() => []),
   ]);
 
   // User signup buckets by month (last 6 months)
@@ -94,9 +119,34 @@ export default async function SuperadminPage() {
     projectsByUser.set(p.userId, (projectsByUser.get(p.userId) ?? 0) + 1);
   }
 
+  // Users email lookup map
+  const userEmailMap = new Map(users.map((u) => [u.id, u.email ?? "—"]));
+
   // Users joined this month
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const newUsersThisMonth = users.filter((u) => u.createdAt >= thisMonthStart).length;
+
+  // DataForSEO estimated cost per call by endpoint pattern
+  const ENDPOINT_COSTS: Record<string, number> = {
+    "/serp/google/organic/live/advanced": 0.0025,
+    "/serp/google/autocomplete/live/advanced": 0.0005,
+    "/keywords_data/google_ads/search_volume/live": 0.002,
+    "/keywords_data/google_ads/keywords_for_keywords/live": 0.002,
+    "/keywords_data/google_ads/keywords_for_site/live": 0.002,
+    "/keywords_data/dataforseo_trends/demography/live": 0.002,
+    "/dataforseo_labs/google/keywords_for_keywords/live": 0.0015,
+    "/dataforseo_labs/google/ranked_keywords/live": 0.0015,
+    "/dataforseo_labs/google/bulk_keyword_difficulty/live": 0.001,
+    "/content_analysis/search/live": 0.01,
+    "/backlinks/bulk_ranks/live": 0.003,
+    "/backlinks/anchors/live": 0.003,
+  };
+
+  const endpointCostRows = topEndpoints.map((ep) => {
+    const costPerCall = Object.entries(ENDPOINT_COSTS).find(([k]) => ep.endpoint.includes(k))?.[1] ?? 0.001;
+    return { endpoint: ep.endpoint, calls: ep._count.id, estimated: ep._count.id * costPerCall };
+  });
+  const totalEstimatedCost = endpointCostRows.reduce((s, e) => s + e.estimated, 0);
 
   return (
     <div className="p-8 space-y-6 max-w-7xl">
@@ -104,17 +154,19 @@ export default async function SuperadminPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <p className="text-xs uppercase tracking-[0.18em] text-[#f15b27] font-black">Superadmin</p>
         <h1 className="mt-2 text-3xl font-black text-slate-900">SAAS Control Center</h1>
-        <p className="mt-1 text-sm text-slate-500">Platform-wide metrics, users, API usage, and project management</p>
+        <p className="mt-1 text-sm text-slate-500">Platform-wide metrics, stored data output, API usage &amp; cost estimates</p>
       </div>
 
       {/* KPI grid */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-7">
         {[
           { label: "Total Users", value: fmt(userCount), sub: `+${newUsersThisMonth} this month`, color: "text-emerald-500" },
           { label: "Projects", value: fmt(projectCount) },
           { label: "Tracked Keywords", value: fmt(keywordCount) },
+          { label: "KW Intelligence", value: fmt(kwIntelCount), sub: "stored records" },
+          { label: "Search History", value: fmt(userSearchCount), sub: "user searches" },
           { label: "Industry Stats", value: fmt(statCount) },
-          { label: "API Calls Logged", value: fmt(apiLogCount) },
+          { label: "API Calls", value: fmt(apiLogCount), sub: `~$${totalEstimatedCost.toFixed(2)} est.`, color: "text-amber-500" },
         ].map((card) => (
           <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{card.label}</p>
@@ -206,12 +258,131 @@ export default async function SuperadminPage() {
         </section>
       </div>
 
-      {/* API Usage */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Top endpoints */}
+      {/* ── DATA OUTPUT ─────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-xs uppercase tracking-[0.18em] font-black text-[#f15b27] mb-3">Stored Data Output</h2>
+      </div>
+
+      {/* Top searched keywords */}
+      <div className="grid gap-6 lg:grid-cols-3">
         <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top Searched Keywords</h2>
+          </div>
+          {(topSearchedKws as { query: string; _count: { id: number } }[]).length === 0 ? (
+            <div className="px-6 py-6 text-sm text-center text-slate-400">No search history yet.</div>
+          ) : (
+            <div className="overflow-y-auto max-h-[320px]">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Keyword</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Searches</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(topSearchedKws as { query: string; _count: { id: number } }[]).map((row) => (
+                    <tr key={row.query} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-xs font-medium text-slate-700">{row.query}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums font-black text-[#f15b27]">{row._count.id}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Recent search history */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden lg:col-span-2">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Recent User Searches ({fmt(userSearchCount)})</h2>
+          </div>
+          {(recentSearchHistory as { id: string; query: string; searchType: string; createdAt: Date; userId: string }[]).length === 0 ? (
+            <div className="px-6 py-6 text-sm text-center text-slate-400">No search history stored yet.</div>
+          ) : (
+            <div className="overflow-y-auto max-h-[320px]">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 sticky top-0 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Query</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Type</th>
+                    <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">User</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(recentSearchHistory as { id: string; query: string; searchType: string; createdAt: Date; userId: string }[]).map((row) => (
+                    <tr key={row.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-xs font-medium text-slate-700 max-w-[200px] truncate">{row.query}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-[10px] bg-slate-100 text-slate-600 rounded-full px-2 py-0.5">{row.searchType}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-[10px] text-slate-400">{userEmailMap.get(row.userId) ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(row.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Keyword Intelligence stored results */}
+      <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Keyword Intelligence — Stored Results ({fmt(kwIntelCount)})</h2>
+          <p className="text-[11px] text-slate-400 mt-0.5">Full API output saved per user per keyword lookup</p>
+        </div>
+        {recentKwIntel.length === 0 ? (
+          <div className="px-6 py-6 text-sm text-center text-slate-400">No keyword intelligence records stored yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Keyword</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">User</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Volume</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">CPC</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">KD</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Last Analyzed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentKwIntel.map((kw) => (
+                  <tr key={kw.id} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-slate-800">{kw.keyword}</td>
+                    <td className="px-4 py-2.5 text-[10px] text-slate-400">{(kw as { user?: { email?: string } }).user?.email ?? userEmailMap.get((kw as { userId?: string }).userId ?? "") ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-600">{kw.searchVolume != null ? fmt(kw.searchVolume) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-600">{kw.cpc != null ? `$${Number(kw.cpc).toFixed(2)}` : "—"}</td>
+                    <td className="px-4 py-2.5 text-right text-xs tabular-nums">
+                      {kw.difficulty != null ? (
+                        <span className={`font-black ${kw.difficulty >= 70 ? "text-rose-500" : kw.difficulty >= 40 ? "text-amber-500" : "text-emerald-500"}`}>{kw.difficulty}</span>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-[10px] text-slate-400">{new Date(kw.lastAnalyzed).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── API USAGE REPORT ───────────────────────────────────────── */}
+      <div>
+        <h2 className="text-xs uppercase tracking-[0.18em] font-black text-[#f15b27] mb-3">API Usage Report</h2>
+      </div>
+
+      {/* API Usage */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Top endpoints with cost */}
+        <section className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider">Top API Endpoints</h2>
+            <span className="text-xs font-black text-amber-600 bg-amber-50 rounded-lg px-2 py-1">~${totalEstimatedCost.toFixed(2)} total est.</span>
           </div>
           {topEndpoints.length === 0 ? (
             <div className="px-6 py-8 text-center text-sm text-slate-400">
@@ -224,13 +395,15 @@ export default async function SuperadminPage() {
                   <tr>
                     <th className="px-4 py-2.5 text-left text-xs font-black uppercase tracking-wider text-slate-400">Endpoint</th>
                     <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Calls</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-black uppercase tracking-wider text-slate-400">Est. Cost</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topEndpoints.map((r) => (
+                  {endpointCostRows.map((r) => (
                     <tr key={r.endpoint} className="border-b border-slate-50 hover:bg-slate-50">
                       <td className="px-4 py-2.5 text-xs font-mono text-slate-700 break-all">{r.endpoint}</td>
-                      <td className="px-4 py-2.5 text-right text-xs font-black text-[#f15b27] tabular-nums">{r._count.id}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-black text-[#f15b27] tabular-nums">{r.calls}</td>
+                      <td className="px-4 py-2.5 text-right text-xs tabular-nums text-amber-700">${r.estimated.toFixed(3)}</td>
                     </tr>
                   ))}
                 </tbody>
