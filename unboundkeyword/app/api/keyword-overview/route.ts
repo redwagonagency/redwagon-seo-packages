@@ -1,13 +1,14 @@
 /**
  * POST /api/keyword-overview
- * Comprehensive keyword overview: SERP top results, A-Z autocomplete,
+ * Comprehensive keyword overview: SERP top results, PAA, A-Z autocomplete,
  * content citations, phrase trends, AI search volume, LLM mentions,
- * and optional Lighthouse audit (requires domain param).
+ * demographics, paid data, SERP features, monthly volumes, and optional
+ * Lighthouse audit (requires domain param).
  */
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
-  getSerpLiveData,
+  getSerpLiveDataEnhanced,
   getGoogleAutocompleteAZ,
   getContentAnalysisSearchLive,
   getContentAnalysisPhraseTrendsLive,
@@ -25,6 +26,8 @@ import {
   type AiKeywordVolumeItem,
   type LlmMentionLiveItem,
   type PeopleAlsoAskItem,
+  type SerpFeaturesResult,
+  type MonthlyVolumeItem,
 } from "@/lib/dataforseo/client";
 
 export interface CitationItem {
@@ -50,7 +53,7 @@ export interface DemographicsData {
 export interface PaidSearchData {
   searchVolume: number | null;
   cpc: number | null;
-  competition: number | null; // 0–1 float → multiply by 100 for %
+  competition: number | null;
   competitionLevel: "LOW" | "MEDIUM" | "HIGH" | null;
 }
 
@@ -62,6 +65,14 @@ export interface RelatedKwItem {
   difficulty: number | null;
 }
 
+export interface ClickDistribution {
+  organic: number;
+  paid: number;
+  aiOverview: number;
+  featuredSnippet: number;
+  noClick: number;
+}
+
 export interface KeywordOverviewResponse {
   keyword: string;
   domain: string | null;
@@ -70,20 +81,25 @@ export interface KeywordOverviewResponse {
   autocomplete: AutocompleteLetterGroup[];
   citations: CitationItem[];
   phraseTrends: PhraseTrendItem[];
+  monthlyVolumes: MonthlyVolumeItem[];
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
   lighthouse: LighthouseLiveResult | null;
   paid: PaidSearchData | null;
   demographics: DemographicsData | null;
   relatedKeywords: RelatedKwItem[];
+  questions: string[];
+  prepositions: string[];
+  comparisons: string[];
   keywordDifficulty: number | null;
+  serpFeatures: SerpFeaturesResult | null;
+  clickDistribution: ClickDistribution;
   errors: Record<string, string>;
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
   const body = (await req.json()) as {
     keyword?: string;
     domain?: string;
@@ -100,7 +116,6 @@ export async function POST(req: NextRequest) {
   const seed = keyword.trim();
   const errors: Record<string, string> = {};
 
-  // Run all tasks in parallel; each is independently safe to fail
   const [
     serpResult,
     autocompleteResult,
@@ -115,36 +130,17 @@ export async function POST(req: NextRequest) {
     suggestionsResult,
     difficultyResult,
   ] = await Promise.allSettled([
-    // 1. Top organic SERP results + People Also Ask (single call)
-    getSerpLiveData(seed, location, language, 10),
-
-    // 2. A-Z autocomplete (all 26 letters in one batched request)
+    getSerpLiveDataEnhanced(seed, location, language, 10),
     getGoogleAutocompleteAZ(seed, location, language),
-
-    // 3. Content citations
     getContentAnalysisSearchLive(seed),
-
-    // 4. Phrase trends
     getContentAnalysisPhraseTrendsLive(seed),
-
-    // 5. AI keyword search volume
     getAiKeywordSearchVolume([seed], location, language),
-
-    // 6. LLM mentions (domain can be empty string — function handles it)
     domain ? getLlmMentionsSearchLive(seed, domain, 20) : Promise.resolve([]),
-
-    // 7. Lighthouse audit (only if domain provided)
     domain ? getLighthouseLiveJson(domain) : Promise.resolve(null),
-
-    // 8. Google Ads paid search data (CPC, competition, volume)
     getKeywordData([seed]),
-    // 9. Demographics
     getDFSTrendsDemography([seed], location),
-    // 10. Related keywords
     getRelatedKeywords(seed, location, language, 40),
-    // 11. Keyword suggestions with difficulty
     getKeywordSuggestions(seed, location, language, 30),
-    // 12. Bulk keyword difficulty for the seed
     getBulkKeywordDifficulty([seed], location, language),
   ]);
 
@@ -156,9 +152,11 @@ export async function POST(req: NextRequest) {
     return result.value;
   }
 
-  const serpData = settle(serpResult, "serp", { organic: [], paa: [] });
+  const serpData = settle(serpResult, "serp", { organic: [], paa: [], features: null as unknown as SerpFeaturesResult });
   const serp = serpData.organic;
   const paa = serpData.paa;
+  const serpFeatures: SerpFeaturesResult | null = serpData.features ?? null;
+
   const autocomplete = settle(autocompleteResult, "autocomplete", []);
   const citRaw = settle(citationsResult, "citations", { items: [], result: null, raw: null });
   const trendsRaw = settle(phraseTrendsResult, "phraseTrends", { items: [], result: null, raw: null });
@@ -190,7 +188,7 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  // Parse paid search data from Google Ads API response
+  // Parse paid search data + monthly volumes
   type PaidRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
   const paidItems = (paidRaw as PaidRaw)?.tasks?.[0]?.result?.[0]?.items ?? [];
   const paidItem = (paidItems[0] ?? null) as Record<string, unknown> | null;
@@ -205,23 +203,26 @@ export async function POST(req: NextRequest) {
       : null,
   } : null;
 
+  // Extract monthly volumes from Google Ads monthly_searches field
+  const monthlyVolumes: MonthlyVolumeItem[] = [];
+  if (paidItem && Array.isArray(paidItem.monthly_searches)) {
+    for (const m of paidItem.monthly_searches as Record<string, unknown>[]) {
+      if (typeof m.year === "number" && typeof m.month === "number" && typeof m.search_volume === "number") {
+        monthlyVolumes.push({ year: m.year, month: m.month, volume: m.search_volume });
+      }
+    }
+    monthlyVolumes.sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+  }
 
-  // Extract keyword difficulty for the seed keyword
   const keywordDifficulty = difficultyRaw.find((d) => d.keyword.toLowerCase() === seed.toLowerCase())?.difficulty ?? null;
 
-  // Merge related keywords and suggestions into one deduplicated list
+  // Merge related + suggestions
   const relatedMap = new Map<string, RelatedKwItem>();
   for (const item of relatedRaw) {
     if (!item.keyword) continue;
     const k = item.keyword.toLowerCase();
-    if (k === seed.toLowerCase()) continue; // skip the seed itself
-    relatedMap.set(k, {
-      keyword: item.keyword,
-      volume: item.searchVolume,
-      cpc: item.cpc ?? null,
-      competition: item.competition ?? null,
-      difficulty: null,
-    });
+    if (k === seed.toLowerCase()) continue;
+    relatedMap.set(k, { keyword: item.keyword, volume: item.searchVolume, cpc: item.cpc ?? null, competition: item.competition ?? null, difficulty: null });
   }
   for (const item of suggestionsRaw) {
     if (!item.keyword) continue;
@@ -231,45 +232,68 @@ export async function POST(req: NextRequest) {
     if (existing) {
       if (item.difficulty !== null) existing.difficulty = item.difficulty;
     } else {
-      relatedMap.set(k, {
-        keyword: item.keyword,
-        volume: item.searchVolume,
-        cpc: item.cpc ?? null,
-        competition: null,
-        difficulty: item.difficulty,
-      });
+      relatedMap.set(k, { keyword: item.keyword, volume: item.searchVolume, cpc: item.cpc ?? null, competition: null, difficulty: item.difficulty });
     }
   }
-  const relatedKeywords = [...relatedMap.values()]
-    .sort((a, b) => b.volume - a.volume)
-    .slice(0, 60);
+  const relatedKeywords = [...relatedMap.values()].sort((a, b) => b.volume - a.volume).slice(0, 60);
 
-  // Map citation items
-  const citations: CitationItem[] = (
-    (citRaw as { items?: Record<string, unknown>[] })?.items ?? []
-  )
-    .slice(0, 20)
-    .map((i) => ({
-      url: typeof i.url === "string" ? i.url : null,
-      title: typeof i.title === "string" ? i.title : null,
-      domain: typeof i.domain === "string" ? i.domain : null,
-      rating: typeof i.rating_distribution === "number" ? i.rating_distribution : null,
-      contentDate: typeof i.content_date === "string" ? i.content_date : null,
-      snippet: typeof i.snippet === "string" ? i.snippet : null,
-    }));
+  // Extract questions / prepositions / comparisons from autocomplete
+  const QUESTION_WORDS = ["how", "what", "why", "where", "when", "which", "who", "can", "does", "is", "are", "will", "should"];
+  const PREPOSITION_WORDS = ["for", "with", "without", "near", "in", "on", "at", "by", "to", "vs", "versus", "like", "after", "before", "during"];
+  const COMPARISON_WORDS = ["vs", "versus", "or", "alternative", "alternatives", "compare", "compared", "better", "difference"];
 
-  // Map phrase trends: result.items is an array of { date, impressions }
-  const phraseTrends: PhraseTrendItem[] = (
-    (trendsRaw as { items?: Record<string, unknown>[] })?.items ?? []
-  )
-    .map((i) => ({
-      date: typeof i.date === "string" ? i.date : String(i.date ?? ""),
-      impressions: typeof i.impressions === "number" ? i.impressions : 0,
-    }))
+  const allAutocomplete: string[] = autocomplete.flatMap((g) => g.suggestions);
+  const questions = allAutocomplete.filter((s) => QUESTION_WORDS.some((w) => s.toLowerCase().startsWith(w + " "))).slice(0, 50);
+  const prepositions = allAutocomplete.filter((s) => {
+    const words = s.toLowerCase().split(/\s+/);
+    return PREPOSITION_WORDS.some((w) => words.includes(w));
+  }).filter((s) => !questions.includes(s)).slice(0, 50);
+  const comparisons = allAutocomplete.filter((s) => {
+    const lower = s.toLowerCase();
+    return COMPARISON_WORDS.some((w) => lower.includes(" " + w + " ") || lower.endsWith(" " + w));
+  }).filter((s) => !questions.includes(s) && !prepositions.includes(s)).slice(0, 50);
+
+  // Compute click distribution
+  let paidPct = 0, aiOverviewPct = 0, featuredSnippetPct = 0;
+  if (serpFeatures) {
+    paidPct = Math.min(serpFeatures.topAdCount * 3 + serpFeatures.bottomAdCount * 1, 25);
+    if (serpFeatures.hasAiOverview) aiOverviewPct = 18;
+    if (serpFeatures.hasFeaturedSnippet && !serpFeatures.hasAiOverview) featuredSnippetPct = 8;
+  } else {
+    paidPct = Math.round((paidData?.competition ?? 0) * 22);
+  }
+  const comp = paidData?.competition ?? 0;
+  const noClickPct = Math.max(Math.round(35 - comp * 10), 15);
+  const organicPct = Math.max(100 - paidPct - aiOverviewPct - featuredSnippetPct - noClickPct, 5);
+  const rawTotal = organicPct + paidPct + aiOverviewPct + featuredSnippetPct + noClickPct;
+  const scale = 100 / rawTotal;
+  const clickDistribution: ClickDistribution = {
+    organic: Math.round(organicPct * scale),
+    paid: Math.round(paidPct * scale),
+    aiOverview: Math.round(aiOverviewPct * scale),
+    featuredSnippet: Math.round(featuredSnippetPct * scale),
+    noClick: Math.round(noClickPct * scale),
+  };
+  const distSum = clickDistribution.organic + clickDistribution.paid + clickDistribution.aiOverview + clickDistribution.featuredSnippet + clickDistribution.noClick;
+  clickDistribution.organic += 100 - distSum;
+
+  // Map citations
+  const citations: CitationItem[] = ((citRaw as { items?: Record<string, unknown>[] })?.items ?? []).slice(0, 20).map((i) => ({
+    url: typeof i.url === "string" ? i.url : null,
+    title: typeof i.title === "string" ? i.title : null,
+    domain: typeof i.domain === "string" ? i.domain : null,
+    rating: typeof i.rating_distribution === "number" ? i.rating_distribution : null,
+    contentDate: typeof i.content_date === "string" ? i.content_date : null,
+    snippet: typeof i.snippet === "string" ? i.snippet : null,
+  }));
+
+  // Map phrase trends
+  const phraseTrends: PhraseTrendItem[] = ((trendsRaw as { items?: Record<string, unknown>[] })?.items ?? [])
+    .map((i) => ({ date: typeof i.date === "string" ? i.date : String(i.date ?? ""), impressions: typeof i.impressions === "number" ? i.impressions : 0 }))
     .filter((i) => i.date)
-    .slice(0, 52); // up to 1 year of weekly data
+    .slice(0, 52);
 
-  const response: KeywordOverviewResponse = {
+  return Response.json({
     keyword: seed,
     domain: domain || null,
     serp,
@@ -277,15 +301,19 @@ export async function POST(req: NextRequest) {
     autocomplete,
     citations,
     phraseTrends,
+    monthlyVolumes,
     aiVolume,
     llmMentions,
     lighthouse,
     paid: paidData,
     demographics,
     relatedKeywords,
+    questions,
+    prepositions,
+    comparisons,
     keywordDifficulty,
+    serpFeatures,
+    clickDistribution,
     errors,
-  };
-
-  return Response.json(response);
+  } satisfies KeywordOverviewResponse);
 }

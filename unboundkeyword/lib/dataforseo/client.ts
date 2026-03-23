@@ -3982,3 +3982,110 @@ export async function getGoogleTrendsExplore(
   }
   return out;
 }
+
+// ─── Enhanced SERP with feature detection ────────────────────────────────────
+
+export interface SerpFeaturesResult {
+  hasAiOverview: boolean;
+  hasFeaturedSnippet: boolean;
+  topAdCount: number;
+  bottomAdCount: number;
+  hasShopping: boolean;
+  hasVideoCarousel: boolean;
+  hasLocalPack: boolean;
+  hasPeopleAlsoAsk: boolean;
+}
+
+export interface MonthlyVolumeItem {
+  year: number;
+  month: number;
+  volume: number;
+}
+
+/**
+ * Like getSerpLiveData but also extracts SERP feature flags and top ad counts
+ * from the same single API call so we can avoid paying for two requests.
+ */
+export async function getSerpLiveDataEnhanced(
+  keyword: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 10
+): Promise<{
+  organic: SerpOrganicResult[];
+  paa: PeopleAlsoAskItem[];
+  features: SerpFeaturesResult;
+}> {
+  const data = await dfsPost("/serp/google/organic/live/advanced", [
+    {
+      keyword,
+      location_code: locationCode,
+      language_code: languageCode,
+      device: "desktop",
+      calculate_rectangles: false,
+      depth: Math.max(limit + 10, 30),
+      load_async_ai_overview: true,
+    },
+  ]);
+
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  const types = items.map((i) => String(i.type ?? ""));
+
+  const topAds = items.filter((i) => i.type === "paid" && (i.rank_absolute as number) <= 4);
+  const bottomAds = items.filter((i) => i.type === "paid" && (i.rank_absolute as number) > 4);
+
+  const features: SerpFeaturesResult = {
+    hasAiOverview: types.includes("ai_overview") || types.includes("answer_box"),
+    hasFeaturedSnippet: types.includes("featured_snippet"),
+    topAdCount: topAds.length,
+    bottomAdCount: bottomAds.length,
+    hasShopping: types.includes("shopping"),
+    hasVideoCarousel: types.includes("video"),
+    hasLocalPack: types.includes("local_pack") || types.includes("maps"),
+    hasPeopleAlsoAsk: types.includes("people_also_ask") || types.includes("people_also_ask_element"),
+  };
+
+  const organic: SerpOrganicResult[] = items
+    .filter((i) => String(i.type ?? "") === "organic")
+    .slice(0, limit)
+    .map((i) => ({
+      position: typeof i.rank_absolute === "number" ? i.rank_absolute : 0,
+      url: typeof i.url === "string" ? i.url : "",
+      title: typeof i.title === "string" ? i.title : "",
+      description: typeof i.description === "string" ? i.description : null,
+      domain: typeof i.domain === "string" ? i.domain : "",
+      etv: typeof i.etv === "number" ? Math.round(i.etv) : null,
+      breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
+    }));
+
+  function mapPaaElement(s: Record<string, unknown>): PeopleAlsoAskItem | null {
+    const question = typeof s.title === "string" ? s.title.trim() : "";
+    if (!question) return null;
+    const answerItems = (s.items ?? []) as Record<string, unknown>[];
+    const box = answerItems[0] as Record<string, unknown> | undefined;
+    return {
+      question,
+      answer: typeof box?.description === "string" ? box.description : typeof box?.text === "string" ? box.text : null,
+      url: typeof box?.url === "string" ? box.url : null,
+      domain: typeof box?.domain === "string" ? box.domain : null,
+    };
+  }
+
+  const paa: PeopleAlsoAskItem[] = [];
+  for (const i of items) {
+    const type = String(i.type ?? "");
+    if (type === "people_also_ask_element") {
+      const mapped = mapPaaElement(i);
+      if (mapped) paa.push(mapped);
+    } else if (type === "people_also_ask") {
+      for (const s of (i.items ?? []) as Record<string, unknown>[]) {
+        if (String(s.type ?? "") === "people_also_ask_element") {
+          const mapped = mapPaaElement(s);
+          if (mapped) paa.push(mapped);
+        }
+      }
+    }
+  }
+
+  return { organic, paa: paa.slice(0, 12), features };
+}
