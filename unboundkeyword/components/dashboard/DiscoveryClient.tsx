@@ -1268,33 +1268,7 @@ export default function DiscoveryClient() {
 
   return (
     <div className="p-8 max-w-7xl">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)] mb-8">
-        <div className="rounded-[2rem] bg-[radial-gradient(circle_at_top_left,_rgba(99,102,241,0.25),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.2),_transparent_32%),linear-gradient(135deg,_#0f172a,_#111827_60%,_#1e1b4b)] p-8 text-white shadow-2xl">
-          <Badge variant="purple" className="mb-4 bg-white/10 text-violet-100">Keyword Discovery</Badge>
-          <h1 className="text-4xl font-black tracking-tight leading-tight mb-4">
-            Premium keyword discovery with the wheel built in
-          </h1>
-          <p className="text-sm leading-7 text-slate-300 max-w-2xl mb-6">
-            Turn one topic into question trees, preposition phrases, comparison terms, related searches, and A-Z expansions,
-            then merge everything into one master keyword dataset you can actually work from.
-          </p>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Circle Graph</div>
-              <div className="text-lg font-bold">Questions, modifiers, and related terms in one visual map</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Master Table</div>
-              <div className="text-lg font-bold">Every keyword source merged into one results surface</div>
-            </div>
-            <div className="rounded-2xl bg-white/10 border border-white/20 p-4 backdrop-blur-sm">
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Workflow Ready</div>
-              <div className="text-lg font-bold">Select from wheel or list and send directly to lists</div>
-            </div>
-          </div>
-        </div>
-
+      <div className="mb-8">
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
           <div className="mb-5">
             <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Start A Discovery Session</div>

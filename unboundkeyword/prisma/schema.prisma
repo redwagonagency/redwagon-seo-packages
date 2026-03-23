@@ -320,3 +320,20 @@ model KeywordIntelligence {
   @@index([keyword])
   @@index([userId, lastAnalyzed])
 }
+
+// ── Master API Query Cache ────────────────────────────────────────────────────
+// Stores every DataForSEO response so no user query is lost and duplicate
+// API calls are avoided. All research done by any user is captured here.
+model ApiQueryCache {
+  id        String   @id @default(cuid())
+  userId    String?
+  endpoint  String   // DataForSEO endpoint path
+  cacheKey  String   @unique // sha256 of endpoint + sorted JSON params
+  payload   String   // JSON-stringified API response
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([cacheKey])
+  @@index([userId])
+  @@index([endpoint])
+}

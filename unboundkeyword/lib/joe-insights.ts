@@ -16,34 +16,67 @@ type JoeInsightInput = {
   industryStats: IndustryStat[];
 };
 
-export function buildJoeInsight(input: JoeInsightInput): string {
+export type JoeInsightResult = {
+  headline: string;
+  body: string;
+  action: string;
+  metric1: { label: string; value: string };
+  metric2: { label: string; value: string };
+  metric3: { label: string; value: string };
+};
+
+export function buildJoeInsight(input: JoeInsightInput): JoeInsightResult {
   const ctrStat = input.industryStats.find((s) => s.metricKey === "avg_organic_ctr");
   const cpcStat = input.industryStats.find((s) => s.metricKey === "avg_cpc");
   const mobileStat = input.industryStats.find((s) => s.metricKey === "mobile_share");
 
-  const ctrText = ctrStat
-    ? `${ctrStat.metricValue.toFixed(1)}${ctrStat.unit || "%"} average organic CTR`
-    : "~3.5% average organic CTR";
-  const cpcText = cpcStat
-    ? `$${cpcStat.metricValue.toFixed(2)} avg CPC benchmark`
-    : "$2.80 avg CPC benchmark";
-  const mobileText = mobileStat
-    ? `${mobileStat.metricValue.toFixed(1)}${mobileStat.unit || "%"} mobile share`
-    : "~61% mobile share";
+  const ctr = ctrStat ? ctrStat.metricValue : 3.5;
+  const benchmarkCpc = cpcStat ? cpcStat.metricValue : 2.8;
+  const mobileShare = mobileStat ? mobileStat.metricValue : 61;
 
-  const topKeywordText = input.topKeyword
-    ? `Your strongest tracked term right now is \"${input.topKeyword}\" (${input.topKeywordVolume.toLocaleString()}/mo).`
-    : "You do not have a strongest tracked term yet, so your first win is tightening one core keyword cluster.";
+  const hasData = input.keywordCount > 0;
+  const hasSite = input.domain !== "your site" && input.domain !== "";
 
-  const cpcContext =
-    input.avgKeywordCpc > 0
-      ? `Your current keyword set averages about $${input.avgKeywordCpc.toFixed(2)} CPC.`
-      : "Your current keyword CPC baseline is still building from fresh data.";
+  // Headline based on account state
+  let headline: string;
+  let body: string;
+  let action: string;
 
-  return [
-    `Joe here. For ${input.domain}, we currently have ${input.keywordCount.toLocaleString()} tracked keywords across ${input.listCount} lists and ${input.discoveryCount} discovery sessions.`,
-    topKeywordText,
-    `${cpcContext} Industry anchors this month: ${ctrText}, ${cpcText}, and ${mobileText}.`,
-    "My recommendation: ship one money-page refresh plus one supporting intent article this week, then track desktop/mobile volume deltas in keyword overview.",
-  ].join(" ");
+  if (!hasSite) {
+    headline = "Start by adding your domain";
+    body = "Add your first site under Settings → Projects to unlock keyword tracking, competitive analysis, and AI-powered content planning.";
+    action = "Go to Settings → Projects";
+  } else if (!hasData && input.listCount === 0) {
+    headline = `${input.domain} has no keywords tracked yet`;
+    body = `Your keyword engine is ready but has no data to work from yet. Run a discovery session for your top topic now — it takes under 90 seconds and will surface hundreds of question, comparison, and long-tail opportunities.`;
+    action = "Run first Discovery session";
+  } else if (input.listCount > 0 && input.keywordCount < 20) {
+    headline = `${input.keywordCount} keywords tracked — build your first real cluster`;
+    body = `You have ${input.listCount} list${input.listCount > 1 ? "s" : ""} started. The sweet spot for a first content cluster is 15–30 tightly grouped keywords. Add supporting and long-tail variations around your core topic to unlock the AI Decision Report.`;
+    action = "Add keywords to your list";
+  } else if (hasData && input.topKeyword) {
+    const cpcDelta = input.avgKeywordCpc > 0
+      ? (input.avgKeywordCpc > benchmarkCpc
+        ? `Your avg CPC of $${input.avgKeywordCpc.toFixed(2)} is above the $${benchmarkCpc.toFixed(2)} benchmark — high commercial intent.`
+        : `Your avg CPC of $${input.avgKeywordCpc.toFixed(2)} is below benchmark — great for organic-first plays.`)
+      : "Enrich your keywords with CPC data by running Keyword Overview.";
+    headline = `"${input.topKeyword}" is your strongest signal right now`;
+    body = `${cpcDelta} With ${input.keywordCount.toLocaleString()} keywords tracked across ${input.listCount} list${input.listCount > 1 ? "s" : ""}, you have enough data to run the AI Decision Report and get a full content map with priority scores.`;
+    action = "Run AI Decision Report";
+  } else {
+    headline = `${input.keywordCount.toLocaleString()} keywords ready for strategy`;
+    body = `You have solid data across ${input.listCount} list${input.listCount > 1 ? "s" : ""}. Industry CTR averages ${ctr.toFixed(1)}%, meaning each top-3 ranking keyword at 1,000/mo volume drives ~35 visits. Run the AI Decision Report to turn your list into a prioritized content plan.`;
+    action = "Run AI Decision Report";
+  }
+
+  return {
+    headline,
+    body,
+    action,
+    metric1: { label: "Industry CTR", value: `${ctr.toFixed(1)}%` },
+    metric2: { label: "Avg CPC", value: `$${benchmarkCpc.toFixed(2)}` },
+    metric3: { label: "Mobile Share", value: `${mobileShare.toFixed(0)}%` },
+  };
 }
+
+

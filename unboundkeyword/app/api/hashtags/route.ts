@@ -19,6 +19,7 @@ export interface HashtagResult {
   cpc: number | null;
   trendsValue: number | null;
   platform: string;
+  platformUrl: string;
   difficulty: number | null;
 }
 
@@ -33,6 +34,17 @@ function toHashtag(kw: string): string {
 }
 
 const PLATFORMS = ["Google", "Instagram", "TikTok", "Twitter/X", "LinkedIn", "YouTube", "Pinterest", "Facebook"];
+
+const PLATFORM_URLS: Record<string, (tag: string) => string> = {
+  "Google": (t) => `https://www.google.com/search?q=%23${encodeURIComponent(t)}`,
+  "Instagram": (t) => `https://www.instagram.com/explore/tags/${encodeURIComponent(t)}/`,
+  "TikTok": (t) => `https://www.tiktok.com/tag/${encodeURIComponent(t)}`,
+  "Twitter/X": (t) => `https://twitter.com/hashtag/${encodeURIComponent(t)}`,
+  "LinkedIn": (t) => `https://www.linkedin.com/feed/hashtag/?keywords=${encodeURIComponent(t)}`,
+  "YouTube": (t) => `https://www.youtube.com/results?search_query=%23${encodeURIComponent(t)}`,
+  "Pinterest": (t) => `https://www.pinterest.com/search/pins/?q=%23${encodeURIComponent(t)}`,
+  "Facebook": (t) => `https://www.facebook.com/hashtag/${encodeURIComponent(t)}`,
+};
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -95,6 +107,7 @@ export async function POST(req: NextRequest) {
         cpc: vol?.cpc ?? null,
         trendsValue,
         platform,
+        platformUrl: PLATFORM_URLS[platform]?.(kw.replace(/[^a-z0-9]/g, "")) ?? "",
         difficulty: vol?.difficulty ?? null,
       });
     }

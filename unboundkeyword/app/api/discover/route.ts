@@ -399,7 +399,26 @@ export async function POST(req: NextRequest) {
         languageCode: String(language),
         limit: 2000,
       }),
-      getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 500),
+      // Multi-angle PAA: run 5 parallel queries to bypass Google's ~4-item PAA limit per SERP
+      Promise.allSettled([
+        getPeopleAlsoAskQuestions(seedClean, Number(location), String(language), 500),
+        getPeopleAlsoAskQuestions(`what is ${seedClean}`, Number(location), String(language), 500),
+        getPeopleAlsoAskQuestions(`how to ${seedClean}`, Number(location), String(language), 500),
+        getPeopleAlsoAskQuestions(`best ${seedClean}`, Number(location), String(language), 500),
+        getPeopleAlsoAskQuestions(`${seedClean} tips`, Number(location), String(language), 500),
+      ]).then((results) => {
+        const seen = new Set<string>();
+        const merged: RelatedKeywordItem[] = [];
+        for (const r of results) {
+          if (r.status === "fulfilled") {
+            for (const item of r.value) {
+              const key = item.keyword?.trim().toLowerCase();
+              if (key && !seen.has(key)) { seen.add(key); merged.push(item); }
+            }
+          }
+        }
+        return merged;
+      }),
       deepMode
         ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
         : Promise.resolve([]),

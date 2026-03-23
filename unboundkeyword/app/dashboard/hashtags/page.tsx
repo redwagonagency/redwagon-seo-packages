@@ -146,8 +146,13 @@ export default function HashtagsPage() {
                   <span className="text-lg font-black text-slate-900 break-all">{row.hashtag}</span>
                   <input type="checkbox" checked={selected.has(row.hashtag)} onChange={() => toggleRow(row.hashtag)} onClick={(e) => e.stopPropagation()} className="rounded mt-0.5" />
                 </div>
-                <div className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold mb-2 ${PLATFORM_COLORS[row.platform] ?? "bg-slate-100 text-slate-600"}`}>
+                <div className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold mb-2 ${PLATFORM_COLORS[row.platform] ?? "bg-slate-100 text-slate-600"}`}>
                   {row.platform}
+                  {row.platformUrl && (
+                    <a href={row.platformUrl} target="_blank" rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="underline opacity-70 hover:opacity-100">↗</a>
+                  )}
                 </div>
                 <div className="flex justify-between text-xs text-slate-500">
                   <span>Vol <strong className="text-slate-700">{row.volume != null ? formatNumber(row.volume) : "—"}</strong></span>
@@ -178,6 +183,7 @@ export default function HashtagsPage() {
                     <th className="px-4 py-3 w-8"><input type="checkbox" checked={selected.size === filteredRows.length && filteredRows.length > 0} onChange={toggleAll} className="rounded" /></th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Hashtag</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Platform</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Verify</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Volume</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">CPC</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Difficulty</th>
@@ -192,6 +198,13 @@ export default function HashtagsPage() {
                       <td className="px-4 py-2.5 font-black text-slate-900">{row.hashtag}</td>
                       <td className="px-4 py-2.5">
                         <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${PLATFORM_COLORS[row.platform] ?? "bg-slate-100 text-slate-600"}`}>{row.platform}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {row.platformUrl
+                          ? <a href={row.platformUrl} target="_blank" rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-[#f15b27] hover:underline">Verify ↗</a>
+                          : null}
                       </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.volume != null ? formatNumber(row.volume) : "—"}</td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "—"}</td>

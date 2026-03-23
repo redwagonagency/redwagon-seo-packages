@@ -521,8 +521,54 @@ export default function KeywordOverviewPage() {
                 })()}
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5 flex items-center justify-center text-slate-400 text-sm">
-                Demographics data unavailable for this keyword
+              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-5">
+                <div className="text-[10px] uppercase tracking-[0.14em] font-black text-slate-400 mb-3">Audience Insights</div>
+                <p className="text-xs text-slate-500 mb-4 leading-5">
+                  Detailed demographic breakdown is not available from Google Trends for this keyword. Below are estimated audience signals based on industry benchmarks and keyword characteristics.
+                </p>
+                {(() => {
+                  // Derive audience signals from keyword + overview data
+                  const kw = (data.keyword ?? "").toLowerCase();
+                  const vol = data.paid?.searchVolume ?? 0;
+                  const isLocal = /near me|local|city|zip|area/.test(kw);
+                  const isTech = /software|app|tool|saas|developer|code|api|crm|seo/.test(kw);
+                  const isHealth = /health|fitness|diet|weight|workout|symptom|medical/.test(kw);
+                  const isEcomm = /buy|shop|price|review|best|cheap|discount|deal/.test(kw);
+                  const mobileEst = isLocal ? 72 : isTech ? 38 : isHealth ? 61 : isEcomm ? 55 : 51;
+                  const desktopEst = 100 - mobileEst;
+                  const ctrBenchmark = vol > 10000 ? 2.8 : vol > 1000 ? 4.2 : 6.1;
+                  const audienceType = isTech ? "Technical / Professional" : isHealth ? "Health-conscious" : isLocal ? "Local / Near Me" : isEcomm ? "Commercial / Shopper" : "General";
+                  return (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-500 mb-1.5">Estimated Device Split</div>
+                        <div className="flex rounded-full overflow-hidden h-5 gap-0.5">
+                          <div className="bg-slate-600 flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${desktopEst}%` }}>
+                            {desktopEst >= 20 ? `${desktopEst}% Desktop` : ""}
+                          </div>
+                          <div className="bg-[#f15b27] flex items-center justify-center text-[10px] font-bold text-white" style={{ width: `${mobileEst}%` }}>
+                            {mobileEst >= 20 ? `${mobileEst}% Mobile` : ""}
+                          </div>
+                        </div>
+                        <div className="flex justify-between mt-1 text-[11px]">
+                          <span className="text-slate-500 font-semibold">🖥 Desktop {desktopEst}%</span>
+                          <span className="text-[#f15b27] font-semibold">📱 Mobile {mobileEst}% est.</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Audience Type</div>
+                          <div className="text-sm font-black text-slate-800">{audienceType}</div>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5">
+                          <div className="text-[10px] uppercase tracking-wider text-slate-400 mb-0.5">Est. Organic CTR</div>
+                          <div className="text-sm font-black text-slate-800">{ctrBenchmark}%</div>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-400 italic">Estimates based on keyword type &amp; volume. Connect Google Search Console for real audience data.</p>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

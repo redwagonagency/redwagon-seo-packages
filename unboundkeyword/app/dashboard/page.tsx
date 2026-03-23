@@ -4,7 +4,7 @@ import IntegrationConnectPanel from "@/components/dashboard/IntegrationConnectPa
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getSelectedSiteForUser } from "@/lib/site-context";
-import { buildJoeInsight } from "@/lib/joe-insights";
+import { buildJoeInsight, type JoeInsightResult } from "@/lib/joe-insights";
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -42,7 +42,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const joeInsight = buildJoeInsight({
+  const joeInsight: JoeInsightResult = buildJoeInsight({
     domain: selectedSite?.domain || "your site",
     listCount,
     keywordCount,
@@ -99,6 +99,52 @@ export default async function DashboardPage() {
         </div>
       </div>
 
+      {/* Joe Insight — positioned between stats and nav cards */}
+      <div className="mb-6 rounded-2xl border border-[#f15b27]/20 bg-[#fff8f5] p-5">
+        <div className="flex items-start gap-4">
+          <img
+            src="/joe-headshot.png"
+            alt="Joe from Redwagon"
+            className="h-12 w-12 rounded-full object-cover ring-2 ring-[#f15b27]/30 shrink-0"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black mb-0.5">Industry Insight</div>
+            <h2 className="text-base font-black text-slate-900 leading-snug">{joeInsight.headline}</h2>
+            <p className="mt-1.5 text-sm leading-6 text-slate-600">{joeInsight.body}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              <div className="flex gap-4">
+                <div className="text-center">
+                  <div className="text-lg font-black text-slate-900">{joeInsight.metric1.value}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric1.label}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-black text-slate-900">{joeInsight.metric2.value}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric2.label}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-black text-slate-900">{joeInsight.metric3.value}</div>
+                  <div className="text-[10px] uppercase tracking-wide text-slate-400">{joeInsight.metric3.label}</div>
+                </div>
+              </div>
+              <Link
+                href={
+                  joeInsight.action === "Run AI Decision Report"
+                    ? "/dashboard/decision-engine"
+                    : joeInsight.action === "Run first Discovery session"
+                    ? "/dashboard/discover"
+                    : joeInsight.action === "Add keywords to your list"
+                    ? "/dashboard/keywords"
+                    : "/dashboard/settings/projects"
+                }
+                className="ml-auto text-xs font-bold text-[#f15b27] border border-[#f15b27]/40 rounded-lg px-3 py-1.5 hover:bg-[#f15b27] hover:text-white transition"
+              >
+                {joeInsight.action} →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/dashboard/traffic" className="rounded-2xl border border-slate-200 bg-white p-5 hover:border-[#f15b27] transition">
@@ -129,19 +175,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex items-start gap-4">
-          <img
-            src="/joe-headshot.png"
-            alt="Joe from Redwagon"
-            className="h-14 w-14 rounded-full object-cover ring-2 ring-[#f15b27]/25"
-          />
-          <div className="flex-1">
-            <div className="text-xs uppercase tracking-[0.16em] text-[#f15b27] font-black">Joe's Industry Insight</div>
-            <p className="mt-2 text-sm leading-6 text-slate-700">{joeInsight}</p>
-          </div>
-        </div>
-      </div>
+
+
     </div>
   );
 }

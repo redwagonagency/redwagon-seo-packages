@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type Priority = "High" | "Medium" | "Low";
@@ -148,6 +149,17 @@ export default function DecisionEngineClient() {
 
   return (
     <div className="p-6 md:p-8 space-y-6">
+      {/* Content Map CTA */}
+      <div className="flex items-center justify-between rounded-2xl border border-[#f15b27]/20 bg-[#fff8f5] px-5 py-3">
+        <div>
+          <span className="text-xs font-black uppercase tracking-wider text-[#f15b27]">New</span>
+          <span className="ml-2 text-sm font-bold text-slate-800">AI Content Map</span>
+          <span className="ml-2 text-xs text-slate-500">— analyse up to 30 keywords at once and get a full prioritised content strategy</span>
+        </div>
+        <Link href="/dashboard/decision-engine/content-map" className="shrink-0 text-xs font-black text-white bg-[#f15b27] rounded-lg px-3 py-1.5 hover:bg-[#d94e20] transition">
+          Open Content Map →
+        </Link>
+      </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="flex-1">
