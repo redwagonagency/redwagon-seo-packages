@@ -17,21 +17,17 @@ type TrafficResponse = {
   competitors: { domain: string; intersections: number; avgPosition: number | null; etv: number | null }[];
   keywords: { keyword: string; position: number; searchVolume: number; traffic: number; cpc?: number | null }[];
   pages?: { url: string; title: string | null; traffic: number; keywordCount: number }[];
+  rankedKeywords?: { keyword: string; position: number; url: string | null; searchVolume: number; cpc: number | null }[];
+  bulkTraffic?: { target: string; organicTraffic: number; paidTraffic: number; etv: number }[];
+  historicalBulkTraffic?: { date: string; organicTraffic: number }[];
+  pageIntersection?: { url: string; domain: string; title: string | null; matchingPages: number }[];
 };
 
-type PageRow = {
-  rank: number;
-  traffic: number;
-  url: string;
-  keywords: number;
-  topKeyword: string;
-  topKeywordVolume: number;
-  topKeywordPosition: number;
-};
+type Tab = "overview" | "ranked" | "traffic-est" | "page-intersection";
 
-function difficultyBand(value: number) {
-  if (value >= 70) return "bg-red-300";
-  if (value >= 40) return "bg-amber-300";
+function diffBand(v: number) {
+  if (v >= 70) return "bg-red-300";
+  if (v >= 40) return "bg-amber-300";
   return "bg-emerald-300";
 }
 
@@ -40,6 +36,7 @@ export default function TrafficPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TrafficResponse | null>(null);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [selectedPageIndex, setSelectedPageIndex] = useState(0);
 
   async function runLookup(nextDomain?: string) {
@@ -63,77 +60,54 @@ export default function TrafficPage() {
     }
   }
 
-  useEffect(() => {
-    void runLookup();
-  }, []);
+  useEffect(() => { void runLookup(); }, []);
 
-  const chartPoints = useMemo(() => {
-    const history = data?.history ?? [];
-    if (history.length === 0) return [] as Array<{ x: number; y: number; value: number }>;
-    const values = history.map((h) => h.organicTraffic || 0);
+  const chartHistory = useMemo(() => {
+    const hist = (data?.historicalBulkTraffic?.length ? data.historicalBulkTraffic : data?.history) ?? [];
+    if (hist.length === 0) return [] as Array<{ x: number; y: number; value: number; label: string }>;
+    const values = hist.map((h) => h.organicTraffic || 0);
     const max = Math.max(...values, 1);
-    return history.map((point, idx) => ({
-      x: (idx / Math.max(history.length - 1, 1)) * 680,
+    return hist.map((point, idx) => ({
+      x: (idx / Math.max(hist.length - 1, 1)) * 680,
       y: 180 - (point.organicTraffic / max) * 160,
       value: point.organicTraffic,
+      label: point.date,
     }));
-  }, [data?.history]);
+  }, [data?.history, data?.historicalBulkTraffic]);
 
-  const linePath = chartPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  const linePath = chartHistory.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
 
-  const pageRows: PageRow[] = useMemo(() => {
+  const pageRows = useMemo(() => {
     const pages = data?.pages ?? [];
     const keywordPool = data?.keywords ?? [];
     return pages.slice(0, 20).map((page, idx) => {
-      const topKeyword = keywordPool[idx % Math.max(keywordPool.length, 1)] ?? {
-        keyword: "top keyword",
-        searchVolume: 0,
-        position: 1,
-        traffic: 0,
-      };
-
-      return {
-        rank: idx + 1,
-        traffic: Math.max(0, Math.round(page.traffic)),
-        url: page.url,
-        keywords: page.keywordCount,
-        topKeyword: topKeyword.keyword,
-        topKeywordVolume: topKeyword.searchVolume,
-        topKeywordPosition: topKeyword.position,
-      };
+      const topKeyword = keywordPool[idx % Math.max(keywordPool.length, 1)] ?? { keyword: "—", searchVolume: 0, position: 0, traffic: 0 };
+      return { rank: idx + 1, traffic: Math.max(0, Math.round(page.traffic)), url: page.url, keywords: page.keywordCount, topKeyword: topKeyword.keyword, topKeywordVolume: topKeyword.searchVolume, topKeywordPosition: topKeyword.position };
     });
   }, [data?.pages, data?.keywords]);
 
-  const selectedPage = pageRows[selectedPageIndex] ?? null;
   const selectedKeywordRows = useMemo(() => {
     const source = data?.keywords ?? [];
     return source.slice(selectedPageIndex * 8, selectedPageIndex * 8 + 8).map((row, idx) => ({
-      keyword: row.keyword,
-      position: row.position,
-      traffic: row.traffic,
-      volume: row.searchVolume,
-      cpc: row.cpc ?? 3.43,
+      keyword: row.keyword, position: row.position, traffic: row.traffic, volume: row.searchVolume, cpc: row.cpc ?? 0,
       seoDifficulty: Math.max(12, Math.min(88, Math.round(row.position * 1.7 + (idx % 4) * 12))),
     }));
   }, [data?.keywords, selectedPageIndex]);
+
+  const tabs: { id: Tab; label: string; count?: number }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "ranked", label: "Ranked Keywords", count: data?.rankedKeywords?.length },
+    { id: "traffic-est", label: "Traffic Estimation", count: data?.bulkTraffic?.length },
+    { id: "page-intersection", label: "Page Intersection", count: data?.pageIntersection?.length },
+  ];
 
   return (
     <div className="p-8 max-w-7xl">
       <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-6 mb-6">
         <div className="text-3xl font-black text-slate-900 mb-3">Website Traffic Checker</div>
         <div className="flex flex-col lg:flex-row gap-3">
-          <input
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            placeholder="Enter your URL"
-            className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => void runLookup()}
-            disabled={loading}
-            className="rounded-lg bg-[#f15b27] px-8 py-3 text-sm font-black text-white hover:bg-[#d94e1f] disabled:opacity-60"
-          >
+          <input value={domain} onChange={(e) => setDomain(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void runLookup()} placeholder="Enter domain (e.g. example.com)" className="flex-1 rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-[#f15b27]" />
+          <button type="button" onClick={() => void runLookup()} disabled={loading} className="rounded-lg bg-[#f15b27] px-8 py-3 text-sm font-black text-white hover:bg-[#d94e1f] disabled:opacity-60">
             {loading ? "Checking..." : "CHECK TRAFFIC"}
           </button>
         </div>
@@ -141,128 +115,259 @@ export default function TrafficPage() {
         {data?.requiresDomain ? <p className="text-sm text-slate-600 mt-2">{data.message}</p> : null}
       </div>
 
-      <div className="mb-5 text-[42px] leading-none font-black text-slate-900">Traffic Overview <span className="text-slate-500 font-semibold">: {data?.domain || "Add your domain"}</span></div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr] mb-6">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6">
-          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-2">Traffic</div>
-          <div className="flex items-center gap-8 mb-4">
-            <div>
-              <div className="text-xs text-slate-500 uppercase tracking-[0.14em] mb-1">Organic</div>
-              <div className="text-5xl font-black text-slate-900 tabular-nums">{formatNumber(data?.overview?.organicTraffic ?? 0)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-slate-500 uppercase tracking-[0.14em] mb-1">Keywords</div>
-              <div className="text-4xl font-black text-slate-900 tabular-nums">{formatNumber(data?.overview?.organicKeywords ?? 0)}</div>
-            </div>
-          </div>
-
-          <svg viewBox="0 0 700 200" className="w-full h-[220px] rounded-xl bg-slate-50 border border-slate-100">
-            {[40, 80, 120, 160].map((y) => <line key={y} x1={12} y1={y} x2={688} y2={y} stroke="#e2e8f0" strokeDasharray="3 6" />)}
-            {linePath ? <path d={linePath} transform="translate(10,10)" stroke="#f15b27" strokeWidth="2.5" fill="none" /> : null}
-            {chartPoints.map((p, idx) => (
-              <circle key={`${idx}-${p.x}`} cx={p.x + 10} cy={p.y + 10} r="3.5" fill="#fff" stroke="#f15b27" strokeWidth="2" />
-            ))}
-          </svg>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            <div className="text-xs uppercase tracking-[0.16em] text-slate-400 mb-2">Domain Authority</div>
-            <div className="text-5xl font-black text-slate-900">{data?.overview?.domainRank ?? 0}</div>
-          </div>
-          <div className="bg-white border border-slate-200 rounded-2xl p-6">
-            <div className="text-xs uppercase tracking-[0.16em] text-slate-400 mb-2">Est. Traffic Value</div>
-            <div className="text-5xl font-black text-slate-900">{formatNumber(data?.overview?.etv ?? 0)}</div>
-          </div>
-        </div>
+      <div className="mb-5 text-[42px] leading-none font-black text-slate-900">
+        Traffic Overview <span className="text-slate-500 font-semibold">: {data?.domain || "Add your domain"}</span>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-5">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-4xl leading-none font-black text-slate-900">Top Traffic Pages: <span className="text-slate-500 text-3xl">{data?.domain}</span></h3>
-          <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
-        </div>
-
-        <div className="overflow-x-auto border-b border-slate-100">
-          <table className="w-full min-w-[1080px] text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3 w-8" />
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Rank</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Traffic</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Page URL</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Keywords</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Top Keyword</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Top KW Vol</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Top KW Pos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-slate-400">No page-level traffic data available yet.</td>
-                </tr>
-              ) : pageRows.map((row, idx) => (
-                <tr
-                  key={`${row.url}-${idx}`}
-                  className={`border-b border-slate-100 cursor-pointer ${selectedPageIndex === idx ? "bg-orange-50" : "hover:bg-slate-50"}`}
-                  onClick={() => setSelectedPageIndex(idx)}
-                >
-                  <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300" /></td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.rank}</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">{formatNumber(row.traffic)} <span className="text-xs text-slate-400">(12%)</span></td>
-                  <td className="px-4 py-3 text-[#f15b27]">{row.url}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.keywords}</td>
-                  <td className="px-4 py-3 text-slate-600">{row.topKeyword}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.topKeywordVolume)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.topKeywordPosition}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Traffic</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC (USD)</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">SEO Difficulty</th>
-              </tr>
-            </thead>
-            <tbody>
-              {selectedKeywordRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-400">Select a top traffic page to inspect ranking keywords.</td>
-                </tr>
-              ) : selectedKeywordRows.map((row) => (
-                <tr key={`${row.keyword}-${row.position}`} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="px-6 py-3 font-medium text-slate-800">{row.keyword}</td>
-                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.position}</td>
-                  <td className="px-6 py-3 text-right tabular-nums font-semibold text-slate-900">{formatNumber(row.traffic)}</td>
-                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
-                  <td className="px-6 py-3 text-right tabular-nums text-slate-700">${row.cpc.toFixed(2)}</td>
-                  <td className="px-6 py-3 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <span className="tabular-nums text-slate-700">{row.seoDifficulty}</span>
-                      <span className={`inline-block h-8 w-24 ${difficultyBand(row.seoDifficulty)}`} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Organic Traffic", value: formatNumber(data?.overview?.organicTraffic ?? 0) },
+          { label: "Organic Keywords", value: formatNumber(data?.overview?.organicKeywords ?? 0) },
+          { label: "Domain Authority", value: data?.overview?.domainRank ?? 0 },
+          { label: "Est. Traffic Value", value: `$${formatNumber(data?.overview?.etv ?? 0)}` },
+        ].map((card) => (
+          <div key={card.label} className="bg-white border border-slate-200 rounded-2xl p-5">
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-400 mb-1">{card.label}</div>
+            <div className="text-4xl font-black text-slate-900 tabular-nums">{card.value}</div>
+          </div>
+        ))}
       </div>
 
-      {selectedPage ? (
-        <p className="text-xs text-slate-500">Showing keyword breakdown for selected page rank #{selectedPage.rank}.</p>
-      ) : null}
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 border-b border-slate-200">
+        {tabs.map((t) => (
+          <button key={t.id} type="button" onClick={() => setActiveTab(t.id)}
+            className={`px-4 py-2.5 text-sm font-semibold transition-colors ${activeTab === t.id ? "border-b-2 border-[#f15b27] text-[#f15b27] -mb-px" : "text-slate-500 hover:text-slate-700"}`}>
+            {t.label}{t.count != null && t.count > 0 ? <span className="ml-1.5 text-xs bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5">{t.count}</span> : null}
+          </button>
+        ))}
+      </div>
+
+      {/* Overview tab */}
+      {activeTab === "overview" && (
+        <>
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-3">Traffic History</div>
+            <svg viewBox="0 0 700 200" className="w-full h-[220px] rounded-xl bg-slate-50 border border-slate-100">
+              {[40, 80, 120, 160].map((y) => <line key={y} x1={12} y1={y} x2={688} y2={y} stroke="#e2e8f0" strokeDasharray="3 6" />)}
+              {linePath ? <path d={linePath} transform="translate(10,10)" stroke="#f15b27" strokeWidth="2.5" fill="none" /> : null}
+              {chartHistory.map((p, idx) => (
+                <circle key={`${idx}-${p.x}`} cx={p.x + 10} cy={p.y + 10} r="3.5" fill="#fff" stroke="#f15b27" strokeWidth="2">
+                  <title>{p.label}: {formatNumber(p.value)}</title>
+                </circle>
+              ))}
+            </svg>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-5">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-2xl font-black text-slate-900">Top Traffic Pages</h3>
+            </div>
+            <div className="overflow-x-auto border-b border-slate-100">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Traffic</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Page URL</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Keywords</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Top Keyword</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Pos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">No page-level traffic data available yet.</td></tr>
+                  ) : pageRows.map((row, idx) => (
+                    <tr key={`${row.url}-${idx}`} className={`border-b border-slate-100 cursor-pointer ${selectedPageIndex === idx ? "bg-orange-50" : "hover:bg-slate-50"}`} onClick={() => setSelectedPageIndex(idx)}>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-500">{row.rank}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">{formatNumber(row.traffic)}</td>
+                      <td className="px-4 py-3 text-[#f15b27] truncate max-w-xs">{row.url}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.keywords}</td>
+                      <td className="px-4 py-3 text-slate-600">{row.topKeyword}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-700">{row.topKeywordPosition}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Traffic</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">SEO Difficulty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedKeywordRows.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-400">Select a top traffic page to inspect ranking keywords.</td></tr>
+                  ) : selectedKeywordRows.map((row) => (
+                    <tr key={`${row.keyword}-${row.position}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-6 py-3 font-medium text-slate-800">{row.keyword}</td>
+                      <td className="px-6 py-3 text-right tabular-nums text-slate-700">{row.position}</td>
+                      <td className="px-6 py-3 text-right tabular-nums font-semibold text-slate-900">{formatNumber(row.traffic)}</td>
+                      <td className="px-6 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.volume)}</td>
+                      <td className="px-6 py-3 text-right tabular-nums text-slate-700">${row.cpc.toFixed(2)}</td>
+                      <td className="px-6 py-3 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          <span className="tabular-nums text-slate-700">{row.seoDifficulty}</span>
+                          <span className={`inline-block h-2 w-16 rounded ${diffBand(row.seoDifficulty)}`} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Ranked Keywords tab */}
+      {activeTab === "ranked" && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="text-xl font-black text-slate-900">Ranked Keywords</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Top keywords this domain currently ranks for across Google search results.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Keyword</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Position</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Volume</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">CPC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">URL</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(data?.rankedKeywords ?? []).length === 0 ? (
+                  <tr><td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-400">No ranked keywords data. Run a domain lookup to see results.</td></tr>
+                ) : (data?.rankedKeywords ?? []).map((row, idx) => (
+                  <tr key={`${row.keyword}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-slate-800">{row.keyword}</td>
+                    <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{row.position}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.searchVolume)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                    <td className="px-4 py-3 text-[#f15b27] text-xs truncate max-w-xs">{row.url ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Traffic Estimation tab */}
+      {activeTab === "traffic-est" && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-xl font-black text-slate-900">Bulk Traffic Estimation</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Current estimated traffic levels for your domain.</p>
+            </div>
+            {(data?.bulkTraffic ?? []).length === 0 ? (
+              <div className="px-6 py-12 text-center text-sm text-slate-400">No traffic estimate data available for this domain.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-b border-slate-100">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Target</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Organic Traffic</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Paid Traffic</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Est. Traffic Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.bulkTraffic ?? []).map((row, idx) => (
+                      <tr key={`${row.target}-${idx}`} className="border-b border-slate-100">
+                        <td className="px-4 py-3 font-semibold text-slate-800">{row.target}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{formatNumber(row.organicTraffic)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{formatNumber(row.paidTraffic)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">${formatNumber(row.etv)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {(data?.historicalBulkTraffic ?? []).length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6">
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mb-3">Historical Bulk Traffic</div>
+              <svg viewBox="0 0 700 200" className="w-full h-[200px] rounded-xl bg-slate-50 border border-slate-100">
+                {[40, 80, 120, 160].map((y) => <line key={y} x1={12} y1={y} x2={688} y2={y} stroke="#e2e8f0" strokeDasharray="3 6" />)}
+                {linePath ? <path d={linePath} transform="translate(10,10)" stroke="#f15b27" strokeWidth="2.5" fill="none" /> : null}
+                {chartHistory.map((p, idx) => (
+                  <circle key={`${idx}-${p.x}`} cx={p.x + 10} cy={p.y + 10} r="3.5" fill="#fff" stroke="#f15b27" strokeWidth="2">
+                    <title>{p.label}: {formatNumber(p.value)}</title>
+                  </circle>
+                ))}
+              </svg>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-slate-400 uppercase tracking-wide"><th className="py-1 text-left">Date</th><th className="py-1 text-right">Organic Traffic</th></tr></thead>
+                  <tbody>
+                    {(data?.historicalBulkTraffic ?? []).map((row, idx) => (
+                      <tr key={`${row.date}-${idx}`} className="border-t border-slate-100">
+                        <td className="py-1.5 text-slate-500">{row.date}</td>
+                        <td className="py-1.5 text-right tabular-nums font-semibold text-slate-700">{formatNumber(row.organicTraffic)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Page Intersection tab */}
+      {activeTab === "page-intersection" && (
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h3 className="text-xl font-black text-slate-900">Page Intersection</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Pages that rank alongside your competitors — revealing shared SERP battleground.</p>
+          </div>
+          {(data?.pageIntersection ?? []).length === 0 ? (
+            <div className="px-6 py-12 text-center text-sm text-slate-400">
+              No page intersection data. Add competitor domains and re-run to see overlapping pages.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">URL</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Domain</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Title</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Matching Pages</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data?.pageIntersection ?? []).map((row, idx) => (
+                    <tr key={`${row.url}-${idx}`} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-3 text-[#f15b27] text-xs truncate max-w-sm">{row.url}</td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">{row.domain}</td>
+                      <td className="px-4 py-3 text-slate-500 text-xs truncate max-w-xs">{row.title ?? "—"}</td>
+                      <td className="px-4 py-3 text-right tabular-nums font-black text-slate-900">{row.matchingPages}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

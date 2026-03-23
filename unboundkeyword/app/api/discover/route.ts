@@ -11,6 +11,7 @@ import {
   getKeywordData,
   getSearchIntent,
   getGoogleAutocompleteLiveAdvanced,
+  getGoogleAutocompleteAZ,
   getPeopleAlsoAskQuestions,
   type KeywordSuggestionItem,
   type RelatedKeywordItem,
@@ -389,7 +390,7 @@ export async function POST(req: NextRequest) {
       };
     };
 
-    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, paaResult, forcedResult] = await Promise.allSettled([
+    const [suggestionsResult, relatedResult, ideasResult, autocompleteResult, paaResult, forcedResult, azAutocompleteResult] = await Promise.allSettled([
       getKeywordSuggestions(seedClean, location, language, 2000),
       getRelatedKeywords(seedClean, location, language, 2000),
       getKeywordIdeasLabs(seedClean, location, language, 2000),
@@ -402,6 +403,7 @@ export async function POST(req: NextRequest) {
       deepMode
         ? enrichForcedCandidates(buildForcedCandidates(seedClean, extraLocationHints, Boolean(includeJobs)), excludedTerms)
         : Promise.resolve([]),
+      getGoogleAutocompleteAZ(seedClean, Number(location), String(language)),
     ]);
 
     const suggestionsRaw: KeywordSuggestionItem[] =
@@ -410,6 +412,7 @@ export async function POST(req: NextRequest) {
       relatedResult.status === "fulfilled" ? relatedResult.value : [];
     const ideasRaw = ideasResult.status === "fulfilled" ? ideasResult.value : [];
     const autocompleteRaw = autocompleteResult.status === "fulfilled" ? autocompleteResult.value.items : [];
+    const azAutocomplete = azAutocompleteResult.status === "fulfilled" ? azAutocompleteResult.value : [];
 
     const suggestions = suggestionsRaw.filter(
       (item) => item.keyword?.trim().length > 0 && !containsExcludedTerm(item.keyword, excludedTerms)
@@ -542,37 +545,40 @@ export async function POST(req: NextRequest) {
 
     const alphaGroups: DiscoveryGroup[] = [];
     for (const letter of ALPHABET) {
-      const matches = uniqueByKeyword([
-        ...suggestions
-          .filter((s) => {
-            const kw = s.keyword.toLowerCase();
-            return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
-          })
-          .map((s) => toDiscovery(s, intentMap)),
-        ...relatedPool
-          .filter((r) => {
-            const kw = r.keyword.toLowerCase();
-            return kw.startsWith(`${seedClean} ${letter}`) || (kw !== seedClean && kw.includes(` ${letter}`));
-          })
-          .map((r) => relToDiscovery(r, intentMap)),
-      ]).slice(0, 80);
+      // Use real A-Z autocomplete suggestions (from batch API call)
+      const azGroup = azAutocomplete.find((g) => g.letter.toLowerCase() === letter);
+      const azSuggestions = (azGroup?.suggestions ?? [])
+        .filter((s) => s && !containsExcludedTerm(s, excludedTerms))
+        .slice(0, 15);
 
-      if (matches.length === 0) {
-        alphaGroups.push({
-          type: "alphabetical" as const,
-          label: `${letter.toUpperCase()}`,
-          letter: letter.toUpperCase(),
-          keywords: [{ keyword: `${seedClean} ${A_TO_Z_SUFFIX[letter]}` }],
-        });
+      if (azSuggestions.length > 0) {
+        const kwObjs = azSuggestions.map((kw) => ({
+          keyword: kw,
+          volume: undefined,
+          cpc: undefined,
+          difficulty: undefined,
+          intent: intentMap[kw.toLowerCase()] ?? undefined,
+        }));
+        alphaGroups.push({ type: "alphabetical" as const, label: letter.toUpperCase(), letter: letter.toUpperCase(), keywords: kwObjs });
         continue;
       }
 
+      // Fallback: filter from existing suggestion pool (seed + letter prefix)
+      const matches = uniqueByKeyword([
+        ...suggestions
+          .filter((s) => s.keyword.toLowerCase().startsWith(`${seedClean} ${letter}`))
+          .map((s) => toDiscovery(s, intentMap)),
+        ...relatedPool
+          .filter((r) => r.keyword.toLowerCase().startsWith(`${seedClean} ${letter}`))
+          .map((r) => relToDiscovery(r, intentMap)),
+      ]).slice(0, 15);
+
       if (matches.length > 0) {
-        alphaGroups.push({ type: "alphabetical" as const, label: `${letter.toUpperCase()}`, letter: letter.toUpperCase(), keywords: matches });
+        alphaGroups.push({ type: "alphabetical" as const, label: letter.toUpperCase(), letter: letter.toUpperCase(), keywords: matches });
       }
+      // Skip letters with no results (no hardcoded fallback)
     }
 
-    // 5. Related
     const relatedKeywords = relatedPool
       .slice(0, 3000)
       .map((r) => relToDiscovery(r, intentMap));

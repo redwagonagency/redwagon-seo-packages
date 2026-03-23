@@ -1,209 +1,201 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
+import type { ContentIdea, ContentIdeasResponse } from "@/app/api/content-ideas/route";
 
-type ContentRow = {
-  title: string;
-  keyword: string;
-  visits: number;
-  backlinks: number;
-  facebook: number;
-  pinterest: number;
+const INTENT_COLORS: Record<string, string> = {
+  informational: "bg-blue-100 text-blue-700",
+  commercial: "bg-amber-100 text-amber-700",
+  transactional: "bg-green-100 text-green-700",
+  navigational: "bg-slate-100 text-slate-600",
 };
 
-function buildTitle(keyword: string, index: number): string {
-  const templates = [
-    `How to choose ${keyword} in 2026`,
-    `${keyword}: examples, checklist, and mistakes to avoid`,
-    `Best ${keyword} strategies that convert in local markets`,
-    `${keyword} playbook for teams that need faster growth`,
-  ];
-  return templates[index % templates.length];
-}
+const TYPE_COLORS: Record<string, string> = {
+  "How-To Guide": "bg-indigo-100 text-indigo-700",
+  "Review / Comparison": "bg-pink-100 text-pink-700",
+  "Listicle / Best Of": "bg-orange-100 text-orange-700",
+  "Definition / What Is": "bg-cyan-100 text-cyan-700",
+  "Tool / Template": "bg-purple-100 text-purple-700",
+  "Case Study": "bg-emerald-100 text-emerald-700",
+  Article: "bg-slate-100 text-slate-600",
+};
 
 export default function ContentIdeasPage() {
-  const [query, setQuery] = useState("dog food");
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [rows, setRows] = useState<ContentRow[]>([]);
+  const [data, setData] = useState<ContentIdeasResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [savedMsg, setSavedMsg] = useState("");
+  const [showSave, setShowSave] = useState(false);
+  const [activeTab, setActiveTab] = useState<"ideas" | "pages">("ideas");
 
-  async function runSearch(nextQuery?: string) {
-    const keyword = (nextQuery ?? query).trim();
-    if (!keyword) return;
-
+  async function runSearch() {
+    if (!query.trim()) return;
     setLoading(true);
     setError("");
+    setSelected(new Set());
     try {
-      const res = await fetch("/api/keywords/research", {
+      const res = await fetch("/api/content-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, mode: "magic", location: 2840, language: "en" }),
+        body: JSON.stringify({ keyword: query.trim(), limit: 60 }),
       });
-      const data = (await res.json()) as {
-        error?: string;
-        keywords?: Array<{ keyword: string; volume: number | null; difficulty: number | null }>;
-      };
-      if (!res.ok) throw new Error(data.error || "Search failed");
-
-      const nextRows: ContentRow[] = (data.keywords ?? []).slice(0, 70).map((row, idx) => {
-        const base = row.volume ?? 0;
-        const diff = row.difficulty ?? 20;
-        return {
-          title: buildTitle(row.keyword, idx),
-          keyword: row.keyword,
-          visits: Math.max(10, Math.round(base * (0.025 + ((idx % 4) * 0.01)))),
-          backlinks: Math.max(1, Math.round(diff * (0.4 + (idx % 3) * 0.12))),
-          facebook: Math.max(0, Math.round(base * (1.2 + (idx % 4) * 0.4))),
-          pinterest: Math.max(0, Math.round(base * (0.2 + (idx % 3) * 0.15))),
-        };
-      });
-
-      setRows(nextRows);
-      setSelected(new Set());
-      setQuery(keyword);
+      const json = (await res.json()) as ContentIdeasResponse & { error?: string };
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setData(json);
     } catch (e) {
-      setRows([]);
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { void runSearch(); }, []);
-
-  const allChecked = rows.length > 0 && selected.size === rows.length;
-
-  function toggleRow(keyword: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(keyword)) next.delete(keyword);
-      else next.add(keyword);
-      return next;
-    });
+  function toggleRow(kw: string) {
+    setSelected((prev) => { const n = new Set(prev); n.has(kw) ? n.delete(kw) : n.add(kw); return n; });
   }
 
   function toggleAll() {
-    if (allChecked) setSelected(new Set());
-    else setSelected(new Set(rows.map((r) => r.keyword)));
+    const all = data?.ideas ?? [];
+    setSelected(selected.size === all.length ? new Set() : new Set(all.map((r) => r.keyword)));
   }
 
-  const selectedKws: KWToSave[] = rows
-    .filter((r) => selected.has(r.keyword))
-    .map((r) => ({ keyword: r.keyword }));
+  const saveItems: KWToSave[] = [...selected].map((kw) => {
+    const r = data?.ideas.find((i) => i.keyword === kw);
+    return { keyword: kw, volume: r?.volume ?? 0, cpc: r?.cpc ?? undefined, difficulty: undefined };
+  });
+
+  const ideas = data?.ideas ?? [];
+  const topPages = data?.topPages ?? [];
 
   return (
     <div className="p-8 max-w-7xl">
-      <div className="rounded-xl border border-[#f15b27] bg-[#fff3ee] p-2 flex gap-2 mb-6">
+      <h1 className="text-4xl font-black text-slate-900 mb-1">Content Ideas</h1>
+      <p className="text-sm text-slate-500 mb-6">Discover keyword-driven content opportunities with intent, trend signals, and content type suggestions.</p>
+
+      <div className="flex gap-2 mb-6">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="keyword"
-          className="flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-500"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void runSearch();
-            }
-          }}
+          onKeyDown={(e) => e.key === "Enter" && void runSearch()}
+          placeholder="Enter a topic or seed keyword…"
+          className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#f15b27]"
         />
-        <button
-          type="button"
-          onClick={() => void runSearch()}
-          disabled={loading || !query.trim()}
-          className="rounded-md bg-[#f15b27] px-6 py-2 text-xs font-black text-white disabled:opacity-60"
-        >
-          {loading ? "Searching..." : "Search"}
+        <button type="button" onClick={() => void runSearch()} disabled={loading}
+          className="rounded-lg bg-[#f15b27] px-6 py-2.5 text-sm font-black text-white hover:bg-[#d94e1f] disabled:opacity-60">
+          {loading ? "Searching…" : "Search"}
         </button>
       </div>
 
       {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-3xl font-black text-slate-900">Content Ideas: <span className="font-semibold text-slate-500">{query}</span></h1>
-          <div className="flex items-center gap-2 flex-wrap">
+      {data && (
+        <>
+          <div className="flex gap-2 mb-4 border-b border-slate-200">
+            {(["ideas", "pages"] as const).map((t) => (
+              <button key={t} type="button" onClick={() => setActiveTab(t)}
+                className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === t ? "border-[#f15b27] text-[#f15b27]" : "border-transparent text-slate-500"}`}>
+                {t === "ideas" ? `Content Ideas (${ideas.length})` : `Top Pages (${topPages.length})`}
+              </button>
+            ))}
             {selected.size > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowSaveModal(true)}
-                className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
-              >
-                + Save {selected.size} to List
+              <button type="button" onClick={() => setShowSave(true)}
+                className="ml-auto mb-1 rounded-full px-4 py-1.5 text-xs font-semibold bg-emerald-600 text-white self-center">
+                Add {selected.size} to List
               </button>
             )}
-            {savedMsg && <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>}
-            <button type="button" className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-500">Filters</button>
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-sm">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3 w-8">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleAll}
-                    className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
-                  />
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Page Title / URL</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Est. Visits</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Backlinks</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Facebook</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Pinterest</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">Search to generate content ideas from live keyword data.</td>
-                </tr>
-              ) : rows.map((row, idx) => (
-                <tr
-                  key={`${row.keyword}-${idx}`}
-                  onClick={() => toggleRow(row.keyword)}
-                  className={`border-b border-slate-100 cursor-pointer transition ${selected.has(row.keyword) ? "bg-orange-50" : "hover:bg-slate-50"}`}
-                >
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selected.has(row.keyword)}
-                      onChange={() => toggleRow(row.keyword)}
-                      className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-[#f15b27] hover:underline cursor-pointer">{row.title}</div>
-                    <div className="text-xs text-slate-400 mt-1">topic: {row.keyword}</div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.visits)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.backlinks)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.facebook)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatNumber(row.pinterest)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          {activeTab === "ideas" && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex justify-between">
+                <span className="text-sm font-semibold text-slate-700">{formatNumber(ideas.length)} ideas</span>
+                <button type="button" onClick={() => {
+                  const csv = ["keyword,volume,cpc,intent,content_type,trending"].concat(ideas.map((r) => `"${r.keyword}",${r.volume},${r.cpc ?? ""},${r.intent ?? ""},${r.contentType ?? ""},${r.trending}`)).join("\n");
+                  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "content-ideas.csv"; a.click();
+                }} className="text-xs text-[#f15b27] hover:underline">Export CSV</button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                      <th className="px-4 py-3 w-8"><input type="checkbox" checked={selected.size === ideas.length && ideas.length > 0} onChange={toggleAll} className="rounded" /></th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Keyword / Topic</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Volume</th>
+                      <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">CPC</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Intent</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Content Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Trend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ideas.map((row) => (
+                      <tr key={row.keyword} onClick={() => toggleRow(row.keyword)}
+                        className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selected.has(row.keyword) ? "bg-orange-50" : ""}`}>
+                        <td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(row.keyword)} onChange={() => toggleRow(row.keyword)} onClick={(e) => e.stopPropagation()} className="rounded" /></td>
+                        <td className="px-4 py-2.5 font-medium text-slate-800">
+                          {row.keyword}
+                          {row.topDomain && <span className="ml-2 text-xs text-slate-400">→ {row.topDomain}</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.volume > 0 ? formatNumber(row.volume) : "—"}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                        <td className="px-4 py-2.5">
+                          {row.intent ? <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${INTENT_COLORS[row.intent] ?? "bg-slate-100 text-slate-600"}`}>{row.intent}</span> : "—"}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {row.contentType ? <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${TYPE_COLORS[row.contentType] ?? "bg-slate-100 text-slate-600"}`}>{row.contentType}</span> : "—"}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={`text-sm ${row.trendDirection === "up" ? "text-emerald-500" : row.trendDirection === "down" ? "text-red-400" : "text-slate-400"}`}>
+                            {row.trendDirection === "up" ? "↑" : row.trendDirection === "down" ? "↓" : "→"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-      {showSaveModal && (
-        <SaveToListModal
-          keywords={selectedKws}
-          onClose={() => setShowSaveModal(false)}
-          onSaved={(count) => {
-            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
-            setSelected(new Set());
-            setTimeout(() => setSavedMsg(""), 4000);
-          }}
-        />
+          {activeTab === "pages" && (
+            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Page Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Domain</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">URL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topPages.map((page, idx) => (
+                    <tr key={page.url} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-4 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
+                      <td className="px-4 py-2.5 font-medium text-slate-800 max-w-xs truncate">{page.title}</td>
+                      <td className="px-4 py-2.5 text-xs text-slate-500">{page.domain}</td>
+                      <td className="px-4 py-2.5 text-xs text-[#f15b27] truncate max-w-[200px]">
+                        <a href={page.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{page.url}</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {!loading && !error && !data && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+          Enter a topic or seed keyword above to discover content opportunities.
+        </div>
+      )}
+
+      {showSave && (
+        <SaveToListModal keywords={saveItems} onClose={() => setShowSave(false)} onSaved={() => { setShowSave(false); setSelected(new Set()); }} />
       )}
     </div>
   );

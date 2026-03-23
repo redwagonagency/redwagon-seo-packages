@@ -7,6 +7,10 @@ import {
   getKeywordGap,
   getKeywordsForSite,
   getRelevantPages,
+  getRankedKeywords,
+  getBulkTrafficEstimation,
+  getPageIntersection,
+  getHistoricalBulkTraffic,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 
@@ -61,12 +65,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const [overviewResult, defaultCompetitorsResult, historyResult, keywordsResult, pagesResult] = await Promise.allSettled([
+  const [overviewResult, defaultCompetitorsResult, historyResult, keywordsResult, pagesResult, rankedKwResult, bulkTrafficResult, historicalBulkResult] = await Promise.allSettled([
     getDomainRankOverview(domain, location, language),
     getDomainCompetitors(domain, location, language, 8),
     getHistoricalRankOverview(domain, location, language),
     getKeywordsForSite(domain, location, language, 120),
     getRelevantPages(domain, location, language, 25),
+    getRankedKeywords(domain, location, language, 50),
+    getBulkTrafficEstimation([{ target: domain }], location, language),
+    getHistoricalBulkTraffic([domain], location, language),
   ]);
 
   const defaultCompetitors = defaultCompetitorsResult.status === "fulfilled" ? defaultCompetitorsResult.value : [];
@@ -77,6 +84,10 @@ export async function POST(req: NextRequest) {
       ...(useDefaultCompetitors ? defaultCompetitors.map((c) => normalizeDomain(c.domain)).filter(Boolean) : []),
     ])
   ).slice(0, 5);
+
+  const pageIntersectionResult = chosenCompetitors.length > 0
+    ? await getPageIntersection(domain, chosenCompetitors[0]!, location, language, 30).catch(() => [])
+    : [];
 
   const competitorsData = await Promise.all(
     chosenCompetitors.map(async (compDomain) => {
@@ -124,5 +135,16 @@ export async function POST(req: NextRequest) {
     pages: pagesResult.status === "fulfilled" ? pagesResult.value : [],
     competitorOverview,
     gapKeywords,
+    rankedKeywords: rankedKwResult.status === "fulfilled" ? rankedKwResult.value : [],
+    bulkTraffic: bulkTrafficResult.status === "fulfilled" ? bulkTrafficResult.value.map((b) => ({
+      target: b.target,
+      organicTraffic: b.traffic,
+      paidTraffic: 0,
+      etv: b.organicEtv,
+    })) : [],
+    historicalBulkTraffic: historicalBulkResult.status === "fulfilled"
+      ? (historicalBulkResult.value[0]?.history ?? []).map((h) => ({ date: h.date, organicTraffic: h.traffic }))
+      : [],
+    pageIntersection: pageIntersectionResult,
   });
 }

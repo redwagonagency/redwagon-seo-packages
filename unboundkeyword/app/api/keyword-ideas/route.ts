@@ -1,34 +1,35 @@
 /**
  * POST /api/keyword-ideas
- * Multi-source keyword ideas: Google (generic + Labs) and Amazon, with demographics.
+ * Multi-source keyword ideas: Google Labs, Bing, Google Ads, Google Trends, Amazon
  */
 import { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import {
-  getKeywordIdeasGeneric,
   getKeywordIdeasLabs,
   getAmazonRelatedKeywords,
-  getDFSTrendsDemography,
+  getBingKeywordsForKeywords,
+  getBingKeywordsForSite,
+  getGoogleAdsKeywordsForSite,
+  getGoogleTrendsExplore,
+  getBingKeywordPerformanceBatch,
 } from "@/lib/dataforseo/client";
+import { getSelectedSiteForUser } from "@/lib/site-context";
 
 export interface IdeaKeyword {
   keyword: string;
   volume: number;
+  bingVolume?: number | null;
   cpc: number | null;
   difficulty: number | null;
   intent: string | null;
-  source: "google" | "amazon";
-}
-
-export interface DemographicsData {
-  male: number | null;
-  female: number | null;
-  ageGroups: { label: string; index: number }[];
+  trendsValue?: number | null;
+  source: "google" | "bing" | "amazon" | "google_ads" | "google_trends";
 }
 
 export interface KeywordIdeasResponse {
   keywords: IdeaKeyword[];
-  demographics: DemographicsData | null;
+  trendsData: { keyword: string; value: number }[];
+  siteName: string | null;
 }
 
 export async function POST(req: NextRequest) {
@@ -37,134 +38,189 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json()) as {
     keyword?: string;
-    source?: "google" | "amazon" | "both";
+    source?: "google" | "bing" | "amazon" | "all";
     location?: number;
     language?: string;
     limit?: number;
   };
 
-  const { keyword, source = "google", location = 2840, language = "en", limit = 100 } = body;
-
+  const { keyword, source = "all", location = 2840, language = "en", limit = 100 } = body;
   if (!keyword?.trim()) {
     return Response.json({ error: "keyword required" }, { status: 400 });
   }
 
   const seed = keyword.trim();
+  const userId = (session.user as { id: string }).id;
+  const selectedSite = await getSelectedSiteForUser(userId).catch(() => null);
+  const siteDomain = selectedSite?.domain ?? "";
 
   try {
-    // Run data fetches in parallel based on source
-    const [genericResults, labsResults, amazonResults, demoRaw] = await Promise.all([
-      // Generic engine-agnostic endpoint (always run for google/both)
-      source !== "amazon"
-        ? getKeywordIdeasGeneric(seed, location, language, Math.ceil(limit / 2)).catch(() => [])
+    const [
+      labsResult,
+      bingKFKResult,
+      bingKFSResult,
+      googleAdsSiteResult,
+      trendsResult,
+      amazonResult,
+      bingPerfResult,
+    ] = await Promise.allSettled([
+      // Google Labs keyword ideas
+      getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => []),
+      // Bing keywords for keywords
+      getBingKeywordsForKeywords([seed], location, language).catch(() => []),
+      // Bing keywords for site (only if we have a domain)
+      siteDomain
+        ? getBingKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
         : Promise.resolve([]),
-      // Google Labs endpoint (always run for google/both)
-      source !== "amazon"
-        ? getKeywordIdeasLabs(seed, location, language, Math.ceil(limit / 2)).catch(() => [])
+      // Google Ads keywords for site
+      siteDomain
+        ? getGoogleAdsKeywordsForSite(siteDomain, location, language, 30).catch(() => [])
         : Promise.resolve([]),
-      // Amazon related keywords
-      source !== "google"
-        ? getAmazonRelatedKeywords(seed, location, language, 1, limit).catch(() => [])
-        : Promise.resolve([]),
-      // Demographics (first keyword as seed)
-      getDFSTrendsDemography([seed], location).catch(() => null),
+      // Google Trends explore
+      getGoogleTrendsExplore([seed], location, language).catch(() => []),
+      // Amazon
+      getAmazonRelatedKeywords(seed, location, language, 1, 30).catch(() => []),
+      // Placeholder — Bing performance will run after collecting unique keywords
+      Promise.resolve([] as { keyword: string; searchVolume: number; cpc: number | null; competition: number | null }[]),
     ]);
 
-    // Merge Google results (generic + labs), deduplicate by keyword
-    const googleMap = new Map<string, IdeaKeyword>();
-    for (const item of genericResults) {
+    const labsItems = labsResult.status === "fulfilled" ? labsResult.value : [];
+    const bingKFK = bingKFKResult.status === "fulfilled" ? bingKFKResult.value : [];
+    const bingKFS = bingKFSResult.status === "fulfilled" ? bingKFSResult.value : [];
+    const googleAdsSite = googleAdsSiteResult.status === "fulfilled" ? googleAdsSiteResult.value : [];
+    const trends = trendsResult.status === "fulfilled" ? trendsResult.value : [];
+    const amazonItems = amazonResult.status === "fulfilled" ? amazonResult.value : [];
+
+    // Build merged keyword map — Google as primary source
+    const kwMap = new Map<string, IdeaKeyword>();
+
+    for (const item of labsItems) {
       if (!item.keyword) continue;
-      googleMap.set(item.keyword.toLowerCase(), {
+      kwMap.set(item.keyword.toLowerCase(), {
         keyword: item.keyword,
         volume: item.searchVolume,
         cpc: item.cpc,
-        difficulty: item.difficulty,
+        difficulty: null,
         intent: item.intent,
         source: "google",
       });
     }
-    // Labs results may fill in gaps or override (they include seasonality/intent)
-    for (const item of labsResults) {
-      if (!item.keyword) continue;
-      const key = item.keyword.toLowerCase();
-      if (!googleMap.has(key)) {
-        googleMap.set(key, {
+
+    // Bing keywords for keywords — add if not already present, else enrich bingVolume
+    for (const item of bingKFK) {
+      const k = String(item.keyword ?? "").toLowerCase();
+      if (!k) continue;
+      const existing = kwMap.get(k);
+      if (existing) {
+        existing.bingVolume = item.searchVolume ?? 0;
+      } else {
+        kwMap.set(k, {
           keyword: item.keyword,
           volume: item.searchVolume,
-          cpc: item.cpc,
+          bingVolume: item.searchVolume,
+          cpc: item.cpc ?? null,
           difficulty: null,
-          intent: item.intent,
-          source: "google",
+          intent: null,
+          source: "bing",
         });
       }
     }
 
-    const googleKeywords: IdeaKeyword[] = [...googleMap.values()]
-      .sort((a, b) => b.volume - a.volume)
-      .slice(0, limit);
-
-    const amazonKeywords: IdeaKeyword[] = amazonResults.map((item) => ({
-      keyword: item.keyword,
-      volume: item.searchVolume,
-      cpc: item.cpc,
-      difficulty: null,
-      intent: null,
-      source: "amazon" as const,
-    }));
-
-    // Combine based on source selection
-    let keywords: IdeaKeyword[];
-    if (source === "google") {
-      keywords = googleKeywords;
-    } else if (source === "amazon") {
-      keywords = amazonKeywords;
-    } else {
-      // "both" — interleave results so each source is represented
-      const combined = new Map<string, IdeaKeyword>();
-      for (const kw of googleKeywords) combined.set(kw.keyword.toLowerCase(), kw);
-      for (const kw of amazonKeywords) {
-        const key = kw.keyword.toLowerCase();
-        if (!combined.has(key)) combined.set(key, kw);
+    // Bing keywords for site
+    for (const item of bingKFS) {
+      const k = String(item.keyword ?? "").toLowerCase();
+      if (!k) continue;
+      if (!kwMap.has(k)) {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: item.searchVolume,
+          bingVolume: item.searchVolume,
+          cpc: item.cpc ?? null,
+          difficulty: null,
+          intent: null,
+          source: "bing",
+        });
       }
-      keywords = [...combined.values()];
     }
 
-    // Parse demographics
-    const demoItems = (
-      (demoRaw as Record<string, unknown> | null)?.tasks as Record<string, unknown>[] | undefined
-    )?.[0];
-    const demoResultItems = (
-      (demoItems?.result as Record<string, unknown>[] | undefined)?.[0]?.items as
-        | Record<string, unknown>[]
-        | undefined
-    ) ?? [];
-
-    let demographics: DemographicsData | null = null;
-    if (demoResultItems.length > 0) {
-      const genderItem = demoResultItems.find((i) => i.type === "gender") as
-        | Record<string, unknown>
-        | undefined;
-      const ageItem = demoResultItems.find((i) => i.type === "age") as
-        | Record<string, unknown>
-        | undefined;
-
-      demographics = {
-        male:
-          typeof genderItem?.male_index === "number" ? Math.round(genderItem.male_index) : null,
-        female:
-          typeof genderItem?.female_index === "number"
-            ? Math.round(genderItem.female_index)
-            : null,
-        ageGroups: Array.isArray(ageItem?.items)
-          ? (ageItem!.items as Record<string, unknown>[]).map((a) => ({
-              label: String(a.age_group ?? a.age ?? ""),
-              index: typeof a.index === "number" ? Math.round(a.index) : 0,
-            }))
-          : [],
-      };
+    // Google Ads site keywords
+    for (const item of googleAdsSite) {
+      const k = item.keyword.toLowerCase();
+      if (!kwMap.has(k)) {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: item.searchVolume,
+          cpc: item.cpc,
+          difficulty: null,
+          intent: null,
+          source: "google_ads",
+        });
+      }
     }
 
-    return Response.json({ keywords, demographics } satisfies KeywordIdeasResponse);
+    // Google Trends
+    const trendsMap = new Map(trends.map((t) => [t.keyword.toLowerCase(), t.value]));
+    for (const item of trends) {
+      const k = item.keyword.toLowerCase();
+      const existing = kwMap.get(k);
+      if (existing) {
+        existing.trendsValue = item.value;
+      } else {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: 0,
+          cpc: null,
+          difficulty: null,
+          intent: null,
+          trendsValue: item.value,
+          source: "google_trends",
+        });
+      }
+    }
+
+    // Amazon
+    for (const item of amazonItems) {
+      const k = item.keyword.toLowerCase();
+      if (!kwMap.has(k)) {
+        kwMap.set(k, {
+          keyword: item.keyword,
+          volume: item.searchVolume,
+          cpc: item.cpc ?? null,
+          difficulty: null,
+          intent: null,
+          source: "amazon",
+        });
+      }
+    }
+
+    // Fetch Bing performance for top Google keywords that don't have bingVolume yet
+    const topKeywords = [...kwMap.values()]
+      .filter((k) => k.source === "google" && !k.bingVolume)
+      .slice(0, 20)
+      .map((k) => k.keyword);
+
+    if (topKeywords.length > 0) {
+      const bingPerf = await getBingKeywordPerformanceBatch(topKeywords, location, language).catch(() => []);
+      for (const bp of bingPerf) {
+        const k = bp.keyword.toLowerCase();
+        const existing = kwMap.get(k);
+        if (existing) existing.bingVolume = bp.searchVolume;
+      }
+    }
+
+    let keywords = [...kwMap.values()].sort((a, b) => b.volume - a.volume);
+
+    if (source === "google") keywords = keywords.filter((k) => k.source === "google" || k.source === "google_ads" || k.source === "google_trends");
+    else if (source === "bing") keywords = keywords.filter((k) => k.source === "bing");
+    else if (source === "amazon") keywords = keywords.filter((k) => k.source === "amazon");
+
+    keywords = keywords.slice(0, limit);
+
+    return Response.json({
+      keywords,
+      trendsData: trends,
+      siteName: siteDomain || null,
+    } satisfies KeywordIdeasResponse);
   } catch (e) {
     return Response.json(
       { error: e instanceof Error ? e.message : "Request failed" },

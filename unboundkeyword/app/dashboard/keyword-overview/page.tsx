@@ -11,7 +11,7 @@ import type {
   LlmMentionLiveItem,
   PeopleAlsoAskItem,
 } from "@/lib/dataforseo/client";
-import type { CitationItem, PhraseTrendItem } from "@/app/api/keyword-overview/route";
+import type { CitationItem, PhraseTrendItem, PaidSearchData, DemographicsData } from "@/app/api/keyword-overview/route";
 
 interface OverviewData {
   keyword: string;
@@ -24,6 +24,8 @@ interface OverviewData {
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
   lighthouse: LighthouseLiveResult | null;
+  paid: PaidSearchData | null;
+  demographics: DemographicsData | null;
   errors: Record<string, string>;
 }
 
@@ -193,6 +195,84 @@ export default function KeywordOverviewPage() {
       {/* Results */}
       {data && !loading && (
         <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+          {/* Paid Search Metrics card */}
+          {data.paid && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 border-b border-slate-200">
+              <div className="flex flex-col gap-0.5 px-5 py-4 border-r border-slate-100">
+                <span className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400">Monthly Volume</span>
+                <span className="text-2xl font-black text-slate-900 tabular-nums">
+                  {data.paid.searchVolume != null ? data.paid.searchVolume.toLocaleString() : "—"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5 px-5 py-4 border-r border-slate-100">
+                <span className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400">CPC (Google Ads)</span>
+                <span className="text-2xl font-black text-slate-900 tabular-nums">
+                  {data.paid.cpc != null ? `$${data.paid.cpc.toFixed(2)}` : "—"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5 px-5 py-4 border-r border-slate-100">
+                <span className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400">Paid Competition</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="flex-1 h-2 rounded-full bg-slate-100">
+                    <div
+                      className="h-2 rounded-full bg-[#f15b27]"
+                      style={{ width: `${Math.round((data.paid.competition ?? 0) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-black text-slate-700 tabular-nums w-9 text-right">
+                    {data.paid.competition != null ? `${Math.round(data.paid.competition * 100)}%` : "—"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5 px-5 py-4">
+                <span className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400">Competition Level</span>
+                <span className={`text-sm font-black tabular-nums mt-1 ${
+                  data.paid.competitionLevel === "HIGH" ? "text-red-600" :
+                  data.paid.competitionLevel === "MEDIUM" ? "text-amber-500" : "text-green-600"
+                }`}>
+                  {data.paid.competitionLevel ?? "—"}
+                </span>
+              </div>
+            </div>
+          )}
+          {/* Tabs */}
+          {/* Demographics card */}
+          {data.demographics && (data.demographics.male !== null || data.demographics.ageGroups.length > 0) && (
+            <div className="mx-6 mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] font-black text-slate-400 mb-3">Audience Demographics</p>
+              <div className="flex flex-col md:flex-row gap-6">
+                {data.demographics.male !== null && data.demographics.female !== null && (
+                  <div className="min-w-[160px]">
+                    <p className="text-xs text-slate-500 mb-1">Gender</p>
+                    <div className="flex rounded-full overflow-hidden h-3 text-[10px] font-bold">
+                      <div className="bg-blue-400" style={{ width: `${data.demographics.male}%` }} title={`Male ${data.demographics.male}%`} />
+                      <div className="bg-pink-400" style={{ width: `${data.demographics.female}%` }} title={`Female ${data.demographics.female}%`} />
+                    </div>
+                    <div className="flex justify-between mt-1 text-[10px] text-slate-500">
+                      <span className="text-blue-500 font-semibold">M {data.demographics.male}%</span>
+                      <span className="text-pink-500 font-semibold">F {data.demographics.female}%</span>
+                    </div>
+                  </div>
+                )}
+                {data.demographics.ageGroups.length > 0 && (
+                  <div className="flex-1">
+                    <p className="text-xs text-slate-500 mb-1">Age Groups (index)</p>
+                    <div className="flex items-end gap-1.5">
+                      {data.demographics.ageGroups.map((ag) => {
+                        const maxIdx = Math.max(...data.demographics!.ageGroups.map((a) => a.index), 1);
+                        return (
+                          <div key={ag.label} className="flex flex-col items-center gap-0.5">
+                            <div className="bg-[#f15b27] rounded-sm w-6" style={{ height: `${Math.max(Math.round((ag.index / maxIdx) * 48), 2)}px` }} />
+                            <span className="text-[9px] text-slate-400 text-center leading-tight">{ag.label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {/* Tabs */}
           <div className="border-b border-slate-200 overflow-x-auto">
             <div className="flex gap-0 min-w-max">

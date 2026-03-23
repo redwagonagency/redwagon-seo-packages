@@ -5,6 +5,9 @@ import {
   getDomainCompetitors,
   getKeywordGap,
   getKeywordsForSite,
+  getBulkSpamScore,
+  getBacklinkCompetitors,
+  getSerpCompetitors,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
 
@@ -49,18 +52,28 @@ export async function POST(req: NextRequest) {
       return Response.json({ error: "domain is required" }, { status: 400 });
     }
 
-    const [yourOverviewResult, suggestedCompetitorsResult] = await Promise.allSettled([
-      getDomainRankOverview(domain, location, language),
-      useDefaultCompetitors ? getDomainCompetitors(domain, location, language, 8) : Promise.resolve([]),
-    ]);
-
-    const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
-    const suggestedCompetitors = suggestedCompetitorsResult.status === "fulfilled" ? suggestedCompetitorsResult.value : [];
-
     const chosenCompetitors = Array.from(new Set([
       ...customCompetitors,
       ...(competitorDomain ? [competitorDomain] : []),
     ])).slice(0, 5);
+
+    const [yourOverviewResult, suggestedCompetitorsResult, spamScoreResult, backlinkCompetitorsResult, siteKeywordsResult] = await Promise.allSettled([
+      getDomainRankOverview(domain, location, language),
+      useDefaultCompetitors ? getDomainCompetitors(domain, location, language, 8) : Promise.resolve([]),
+      chosenCompetitors.length > 0 ? getBulkSpamScore(chosenCompetitors) : Promise.resolve([]),
+      getBacklinkCompetitors(domain, 10),
+      getKeywordsForSite(domain, location, language, 20),
+    ]);
+
+    const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
+    const suggestedCompetitors = suggestedCompetitorsResult.status === "fulfilled" ? suggestedCompetitorsResult.value : [];
+    const spamScores = spamScoreResult.status === "fulfilled" ? spamScoreResult.value : [];
+    const backlinkCompetitors = backlinkCompetitorsResult.status === "fulfilled" ? backlinkCompetitorsResult.value : [];
+    const siteKeywords = siteKeywordsResult.status === "fulfilled" ? siteKeywordsResult.value.slice(0, 5).map((k) => k.keyword).filter(Boolean) : [];
+
+    const serpCompetitorsList = siteKeywords.length > 0
+      ? await getSerpCompetitors(siteKeywords, location, language).catch(() => [])
+      : [];
 
     const competitorsData = await Promise.all(
       chosenCompetitors.map(async (compDomain) => {
@@ -96,6 +109,9 @@ export async function POST(req: NextRequest) {
       competitorDomains: chosenCompetitors,
       yourOverview,
       suggestedCompetitors,
+      spamScores,
+      backlinkCompetitors,
+      serpCompetitors: serpCompetitorsList,
       competitorsData,
     });
   } catch (error) {

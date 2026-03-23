@@ -3767,32 +3767,204 @@ export async function getSerpLiveData(
       breadcrumb: typeof i.breadcrumb === "string" ? i.breadcrumb : null,
     }));
 
-  // PAA: top-level item type=people_also_ask contains sub-items
-  const paa: PeopleAlsoAskItem[] = items
-    .filter((i) => String(i.type ?? "") === "people_also_ask")
-    .flatMap((i) => {
-      const subItems = (i.items ?? []) as Record<string, unknown>[];
-      return subItems
-        .filter((s) => String(s.type ?? "") === "people_also_ask_element")
-        .map((s) => {
-          // Answer lives inside s.items[0] (an answer_box / featured_snippet)
-          const answerItems = (s.items ?? []) as Record<string, unknown>[];
-          const box = answerItems[0] as Record<string, unknown> | undefined;
-          return {
-            question: typeof s.title === "string" ? s.title : String(s.title ?? ""),
-            answer:
-              typeof box?.description === "string"
-                ? box.description
-                : typeof box?.text === "string"
-                ? box.text
-                : null,
-            url: typeof box?.url === "string" ? box.url : null,
-            domain: typeof box?.domain === "string" ? box.domain : null,
-          };
-        });
-    })
-    .filter((p) => p.question)
-    .slice(0, 12);
+  // PAA: DFS may return PAA as container (type=people_also_ask with sub-items)
+  // OR as flat top-level elements (type=people_also_ask_element). Handle both.
+  function mapPaaElement(s: Record<string, unknown>): PeopleAlsoAskItem | null {
+    const question = typeof s.title === "string" ? s.title.trim() : "";
+    if (!question) return null;
+    const answerItems = (s.items ?? []) as Record<string, unknown>[];
+    const box = answerItems[0] as Record<string, unknown> | undefined;
+    return {
+      question,
+      answer:
+        typeof box?.description === "string" ? box.description :
+        typeof box?.text === "string" ? box.text : null,
+      url: typeof box?.url === "string" ? box.url : null,
+      domain: typeof box?.domain === "string" ? box.domain : null,
+    };
+  }
 
-  return { organic, paa };
+  const paa: PeopleAlsoAskItem[] = [];
+  for (const i of items) {
+    const type = String(i.type ?? "");
+    if (type === "people_also_ask_element") {
+      const mapped = mapPaaElement(i);
+      if (mapped) paa.push(mapped);
+    } else if (type === "people_also_ask") {
+      const subItems = (i.items ?? []) as Record<string, unknown>[];
+      for (const s of subItems) {
+        if (String(s.type ?? "") === "people_also_ask_element") {
+          const mapped = mapPaaElement(s);
+          if (mapped) paa.push(mapped);
+        }
+      }
+    }
+  }
+
+  return { organic, paa: paa.slice(0, 12) };
+}
+
+// ─── Bulk Spam Score (backlinks) ───────────────────────────────────────────
+export async function getBulkSpamScore(
+  targets: string[]
+): Promise<{ target: string; spamScore: number }[]> {
+  if (!targets.length) return [];
+  const data = await dfsPost("/backlinks/bulk_spam_score/live", [
+    { targets },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    target: String(i.target ?? ""),
+    spamScore: typeof i.spam_score === "number" ? i.spam_score : 0,
+  }));
+}
+
+// ─── Backlinks Competitors ─────────────────────────────────────────────────
+export async function getBacklinkCompetitors(
+  target: string,
+  limit = 10
+): Promise<{ domain: string; intersections: number; relevantPages: number }[]> {
+  const data = await dfsPost("/backlinks/competitors/live", [
+    { target, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    domain: String(i.domain ?? i.target ?? ""),
+    intersections: typeof i.intersections === "number" ? i.intersections : 0,
+    relevantPages: typeof i.relevant_pages === "number" ? i.relevant_pages : 0,
+  }));
+}
+
+// ─── Bulk Traffic Estimation ───────────────────────────────────────────────
+export async function getBulkTrafficEstimation(
+  targets: { target: string; targetType?: "site" | "page" }[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<{ target: string; organicEtv: number; paidEtv: number; traffic: number }[]> {
+  if (!targets.length) return [];
+  const data = await dfsPost("/dataforseo_labs/google/bulk_traffic_estimation/live", [
+    {
+      targets: targets.map((t) => ({ target: t.target, target_type: t.targetType ?? "site" })),
+      location_code: locationCode,
+      language_code: languageCode,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const metrics = (i.metrics as Record<string, unknown>) ?? {};
+    const organic = (metrics.organic as Record<string, unknown>) ?? {};
+    const paid = (metrics.paid as Record<string, unknown>) ?? {};
+    return {
+      target: String(i.target ?? ""),
+      organicEtv: typeof organic.etv === "number" ? Math.round(organic.etv) : 0,
+      paidEtv: typeof paid.etv === "number" ? Math.round(paid.etv) : 0,
+      traffic: typeof organic.count === "number" ? organic.count : 0,
+    };
+  });
+}
+
+// ─── Historical Bulk Traffic Estimation ───────────────────────────────────
+export async function getHistoricalBulkTraffic(
+  targets: string[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<{ target: string; history: { date: string; traffic: number }[] }[]> {
+  if (!targets.length) return [];
+  const data = await dfsPost("/dataforseo_labs/google/historical_bulk_traffic_estimation/live", [
+    {
+      targets: targets.map((t) => ({ target: t, target_type: "site" })),
+      location_code: locationCode,
+      language_code: languageCode,
+    },
+  ]);
+  const items = (data?.tasks?.[0]?.result?.[0]?.items ?? []) as Record<string, unknown>[];
+  return items.map((i) => {
+    const historyRaw = (i.history as Record<string, unknown>[]) ?? [];
+    return {
+      target: String(i.target ?? ""),
+      history: historyRaw.map((h) => ({
+        date: String(h.date ?? ""),
+        traffic: typeof (h.organic as Record<string, unknown> | undefined)?.count === "number" ? ((h.organic as Record<string, unknown>).count as number) : 0,
+      })),
+    };
+  });
+}
+
+// ─── Google Ads Keywords for Site ─────────────────────────────────────────
+export async function getGoogleAdsKeywordsForSite(
+  site: string,
+  locationCode = 2840,
+  languageCode = "en",
+  limit = 50
+): Promise<{ keyword: string; searchVolume: number; cpc: number | null; competition: string | null }[]> {
+  const data = await dfsPost("/keywords_data/google_ads/keywords_for_site/live", [
+    { target: site, location_code: locationCode, language_code: languageCode, limit },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    cpc: typeof i.cpc === "number" ? Math.round(i.cpc * 100) / 100 : null,
+    competition: typeof i.competition_level === "string" ? i.competition_level : null,
+  }));
+}
+
+// ─── Bing Keyword Performance ─────────────────────────────────────────────
+export interface BingKeywordPerformanceItem {
+  keyword: string;
+  searchVolume: number;
+  cpc: number | null;
+  competition: number | null;
+}
+export async function getBingKeywordPerformanceBatch(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<BingKeywordPerformanceItem[]> {
+  if (!keywords.length) return [];
+  const data = await dfsPost("/keywords_data/bing/keyword_performance/live", [
+    { keywords, location_code: locationCode, language_code: languageCode },
+  ]);
+  const items = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  return items.map((i) => ({
+    keyword: String(i.keyword ?? ""),
+    searchVolume: typeof i.search_volume === "number" ? i.search_volume : 0,
+    cpc: typeof i.cpc === "number" ? Math.round(i.cpc * 100) / 100 : null,
+    competition: typeof i.competition === "number" ? i.competition : null,
+  }));
+}
+
+// ─── Google Trends Explore ────────────────────────────────────────────────
+export interface TrendsExploreItem {
+  keyword: string;
+  value: number;
+}
+export async function getGoogleTrendsExplore(
+  keywords: string[],
+  locationCode = 2840,
+  languageCode = "en"
+): Promise<TrendsExploreItem[]> {
+  const data = await dfsPost("/keywords_data/google_trends/explore/live", [
+    { keywords, location_code: locationCode, language_code: languageCode, type: "web_search" },
+  ]);
+  const result = (data?.tasks?.[0]?.result ?? []) as Record<string, unknown>[];
+  const out: TrendsExploreItem[] = [];
+  for (const r of result) {
+    const items = (r.items ?? []) as Record<string, unknown>[];
+    for (const item of items) {
+      if (item.type === "google_trends_graph") {
+        const kws = (item.keywords ?? []) as string[];
+        const data2 = (item.data ?? []) as Record<string, unknown>[];
+        for (let ki = 0; ki < kws.length; ki++) {
+          const values = data2.map((d) => {
+            const vals = (d.values ?? []) as number[];
+            return vals[ki] ?? 0;
+          });
+          const avg = values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : 0;
+          out.push({ keyword: kws[ki], value: avg });
+        }
+      }
+    }
+  }
+  return out;
 }

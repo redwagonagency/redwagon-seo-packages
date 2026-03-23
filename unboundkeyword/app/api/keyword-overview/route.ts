@@ -14,6 +14,8 @@ import {
   getAiKeywordSearchVolume,
   getLlmMentionsSearchLive,
   getLighthouseLiveJson,
+  getKeywordData,
+  getDFSTrendsDemography,
   type SerpOrganicResult,
   type AutocompleteLetterGroup,
   type LighthouseLiveResult,
@@ -36,6 +38,19 @@ export interface PhraseTrendItem {
   impressions: number;
 }
 
+export interface DemographicsData {
+  male: number | null;
+  female: number | null;
+  ageGroups: { label: string; index: number }[];
+}
+
+export interface PaidSearchData {
+  searchVolume: number | null;
+  cpc: number | null;
+  competition: number | null; // 0–1 float → multiply by 100 for %
+  competitionLevel: "LOW" | "MEDIUM" | "HIGH" | null;
+}
+
 export interface KeywordOverviewResponse {
   keyword: string;
   domain: string | null;
@@ -47,6 +62,8 @@ export interface KeywordOverviewResponse {
   aiVolume: AiKeywordVolumeItem[];
   llmMentions: LlmMentionLiveItem[];
   lighthouse: LighthouseLiveResult | null;
+  paid: PaidSearchData | null;
+  demographics: DemographicsData | null;
   errors: Record<string, string>;
 }
 
@@ -79,6 +96,8 @@ export async function POST(req: NextRequest) {
     aiVolumeResult,
     llmResult,
     lighthouseResult,
+    paidResult,
+    demoResult,
   ] = await Promise.allSettled([
     // 1. Top organic SERP results + People Also Ask (single call)
     getSerpLiveData(seed, location, language, 10),
@@ -100,6 +119,11 @@ export async function POST(req: NextRequest) {
 
     // 7. Lighthouse audit (only if domain provided)
     domain ? getLighthouseLiveJson(domain) : Promise.resolve(null),
+
+    // 8. Google Ads paid search data (CPC, competition, volume)
+    getKeywordData([seed]),
+    // 9. Demographics
+    getDFSTrendsDemography([seed], location),
   ]);
 
   function settle<T>(result: PromiseSettledResult<T>, key: string, fallback: T): T {
@@ -119,6 +143,43 @@ export async function POST(req: NextRequest) {
   const aiVolume = settle(aiVolumeResult, "aiVolume", []);
   const llmMentions = settle(llmResult, "llmMentions", []);
   const lighthouse = settle(lighthouseResult, "lighthouse", null);
+  const paidRaw = settle(paidResult, "paid", null);
+  const demoRaw = settle(demoResult, "demographics", null);
+
+  // Parse demographics
+  type DemoRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
+  const demoItems = (demoRaw as DemoRaw)?.tasks?.[0]?.result?.[0]?.items ?? [];
+  let demographics: DemographicsData | null = null;
+  if (demoItems.length > 0) {
+    const genderItem = demoItems.find((i) => i.type === "gender") as Record<string, unknown> | undefined;
+    const ageItem = demoItems.find((i) => i.type === "age") as Record<string, unknown> | undefined;
+    demographics = {
+      male: typeof genderItem?.male_index === "number" ? Math.round(genderItem.male_index) : null,
+      female: typeof genderItem?.female_index === "number" ? Math.round(genderItem.female_index) : null,
+      ageGroups: Array.isArray(ageItem?.items)
+        ? (ageItem!.items as Record<string, unknown>[]).map((a) => ({
+            label: String(a.age_group ?? a.age ?? ""),
+            index: typeof a.index === "number" ? Math.round(a.index) : 0,
+          }))
+        : [],
+    };
+  }
+
+  // Parse paid search data from Google Ads API response
+  type PaidRaw = { tasks?: Array<{ result?: Array<{ items?: Array<Record<string, unknown>> }> }> };
+  const paidItems = (paidRaw as PaidRaw)?.tasks?.[0]?.result?.[0]?.items ?? [];
+  const paidItem = (paidItems[0] ?? null) as Record<string, unknown> | null;
+  const paidData: PaidSearchData | null = paidItem ? {
+    searchVolume: typeof paidItem.search_volume === "number" ? paidItem.search_volume : null,
+    cpc: typeof paidItem.cpc === "number" ? paidItem.cpc :
+         typeof paidItem.low_top_of_page_bid === "number" ? paidItem.low_top_of_page_bid : null,
+    competition: typeof paidItem.competition_index === "number" ? paidItem.competition_index / 100 :
+                 typeof paidItem.competition === "number" ? paidItem.competition : null,
+    competitionLevel: (["LOW", "MEDIUM", "HIGH"].includes(String(paidItem.competition_level ?? "")))
+      ? (paidItem.competition_level as "LOW" | "MEDIUM" | "HIGH")
+      : null,
+  } : null;
+
 
   // Map citation items
   const citations: CitationItem[] = (
@@ -156,6 +217,8 @@ export async function POST(req: NextRequest) {
     aiVolume,
     llmMentions,
     lighthouse,
+    paid: paidData,
+    demographics,
     errors,
   };
 

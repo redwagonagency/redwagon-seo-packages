@@ -1,424 +1,210 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { formatNumber } from "@/lib/utils";
 import SaveToListModal, { type KWToSave } from "@/components/dashboard/SaveToListModal";
-import type { IdeaKeyword, DemographicsData } from "@/app/api/keyword-ideas/route";
+import type { IdeaKeyword, KeywordIdeasResponse } from "@/app/api/keyword-ideas/route";
 
-type Source = "google" | "amazon" | "both";
+type Source = "all" | "google" | "bing" | "amazon";
 
-function difficultyCell(value: number) {
-  if (value >= 70) return "bg-red-100 text-red-700";
-  if (value >= 40) return "bg-amber-100 text-amber-700";
+const SOURCE_COLORS: Record<string, string> = {
+  google: "bg-blue-100 text-blue-700",
+  google_ads: "bg-indigo-100 text-indigo-700",
+  google_trends: "bg-purple-100 text-purple-700",
+  bing: "bg-cyan-100 text-cyan-700",
+  amazon: "bg-orange-100 text-orange-700",
+};
+
+function difficultyCell(v: number | null) {
+  if (v === null) return "bg-slate-100 text-slate-500";
+  if (v >= 70) return "bg-red-100 text-red-700";
+  if (v >= 40) return "bg-amber-100 text-amber-700";
   return "bg-emerald-100 text-emerald-700";
 }
 
-function DemographicsPanel({
-  demo,
-  keyword,
-}: {
-  demo: DemographicsData | null;
-  keyword: string | null;
-}) {
-  if (!keyword) {
-    return (
-      <div className="p-5 text-sm text-slate-400 text-center">
-        Run a search to see audience demographics.
-      </div>
-    );
-  }
-  if (!demo || (demo.male === null && demo.ageGroups.length === 0)) {
-    return (
-      <div className="p-5 text-sm text-slate-400 text-center">
-        Demographics unavailable for this keyword.
-      </div>
-    );
-  }
-
-  const maxAge = Math.max(...demo.ageGroups.map((a) => a.index), 1);
-
-  return (
-    <div className="p-5 space-y-5 text-sm">
-      {demo.male !== null && demo.female !== null && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-            Audience gender
-          </p>
-          <div className="flex rounded-lg overflow-hidden h-5 text-xs font-bold text-white">
-            <div
-              style={{ width: `${demo.male}%` }}
-              className="bg-blue-500 flex items-center justify-center"
-            >
-              {demo.male >= 15 ? `M ${demo.male}%` : ""}
-            </div>
-            <div
-              style={{ width: `${demo.female}%` }}
-              className="bg-pink-400 flex items-center justify-center"
-            >
-              {demo.female >= 15 ? `F ${demo.female}%` : ""}
-            </div>
-          </div>
-          <div className="flex justify-between text-xs text-slate-500 mt-1">
-            <span>Male {demo.male}%</span>
-            <span>Female {demo.female}%</span>
-          </div>
-        </div>
-      )}
-
-      {demo.ageGroups.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-            Age distribution
-          </p>
-          <div className="space-y-1.5">
-            {demo.ageGroups.map((ag) => (
-              <div key={ag.label} className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 w-14 shrink-0">{ag.label}</span>
-                <div className="flex-1 bg-slate-100 rounded-full h-2">
-                  <div
-                    className="bg-[#f15b27] h-2 rounded-full"
-                    style={{ width: `${Math.round((ag.index / maxAge) * 100)}%` }}
-                  />
-                </div>
-                <span className="text-xs tabular-nums text-slate-600 w-8 text-right">
-                  {ag.index}
-                </span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-slate-400 mt-2">
-            Index: 100 = average. Above 100 = over-represented.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function KeywordIdeasPage() {
-  const [query, setQuery] = useState("digital marketing");
-  const [source, setSource] = useState<Source>("google");
+  const [query, setQuery] = useState("");
+  const [source, setSource] = useState<Source>("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [rows, setRows] = useState<IdeaKeyword[]>([]);
-  const [demographics, setDemographics] = useState<DemographicsData | null>(null);
-  const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
+  const [data, setData] = useState<KeywordIdeasResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [savedMsg, setSavedMsg] = useState("");
+  const [showSave, setShowSave] = useState(false);
 
-  async function runSearch(nextQuery?: string, nextSource?: Source) {
-    const keyword = (nextQuery ?? query).trim();
-    const src = nextSource ?? source;
-    if (!keyword) return;
-
+  async function runSearch() {
+    if (!query.trim()) return;
     setLoading(true);
     setError("");
+    setSelected(new Set());
     try {
       const res = await fetch("/api/keyword-ideas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword, source: src, location: 2840, language: "en", limit: 100 }),
+        body: JSON.stringify({ keyword: query.trim(), source, limit: 150 }),
       });
-      const data = (await res.json()) as {
-        error?: string;
-        keywords?: IdeaKeyword[];
-        demographics?: DemographicsData | null;
-      };
-      if (!res.ok) throw new Error(data.error ?? "Search failed");
-
-      setRows((data.keywords ?? []).sort((a, b) => b.volume - a.volume));
-      setDemographics(data.demographics ?? null);
-      setSearchedQuery(keyword);
-      setSelected(new Set());
+      const json = (await res.json()) as KeywordIdeasResponse & { error?: string };
+      if (!res.ok) throw new Error(json.error || "Failed");
+      setData(json);
     } catch (e) {
-      setRows([]);
-      setDemographics(null);
       setError(e instanceof Error ? e.message : "Search failed");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { void runSearch(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const allChecked = rows.length > 0 && selected.size === rows.length;
-  const showSource = source === "both";
-
-  function toggleRow(keyword: string) {
+  function toggleRow(kw: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(keyword)) next.delete(keyword);
-      else next.add(keyword);
+      if (next.has(kw)) next.delete(kw); else next.add(kw);
       return next;
     });
   }
 
   function toggleAll() {
-    if (allChecked) setSelected(new Set());
+    const rows = data?.keywords ?? [];
+    if (selected.size === rows.length) setSelected(new Set());
     else setSelected(new Set(rows.map((r) => r.keyword)));
   }
 
-  function handleSourceChange(s: Source) {
-    setSource(s);
-    void runSearch(undefined, s);
-  }
+  const saveItems: KWToSave[] = [...selected].map((kw) => {
+    const row = data?.keywords.find((r) => r.keyword === kw);
+    return { keyword: kw, volume: row?.volume ?? 0, cpc: row?.cpc ?? undefined, difficulty: row?.difficulty ?? undefined };
+  });
 
-  const selectedKws: KWToSave[] = useMemo(
-    () =>
-      rows
-        .filter((r) => selected.has(r.keyword))
-        .map((r) => ({
-          keyword: r.keyword,
-          volume: r.volume,
-          difficulty: r.difficulty ?? undefined,
-          cpc: r.cpc ?? undefined,
-          intent: r.intent ?? undefined,
-        })),
-    [rows, selected]
-  );
-
-  const googleCount = rows.filter((r) => r.source === "google").length;
-  const amazonCount = rows.filter((r) => r.source === "amazon").length;
+  const rows = data?.keywords ?? [];
 
   return (
     <div className="p-8 max-w-7xl">
-      <h1 className="text-2xl font-black text-slate-900 mb-4">Keyword Ideas</h1>
-
-      {/* Source selector */}
-      <div className="flex gap-2 mb-3">
-        {(["google", "amazon", "both"] as Source[]).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => handleSourceChange(s)}
-            disabled={loading}
-            className={`rounded-full px-4 py-1 text-xs font-bold border transition disabled:opacity-50 ${
-              source === s
-                ? "bg-[#f15b27] text-white border-[#f15b27]"
-                : "bg-white text-slate-600 border-slate-200 hover:border-[#f15b27] hover:text-[#f15b27]"
-            }`}
-          >
-            {s === "google" ? "Google" : s === "amazon" ? "Amazon" : "Both"}
-          </button>
-        ))}
-        {source === "both" && rows.length > 0 && (
-          <span className="ml-2 text-xs text-slate-400 self-center">
-            {googleCount} Google · {amazonCount} Amazon
-          </span>
-        )}
-      </div>
+      <h1 className="text-4xl font-black text-slate-900 mb-1">Keyword Ideas</h1>
+      <p className="text-sm text-slate-500 mb-6">
+        Multi-source suggestions from Google, Bing, Google Ads, Google Trends, and Amazon.
+        {data?.siteName ? ` Site-specific results for ${data.siteName}.` : ""}
+      </p>
 
       {/* Search bar */}
-      <div className="rounded-xl border border-[#f15b27] bg-[#fff3ee] p-2 flex gap-2 mb-6">
+      <div className="flex gap-2 mb-4">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && void runSearch()}
           placeholder="Enter a seed keyword…"
-          className="flex-1 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-900 placeholder:text-slate-500"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              void runSearch();
-            }
-          }}
+          className="flex-1 rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[#f15b27]"
         />
         <button
           type="button"
           onClick={() => void runSearch()}
-          disabled={loading || !query.trim()}
-          className="rounded-md bg-[#f15b27] px-4 py-2 text-xs font-black text-white disabled:opacity-60"
+          disabled={loading}
+          className="rounded-lg bg-[#f15b27] px-6 py-2.5 text-sm font-black text-white hover:bg-[#d94e1f] disabled:opacity-60"
         >
           {loading ? "Searching…" : "Search"}
         </button>
       </div>
 
-      {error ? (
-        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      {/* Source filter */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {(["all", "google", "bing", "amazon"] as Source[]).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSource(s)}
+            className={`rounded-full px-4 py-1.5 text-xs font-semibold border transition-colors ${source === s ? "bg-[#f15b27] text-white border-[#f15b27]" : "bg-white text-slate-600 border-slate-200 hover:border-[#f15b27]"}`}
+          >
+            {s === "all" ? "All Sources" : s.charAt(0).toUpperCase() + s.slice(1)}
+          </button>
+        ))}
+        {selected.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowSave(true)}
+            className="ml-auto rounded-full px-4 py-1.5 text-xs font-semibold bg-emerald-600 text-white"
+          >
+            Add {selected.size} to List
+          </button>
+        )}
+      </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        {/* Results table */}
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-            <span className="text-2xl font-black text-slate-900">
-              {rows.length.toLocaleString()} Keyword Ideas
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              {selected.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowSaveModal(true)}
-                  className="rounded-md bg-[#f15b27] px-4 py-1.5 text-xs font-black text-white hover:bg-[#d94e1f] transition"
-                >
-                  + Save {selected.size} to List
-                </button>
-              )}
-              {savedMsg && (
-                <span className="text-xs text-emerald-600 font-semibold">{savedMsg}</span>
-              )}
-            </div>
+      {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{error}</div> : null}
+
+      {/* Google Trends mini-chart */}
+      {(data?.trendsData ?? []).length > 0 && (
+        <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Google Trends Interest</p>
+          <div className="flex flex-wrap gap-2">
+            {data!.trendsData.map((t) => (
+              <div key={t.keyword} className="flex items-center gap-2 text-xs">
+                <span className="text-slate-600 font-medium">{t.keyword}</span>
+                <div className="h-2 rounded-full bg-emerald-500" style={{ width: `${Math.max(t.value, 4)}px` }} />
+                <span className="text-slate-400">{t.value}</span>
+              </div>
+            ))}
           </div>
+        </div>
+      )}
 
+      {/* Results table */}
+      {rows.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">{formatNumber(rows.length)} keywords</span>
+            <button type="button" onClick={() => {
+              const csv = ["keyword,volume,bing_volume,cpc,difficulty,source", ...rows.map((r) => `"${r.keyword}",${r.volume},${r.bingVolume ?? ""},${r.cpc ?? ""},${r.difficulty ?? ""},${r.source}`)].join("\n");
+              const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "keyword-ideas.csv"; a.click();
+            }} className="text-xs text-[#f15b27] hover:underline">Export CSV</button>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>
-                  <th className="px-4 py-3 w-8">
-                    <input
-                      type="checkbox"
-                      checked={allChecked}
-                      onChange={toggleAll}
-                      className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
-                    />
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-500">
+                  <th className="px-4 py-3 text-left w-8">
+                    <input type="checkbox" checked={selected.size === rows.length && rows.length > 0} onChange={toggleAll} className="rounded" />
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Keyword
-                  </th>
-                  {showSource && (
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Source
-                    </th>
-                  )}
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Vol
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    CPC
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Diff
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Intent
-                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Keyword</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Volume</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Bing Vol</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">CPC</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Difficulty</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider">Trends</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Source</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={showSource ? 7 : 6}
-                      className="px-4 py-10 text-center text-sm text-slate-400"
-                    >
-                      {loading ? "Loading…" : "Search to load keyword ideas."}
+                {rows.map((row) => (
+                  <tr key={row.keyword} onClick={() => toggleRow(row.keyword)} className={`border-b border-slate-50 cursor-pointer hover:bg-slate-50 ${selected.has(row.keyword) ? "bg-orange-50" : ""}`}>
+                    <td className="px-4 py-2.5">
+                      <input type="checkbox" checked={selected.has(row.keyword)} onChange={() => toggleRow(row.keyword)} onClick={(e) => e.stopPropagation()} className="rounded" />
+                    </td>
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{row.keyword}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.volume > 0 ? formatNumber(row.volume) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-400 text-xs">{row.bingVolume != null ? formatNumber(row.bingVolume) : "—"}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-600">{row.cpc != null ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      {row.difficulty != null ? (
+                        <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${difficultyCell(row.difficulty)}`}>{row.difficulty}</span>
+                      ) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-slate-400 text-xs">{row.trendsValue != null ? row.trendsValue : "—"}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${SOURCE_COLORS[row.source] ?? "bg-slate-100 text-slate-600"}`}>{row.source.replace("_", " ")}</span>
                     </td>
                   </tr>
-                ) : (
-                  rows.map((row) => (
-                    <tr
-                      key={`${row.source}:${row.keyword}`}
-                      onClick={() => toggleRow(row.keyword)}
-                      className={`border-b border-slate-100 cursor-pointer transition ${
-                        selected.has(row.keyword) ? "bg-orange-50" : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selected.has(row.keyword)}
-                          onChange={() => toggleRow(row.keyword)}
-                          className="rounded border-slate-300 text-[#f15b27] focus:ring-[#f15b27]"
-                        />
-                      </td>
-                      <td className="px-4 py-2.5 font-medium text-slate-800">{row.keyword}</td>
-                      {showSource && (
-                        <td className="px-4 py-2.5 text-center">
-                          <span
-                            className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold ${
-                              row.source === "google"
-                                ? "bg-blue-50 text-blue-600"
-                                : "bg-amber-50 text-amber-600"
-                            }`}
-                          >
-                            {row.source === "google" ? "Google" : "Amazon"}
-                          </span>
-                        </td>
-                      )}
-                      <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
-                        {formatNumber(row.volume)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
-                        {row.cpc != null ? `$${row.cpc.toFixed(2)}` : "-"}
-                      </td>
-                      <td className="px-4 py-2.5 text-center">
-                        {row.difficulty != null ? (
-                          <span
-                            className={`inline-flex rounded px-2 py-0.5 text-xs font-black ${difficultyCell(row.difficulty)}`}
-                          >
-                            {row.difficulty}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-center text-xs text-slate-600 capitalize">
-                        {row.intent ?? "-"}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
+      )}
 
-        {/* Right panel: demographics + summary */}
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100">
-            <h2 className="text-xl font-black text-slate-900">Audience Demographics</h2>
-            <p className="text-slate-500 text-sm mt-0.5 truncate">
-              {searchedQuery ?? "Run a search"}
-            </p>
-          </div>
-
-          <DemographicsPanel demo={demographics} keyword={searchedQuery} />
-
-          {rows.length > 0 && (
-            <div className="px-5 py-4 border-t border-slate-100 space-y-2 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
-                Summary
-              </p>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Total ideas</span>
-                <span className="font-semibold text-slate-800">{rows.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Avg volume</span>
-                <span className="font-semibold text-slate-800">
-                  {formatNumber(
-                    Math.round(rows.reduce((s, r) => s + r.volume, 0) / rows.length)
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">High difficulty (70+)</span>
-                <span className="font-semibold text-red-600">
-                  {rows.filter((r) => (r.difficulty ?? 0) >= 70).length}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Low difficulty (&lt;40)</span>
-                <span className="font-semibold text-emerald-600">
-                  {rows.filter((r) => r.difficulty !== null && r.difficulty < 40).length}
-                </span>
-              </div>
-            </div>
-          )}
+      {!loading && !error && rows.length === 0 && query && data && (
+        <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-500">
+          No keywords found. Try a different seed term.
         </div>
-      </div>
+      )}
 
-      {showSaveModal && (
+      {showSave && (
         <SaveToListModal
-          keywords={selectedKws}
-          onClose={() => setShowSaveModal(false)}
-          onSaved={(count) => {
-            setSavedMsg(`✓ ${count} keyword${count !== 1 ? "s" : ""} saved`);
-            setSelected(new Set());
-            setTimeout(() => setSavedMsg(""), 4000);
-          }}
+          keywords={saveItems}
+          onClose={() => setShowSave(false)}
+          onSaved={() => { setShowSave(false); setSelected(new Set()); }}
         />
       )}
     </div>

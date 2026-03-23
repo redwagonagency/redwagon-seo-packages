@@ -296,6 +296,220 @@ function buildSocialHashtagRows(rows: MasterKeywordRow[]): SocialHashtagRow[] {
   }).sort((left, right) => right.searchVol - left.searchVol);
 }
 
+
+// ─── Unified Radial Wheel (ATP-style, all groups in one SVG) ────────────────
+
+const GROUP_COLORS: Record<string, string> = {
+  questions:    "#3b82f6", // blue
+  prepositions: "#8b5cf6", // purple
+  comparisons:  "#f97316", // orange
+  related:      "#64748b", // slate
+  alphabetical: "#22c55e", // green
+};
+
+interface UnifiedWheelProps {
+  seed: string;
+  groups: DiscoveryGroup[];
+  selected: Set<string>;
+  onToggle: (kw: string) => void;
+  onSelectGroup: (type: string) => void;
+}
+
+function UnifiedRadialWheel({ seed, groups, selected, onToggle, onSelectGroup }: UnifiedWheelProps) {
+  const cx = 480, cy = 480;
+  const MAX_PER_GROUP = 48;
+  const RADII = [130, 185, 240, 295, 350, 405];
+
+  // Only show non-alphabetical groups in the wheel
+  const wheelGroups = groups.filter((g) => g.type !== "alphabetical" && g.keywords.length > 0);
+  if (wheelGroups.length === 0) return null;
+
+  // Build items with angular allocation per group
+  interface WheelItem extends DiscoveryKeyword {
+    groupType: string;
+    globalIdx: number;
+    groupStart: number;
+    groupCount: number;
+  }
+
+  const allItems: WheelItem[] = [];
+  const countPerGroup = wheelGroups.map((g) => Math.min(g.keywords.length, MAX_PER_GROUP));
+  const total = countPerGroup.reduce((s, c) => s + c, 0);
+
+  for (let gi = 0; gi < wheelGroups.length; gi++) {
+    const g = wheelGroups[gi];
+    const count = countPerGroup[gi];
+    const groupStart = countPerGroup.slice(0, gi).reduce((s, c) => s + c, 0);
+    for (let ki = 0; ki < count; ki++) {
+      allItems.push({ ...g.keywords[ki], groupType: g.type, globalIdx: groupStart + ki, groupStart, groupCount: count });
+    }
+  }
+
+  // Angular position: proportional allocation
+  function getAngle(globalIdx: number): number {
+    return -90 + (globalIdx / total) * 360;
+  }
+
+  // Place items in concentric rings within their group slice
+  function getPosition(item: WheelItem): { x: number; y: number } {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(item.groupCount * 1.5)));
+    const posInGroup = item.globalIdx - item.groupStart;
+    const row = Math.floor(posInGroup / cols);
+    const col = posInGroup % cols;
+    const halfCols = (cols - 1) / 2;
+
+    const offsetCols = (col - halfCols) / Math.max(cols, 1);
+    const angIdx = item.groupStart + (posInGroup - col + cols / 2) + offsetCols * (cols - 1) * 0.5;
+    const ang = getAngle(angIdx + offsetCols * 2);
+    const rad = ang * (Math.PI / 180);
+    const r = RADII[Math.min(row, RADII.length - 1)];
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  // Group label positions (at mid-angle of each group, outer ring)
+  const LABEL_R = 455;
+  const groupLabelPositions = wheelGroups.map((g, gi) => {
+    const start = countPerGroup.slice(0, gi).reduce((s, c) => s + c, 0);
+    const count = countPerGroup[gi];
+    const midIdx = start + count / 2;
+    const ang = getAngle(midIdx);
+    const rad = ang * (Math.PI / 180);
+    return { x: cx + LABEL_R * Math.cos(rad), y: cy + LABEL_R * Math.sin(rad), group: g };
+  });
+
+  return (
+    <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-6 pt-5 pb-3 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 font-black mb-0.5">Keyword Discovery Wheel</div>
+          <p className="text-xs text-slate-500">Click keywords to select · Click group labels to select all</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {wheelGroups.map((g) => (
+            <button
+              key={g.type}
+              type="button"
+              onClick={() => onSelectGroup(g.type)}
+              className="text-[10px] font-black px-2.5 py-1 rounded-full border transition"
+              style={{ borderColor: GROUP_COLORS[g.type], color: GROUP_COLORS[g.type] }}
+            >
+              {g.type === "alphabetical" ? "A-Z" : g.type} ({g.keywords.length})
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg viewBox="0 0 960 960" className="w-full" style={{ maxHeight: "580px", minWidth: "520px" }} aria-label="Keyword discovery wheel">
+          {/* Sector background arcs for each group */}
+          {wheelGroups.map((g, gi) => {
+            const start = countPerGroup.slice(0, gi).reduce((s, c) => s + c, 0);
+            const count = countPerGroup[gi];
+            const startAngle = (getAngle(start) - 1) * (Math.PI / 180);
+            const endAngle = (getAngle(start + count) + 1) * (Math.PI / 180);
+            const R = 430;
+            const x1 = cx + R * Math.cos(startAngle), y1 = cy + R * Math.sin(startAngle);
+            const x2 = cx + R * Math.cos(endAngle),   y2 = cy + R * Math.sin(endAngle);
+            const large = (endAngle - startAngle) > Math.PI ? 1 : 0;
+            return (
+              <path
+                key={g.type}
+                d={`M ${cx} ${cy} L ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} Z`}
+                fill={GROUP_COLORS[g.type]}
+                opacity={0.04}
+              />
+            );
+          })}
+
+          {/* Spoke lines from center to each keyword */}
+          {allItems.map((item) => {
+            const { x, y } = getPosition(item);
+            return (
+              <line
+                key={`spoke-${item.keyword}`}
+                x1={cx} y1={cy} x2={x} y2={y}
+                stroke={GROUP_COLORS[item.groupType]}
+                strokeWidth={0.3}
+                opacity={0.2}
+              />
+            );
+          })}
+
+          {/* Group label arcs */}
+          {groupLabelPositions.map(({ x, y, group }) => (
+            <g key={`label-${group.type}`}>
+              <circle cx={x} cy={y} r={32} fill={GROUP_COLORS[group.type]} opacity={0.12} />
+              <text
+                x={x} y={y}
+                textAnchor="middle" dominantBaseline="middle"
+                fill={GROUP_COLORS[group.type]}
+                fontSize={10} fontWeight="800"
+                style={{ cursor: "pointer", userSelect: "none" }}
+                onClick={() => onSelectGroup(group.type)}
+              >
+                {group.type.charAt(0).toUpperCase() + group.type.slice(1)}
+              </text>
+              <text
+                x={x} y={y + 13}
+                textAnchor="middle" dominantBaseline="middle"
+                fill={GROUP_COLORS[group.type]}
+                fontSize={8} fontWeight="600"
+                opacity={0.7}
+                style={{ userSelect: "none" }}
+              >
+                {group.keywords.length}
+              </text>
+            </g>
+          ))}
+
+          {/* Keyword bubbles */}
+          {allItems.map((item) => {
+            const { x, y } = getPosition(item);
+            const isSel = selected.has(item.keyword);
+            const color = GROUP_COLORS[item.groupType];
+            const label = item.keyword.length > 18 ? item.keyword.slice(0, 16) + "…" : item.keyword;
+            return (
+              <g
+                key={`kw-${item.keyword}`}
+                onClick={() => onToggle(item.keyword)}
+                style={{ cursor: "pointer" }}
+              >
+                <title>{item.keyword}{item.volume ? ` · ${item.volume.toLocaleString()} vol` : ""}{item.cpc != null ? ` · $${item.cpc.toFixed(2)} CPC` : ""}</title>
+                <circle
+                  cx={x} cy={y}
+                  r={isSel ? 36 : 30}
+                  fill={isSel ? color : "white"}
+                  stroke={color}
+                  strokeWidth={isSel ? 2 : 1}
+                  opacity={0.95}
+                />
+                <text
+                  x={x} y={y}
+                  textAnchor="middle" dominantBaseline="middle"
+                  fill={isSel ? "white" : "#334155"}
+                  fontSize={8.5}
+                  fontWeight={isSel ? "700" : "500"}
+                  style={{ userSelect: "none" }}
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Center seed bubble */}
+          <circle cx={cx} cy={cy} r={52} fill="#0f172a" />
+          <text x={cx} y={cy - 6} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize={11} fontWeight="800" style={{ userSelect: "none" }}>
+            {seed.length > 14 ? seed.slice(0, 13) + "…" : seed}
+          </text>
+          <text x={cx} y={cy + 10} textAnchor="middle" dominantBaseline="middle" fill="#94a3b8" fontSize={8} style={{ userSelect: "none" }}>
+            {allItems.length} terms
+          </text>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function KeywordWheel({
   seed,
   group,
@@ -1405,43 +1619,26 @@ export default function DiscoveryClient() {
             return null;
           })()}
 
-            {(() => {
-              const questionGroup = allGroups.find((group) => group.type === "questions");
-              if (!questionGroup || questionGroup.keywords.length === 0) return null;
-              return (
-                <div className="mb-8">
-                  <QuestionIntentMap root={result.seed} keywords={questionGroup.keywords} />
-                </div>
-              );
-            })()}
+          {/* Unified Radial Wheel — all groups in one ATP-style visualization */}
+          <div className="mb-8">
+            <UnifiedRadialWheel
+              seed={result.seed}
+              groups={allGroups}
+              selected={selected}
+              onToggle={toggleKeyword}
+              onSelectGroup={(type) => {
+                const group = allGroups.find((g) => g.type === type);
+                if (!group) return;
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  const allSelected = group.keywords.every((k) => prev.has(k.keyword));
+                  group.keywords.forEach((k) => allSelected ? next.delete(k.keyword) : next.add(k.keyword));
+                  return next;
+                });
+              }}
+            />
+          </div>
 
-          {(() => {
-            const wheelGroups = WHEEL_GROUPS
-              .map((type) => allGroups.find((group) => group.type === type))
-              .filter((group): group is DiscoveryGroup => Boolean(group && group.keywords.length));
-
-            if (wheelGroups.length === 0) {
-              return null;
-            }
-
-            return (
-              <div className="mb-8 space-y-6">
-                {wheelGroups.map((wheelGroup) => (
-                  <KeywordWheel
-                    key={wheelGroup.type}
-                    seed={result.seed}
-                    group={wheelGroup}
-                    selected={selected}
-                    onToggleKeyword={toggleKeyword}
-                    onDrilldown={drilldownKeyword}
-                  />
-                ))}
-                <p className="mt-3 text-xs text-slate-500">
-                  All discovery circles stay visible by default so users can click through every questions, prepositions, comparisons, and related keyword item.
-                </p>
-              </div>
-            );
-          })()}
 
           {drilldownResult && drilldownPath.length > 0 && (
             <div className="mb-8 space-y-4 border-t-4 border-indigo-300 pt-8">
