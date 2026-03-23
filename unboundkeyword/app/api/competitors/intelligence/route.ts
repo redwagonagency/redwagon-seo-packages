@@ -11,6 +11,9 @@ import {
   getRankedKeywords,
 } from "@/lib/dataforseo/client";
 import { getSelectedSiteForUser } from "@/lib/site-context";
+import { prisma } from "@/lib/prisma";
+
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function normalizeDomain(value: string | undefined): string {
   return (value ?? "")
@@ -35,6 +38,7 @@ export type CompetitorRow = {
   commonKeywords: { keyword: string; volume: number | null; yourPosition: number | null; competitorPosition: number | null }[];
   keywordGapCount: number;
   keywordGap: { keyword: string; volume: number | null; yourPosition: number | null; competitorPosition: number | null; opportunity: string }[];
+  rankedKeywords: RankedKwItem[]; // full set of competitor's ranked keywords
   estimatedTraffic: number;
   backlinks: number;
   referringDomains: number;
@@ -53,6 +57,8 @@ export type CompetitorAnalysisResponse = {
   competitors: CompetitorRow[];
   monthlyTraffic: TrafficHistoryPoint[];
   suggestedCompetitors: string[];
+  fromCache?: boolean;
+  cachedAt?: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -61,8 +67,9 @@ export async function POST(req: NextRequest) {
   const userId = (session.user as { id: string }).id;
 
   try {
-    type RequestBody = { domain?: string; competitorDomains?: string[]; location?: number; language?: string };
+    type RequestBody = { domain?: string; competitorDomains?: string[]; location?: number; language?: string; forceRefresh?: boolean };
     const body = (await req.json()) as RequestBody;
+    const forceRefresh = body.forceRefresh === true;
 
     const selectedSite = await getSelectedSiteForUser(userId);
     const domain = normalizeDomain(body.domain || selectedSite?.domain);
@@ -79,6 +86,17 @@ export async function POST(req: NextRequest) {
         suggestedCompetitors: [],
         requiresDomain: true,
       });
+    }
+
+    // Serve from cache if available and fresh
+    if (!forceRefresh) {
+      const cached = await prisma.competitorAnalysisCache.findUnique({
+        where: { userId_domain: { userId, domain } },
+      });
+      if (cached && Date.now() - new Date(cached.updatedAt).getTime() < CACHE_TTL_MS) {
+        const parsed = JSON.parse(cached.data) as CompetitorAnalysisResponse;
+        return Response.json({ ...parsed, fromCache: true, cachedAt: cached.updatedAt.toISOString() });
+      }
     }
 
     const customCompetitors = Array.isArray(body.competitorDomains)
@@ -102,7 +120,7 @@ export async function POST(req: NextRequest) {
     const [yourOverviewResult, suggestedResult, yourRankedResult] = await Promise.allSettled([
       getDomainRankOverview(domain, location, language),
       needSuggested ? getDomainCompetitors(domain, location, language, 10) : Promise.resolve([]),
-      getRankedKeywords(domain, location, language, 100),
+      getRankedKeywords(domain, location, language, 300),
     ]);
 
     const yourOverview = yourOverviewResult.status === "fulfilled" ? yourOverviewResult.value : null;
@@ -135,6 +153,10 @@ export async function POST(req: NextRequest) {
       getBulkTrafficEstimation(allTargets.map((t) => ({ target: t })), location, language),
       getHistoricalBulkTraffic(allTargets, location, language),
     ]);
+    // Pre-fetch ranked keywords for all competitors in parallel
+    const competitorRankedResults = await Promise.allSettled(
+      chosenCompetitors.map((cd) => getRankedKeywords(cd, location, language, 300))
+    );
 
     const bulkTraffic = bulkTrafficResult.status === "fulfilled" ? bulkTrafficResult.value : [];
     const bulkTrafficMap = new Map(bulkTraffic.map((b) => [b.target, b]));
@@ -160,12 +182,16 @@ export async function POST(req: NextRequest) {
 
     // Per-competitor data: common keywords, keyword gap, backlinks
     const competitorRows: CompetitorRow[] = await Promise.all(
-      chosenCompetitors.map(async (compDomain): Promise<CompetitorRow> => {
+      chosenCompetitors.map(async (compDomain, idx): Promise<CompetitorRow> => {
         const [commonResult, gapResult, backlinkResult] = await Promise.allSettled([
-          getCommonKeywords(domain, compDomain, location, language, 200),
-          getKeywordGap(domain, [compDomain], location, language, 200),
+          getCommonKeywords(domain, compDomain, location, language, 500),
+          getKeywordGap(domain, [compDomain], location, language, 500),
           getBacklinkTotalSummary(compDomain),
         ]);
+        const rankedKws: RankedKwItem[] =
+          competitorRankedResults[idx]?.status === "fulfilled"
+            ? (competitorRankedResults[idx] as PromiseFulfilledResult<RankedKwItem[]>).value
+            : [];
 
         const common = commonResult.status === "fulfilled" ? commonResult.value : { count: 0, items: [] };
         const gap = gapResult.status === "fulfilled" ? gapResult.value : [];
@@ -184,6 +210,7 @@ export async function POST(req: NextRequest) {
             competitorPosition: g.competitorPositions[0]?.position ?? null,
             opportunity: g.opportunity,
           })),
+          rankedKeywords: rankedKws,
           estimatedTraffic: traffic?.traffic ?? 0,
           backlinks: backlink.backlinksTotal,
           referringDomains: backlink.referringDomains,
@@ -192,14 +219,23 @@ export async function POST(req: NextRequest) {
       })
     );
 
-    return Response.json({
+    const responseData = {
       domain,
       yourOverview,
       yourRankedKeywords,
       competitors: competitorRows,
       monthlyTraffic,
       suggestedCompetitors: suggestedDomains.slice(0, 15),
-    } satisfies CompetitorAnalysisResponse);
+    } satisfies CompetitorAnalysisResponse;
+
+    // Save to cache (fire and forget — don't block the response)
+    prisma.competitorAnalysisCache.upsert({
+      where: { userId_domain: { userId, domain } },
+      update: { data: JSON.stringify(responseData) },
+      create: { userId, domain, data: JSON.stringify(responseData) },
+    }).catch((err: unknown) => console.error("[competitor cache] save failed:", err));
+
+    return Response.json({ ...responseData, fromCache: false, cachedAt: null });
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : "Competitor analysis failed" },

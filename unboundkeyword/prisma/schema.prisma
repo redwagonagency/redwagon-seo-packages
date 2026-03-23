@@ -30,6 +30,7 @@ model User {
   decisionRuns DecisionRun[]
   dailyIntelDigests DailyIntelDigest[]
   keywordIntelligence KeywordIntelligence[]
+  competitorAnalysisCache CompetitorAnalysisCache[]
 }
 
 model SiteProject {
@@ -334,6 +335,22 @@ model ApiQueryLog {
   @@index([userId])
   @@index([endpoint])
   @@index([createdAt])
+}
+
+// Cached competitor analysis results — stored per user per domain to avoid repeated API calls
+model CompetitorAnalysisCache {
+  id        String   @id @default(cuid())
+  userId    String
+  domain    String
+  // Full JSON blob of CompetitorAnalysisResponse (competitors, keywords, gap, traffic history)
+  data      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domain])
+  @@index([userId])
 }
 
 // Tracks every keyword/domain search a user runs — full session history

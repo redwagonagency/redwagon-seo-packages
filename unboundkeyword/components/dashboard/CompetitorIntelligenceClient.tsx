@@ -161,17 +161,17 @@ export default function CompetitorIntelligenceClient() {
       .catch(() => {});
   }, []);
 
-  // Auto-run when project domain is known (using saved competitors or none)
+  // Auto-run when project domain is known — reads from cache (no API call if cached)
   useEffect(() => {
     if (projectDomain && !didLoad.current) {
       didLoad.current = true;
-      // competitorInputs may have been pre-filled; pass them through
-      void runAnalysis(projectDomain, undefined);
+      // Pass forceRefresh=false so it hits the DB cache first
+      void runAnalysis(projectDomain, undefined, false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectDomain]);
 
-  async function runAnalysis(domain?: string, competitors?: string[]) {
+  async function runAnalysis(domain?: string, competitors?: string[], forceRefresh = true) {
     setLoading(true);
     setError("");
     const domainToUse = domain ?? domainInput.trim();
@@ -183,6 +183,7 @@ export default function CompetitorIntelligenceClient() {
         body: JSON.stringify({
           domain: domainToUse || undefined,
           competitorDomains: compsToUse.length > 0 ? compsToUse : undefined,
+          forceRefresh,
         }),
       });
       const json = (await res.json()) as CompetitorAnalysisResponse & { error?: string };
@@ -227,27 +228,34 @@ export default function CompetitorIntelligenceClient() {
     return modalState.type === "common" ? modalState.row.commonKeywords : modalState.row.keywordGap;
   }, [modalState]);
 
-  // For "ranked" type: all keywords the competitor appears for (common + gap), sorted by position
+  // For "ranked" type: use actual competitor ranked keywords (fetched by API), fall back to combining common+gap
   const modalRankedRows = useMemo((): RankedKwItem[] => {
-    if (modalState.type !== "ranked" || !modalState.row) return [];
-    const row = modalState.row;
-    const combined: RankedKwItem[] = [
-      ...row.commonKeywords.map((k) => ({
-        keyword: k.keyword,
-        position: k.competitorPosition ?? 999,
-        searchVolume: k.volume ?? 0,
-        cpc: null,
-        url: null,
-      })),
-      ...row.keywordGap.map((k) => ({
-        keyword: k.keyword,
-        position: k.competitorPosition ?? 999,
-        searchVolume: k.volume ?? 0,
-        cpc: null,
-        url: null,
-      })),
-    ];
-    return combined.sort((a, b) => a.position - b.position || b.searchVolume - a.searchVolume);
+    if (!modalState.row) return [];
+    if (modalState.type === "ranked") {
+      // Use pre-fetched ranked keywords if available; else synthesize from common+gap
+      if (modalState.row.rankedKeywords && modalState.row.rankedKeywords.length > 0) {
+        return [...modalState.row.rankedKeywords].sort((a, b) => a.position - b.position || b.searchVolume - a.searchVolume);
+      }
+      const row = modalState.row;
+      const combined: RankedKwItem[] = [
+        ...row.commonKeywords.map((k) => ({
+          keyword: k.keyword,
+          position: k.competitorPosition ?? 999,
+          searchVolume: k.volume ?? 0,
+          cpc: null,
+          url: null,
+        })),
+        ...row.keywordGap.map((k) => ({
+          keyword: k.keyword,
+          position: k.competitorPosition ?? 999,
+          searchVolume: k.volume ?? 0,
+          cpc: null,
+          url: null,
+        })),
+      ];
+      return combined.sort((a, b) => a.position - b.position || b.searchVolume - a.searchVolume);
+    }
+    return [];
   }, [modalState]);
 
   return (
@@ -314,10 +322,32 @@ export default function CompetitorIntelligenceClient() {
 
       {data && !loading && (
         <>
-          {/* Header */}
-          <div className="mb-2">
-            <h1 className="text-2xl font-black text-slate-900">Competitor Analysis: <span className="text-[#f15b27]">{domain}</span></h1>
-            <p className="text-sm text-slate-500">Here are the domains that rank for similar keywords</p>
+          {/* Header + cache status */}
+          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h1 className="text-2xl font-black text-slate-900">Competitor Analysis: <span className="text-[#f15b27]">{domain}</span></h1>
+              <p className="text-sm text-slate-500">Here are the domains that rank for similar keywords</p>
+            </div>
+            {data.fromCache && data.cachedAt && (
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-500">
+                <span>
+                  Cached ·{" "}
+                  {(() => {
+                    const ageMs = Date.now() - new Date(data.cachedAt!).getTime();
+                    const ageHrs = Math.floor(ageMs / 3_600_000);
+                    const ageDays = Math.floor(ageMs / 86_400_000);
+                    return ageDays >= 1 ? `${ageDays}d ago` : `${ageHrs}h ago`;
+                  })()}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void runAnalysis(undefined, undefined, true)}
+                  className="font-semibold text-[#f15b27] hover:underline whitespace-nowrap"
+                >
+                  Refresh ↺
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Competitor toggle chips */}
@@ -472,7 +502,7 @@ export default function CompetitorIntelligenceClient() {
                             onClick={() => setModalState({ type: "ranked", row })}
                             className="rounded border border-slate-300 text-slate-600 text-[11px] font-semibold px-2 py-0.5 hover:border-[#f15b27] hover:text-[#f15b27] transition-colors"
                           >
-                            {formatCompact(row.commonKeywordsCount + row.keywordGapCount)} kws ↗
+                            {formatCompact(row.rankedKeywords?.length > 0 ? row.rankedKeywords.length : row.commonKeywordsCount + row.keywordGapCount)} kws ↗
                           </button>
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums font-semibold text-slate-800">
