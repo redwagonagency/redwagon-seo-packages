@@ -4,6 +4,7 @@ import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { JOE_ADMIN_EMAIL } from "@/lib/superadmin";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
@@ -53,11 +54,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id as string },
-          select: { plan: true },
-        });
-        token.plan = dbUser?.plan ?? "free";
+        // Superadmin always gets unlimited agency plan
+        if ((user.email ?? "").toLowerCase() === JOE_ADMIN_EMAIL) {
+          token.plan = "agency";
+        } else {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id as string },
+            select: { plan: true },
+          });
+          token.plan = dbUser?.plan ?? "free";
+        }
       }
       return token;
     },
