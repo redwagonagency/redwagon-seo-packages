@@ -292,8 +292,8 @@ else
 fi
 """, "SSL certificate + conditional nginx SSL config")
 
-    # Install npm deps
-    run(client, f"cd {APP_DIR} && npm ci", "npm ci", timeout=300)
+    # Install npm deps (use install --legacy-peer-deps to avoid lockfile/cache issues)
+    run(client, f"cd {APP_DIR} && npm install --legacy-peer-deps", "npm install", timeout=300)
 
     # Prisma
     run(client, f"""
