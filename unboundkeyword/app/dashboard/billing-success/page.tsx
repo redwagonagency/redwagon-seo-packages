@@ -7,21 +7,40 @@ import Link from "next/link";
 import { PLAN_LABELS, normalizePlan } from "@/lib/plans";
 
 function BillingSuccessInner() {
-  const { update } = useSession();
+  const { data: session, update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const planParam = searchParams.get("plan") ?? "free";
-  const plan = normalizePlan(planParam);
-  const planLabel = PLAN_LABELS[plan];
+  const expectedPlan = normalizePlan(planParam);
+  const planLabel = PLAN_LABELS[expectedPlan];
 
   const [refreshed, setRefreshed] = useState(false);
 
   useEffect(() => {
-    // Force-refresh the JWT so the new plan is reflected immediately
-    update().then(() => setRefreshed(true));
-    // Auto-redirect to dashboard after 4 seconds
-    const timer = setTimeout(() => router.push("/dashboard"), 4000);
-    return () => clearTimeout(timer);
+    // Poll session.update() until the JWT reflects the new plan (webhook may
+    // fire after we land here, so we retry up to ~12 seconds).
+    let attempts = 0;
+    const MAX_ATTEMPTS = 6;
+
+    async function tryRefresh() {
+      const updated = await update();
+      const currentPlan = normalizePlan(
+        (updated?.user as { plan?: string } | undefined)?.plan
+      );
+      if (currentPlan === expectedPlan || attempts >= MAX_ATTEMPTS) {
+        setRefreshed(true);
+        // Redirect to dashboard 2 s after we confirm the plan is active
+        setTimeout(() => router.push("/dashboard"), 2000);
+      } else {
+        attempts++;
+        setTimeout(tryRefresh, 2000);
+      }
+    }
+
+    tryRefresh();
+    // Safety-net redirect after 15 s no matter what
+    const fallbackTimer = setTimeout(() => router.push("/dashboard"), 15000);
+    return () => clearTimeout(fallbackTimer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
