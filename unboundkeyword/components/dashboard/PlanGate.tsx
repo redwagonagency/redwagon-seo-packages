@@ -1,13 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import Link from "next/link";
-
-const PLAN_ORDER = ["free", "solo", "growth", "agency"];
-
-function planIndex(plan: string) {
-  return PLAN_ORDER.indexOf(plan.toLowerCase());
-}
+import { getCheckoutUrl, hasPlanAccess, normalizePlan, PLAN_LABELS } from "@/lib/plans";
 
 interface PlanGateProps {
   /** Minimum plan required, e.g. "solo", "growth", "agency" */
@@ -23,8 +17,9 @@ export default function PlanGate({ requiredPlan, feature, children }: PlanGatePr
 
   if (status === "loading") return null;
 
-  const plan = ((session?.user as { plan?: string })?.plan ?? "free").toLowerCase();
-  const hasAccess = planIndex(plan) >= planIndex(requiredPlan);
+  const plan = normalizePlan((session?.user as { plan?: string })?.plan);
+  const normalizedRequiredPlan = normalizePlan(requiredPlan);
+  const hasAccess = hasPlanAccess(plan, normalizedRequiredPlan);
 
   if (hasAccess) return <>{children}</>;
 
@@ -35,17 +30,17 @@ export default function PlanGate({ requiredPlan, feature, children }: PlanGatePr
         <h2 className="text-xl font-black text-slate-800 mb-2">{feature}</h2>
         <p className="text-slate-500 text-sm mb-2">
           This feature requires the{" "}
-          <span className="font-bold text-[#f15b27] capitalize">{requiredPlan}</span> plan or above.
+          <span className="font-bold text-[#f15b27] capitalize">{PLAN_LABELS[normalizedRequiredPlan]}</span> plan or above.
         </p>
         <p className="text-slate-400 text-xs mb-6">
-          Your current plan: <span className="font-semibold capitalize">{plan}</span>
+          Your current plan: <span className="font-semibold capitalize">{PLAN_LABELS[plan]}</span>
         </p>
-        <Link
-          href="/pricing"
+        <a
+          href={getCheckoutUrl(normalizedRequiredPlan)}
           className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white text-sm font-bold px-8 py-3 hover:opacity-90 transition shadow-md"
         >
-          View Plans &amp; Upgrade →
-        </Link>
+          See Upgrade Options →
+        </a>
         <div className="mt-6 grid grid-cols-3 gap-3 text-left">
           {[
             { plan: "Solo", price: "$25/mo", perks: ["25 keyword hunts", "300 lookups", "5 lists"] },

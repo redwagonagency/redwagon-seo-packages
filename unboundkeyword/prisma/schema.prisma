@@ -16,6 +16,8 @@ model User {
   password      String?
   role          String    @default("USER")
   plan          String    @default("free")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -32,6 +34,8 @@ model User {
   dailyIntelDigests DailyIntelDigest[]
   keywordIntelligence KeywordIntelligence[]
   competitorAnalysisCache CompetitorAnalysisCache[]
+  keywordOverviewHistory KeywordOverviewHistory[]
+  competitorKeywords CompetitorKeyword[]
   apiQueryLogs ApiQueryLog[]
 }
 
@@ -372,6 +376,54 @@ model CompetitorAnalysisCache {
 
   @@unique([userId, domain])
   @@index([userId])
+}
+
+// ─── Saved Keyword Overview Searches ────────────────────────────────────────
+
+model KeywordOverviewHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  keyword      String
+  domain       String?
+  searchVolume Int?
+  difficulty   Int?
+  cpc          Float?
+  competition  Float?
+  intent       String?
+  payloadJson  String   // full serialized response for re-hydration
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@unique([userId, keyword])
+}
+
+// ─── Competitor Keyword Store ─────────────────────────────────────────────────
+// Stores individual ranked keywords per competitor for fast gap analysis
+model CompetitorKeyword {
+  id               String   @id @default(cuid())
+  userId           String
+  yourDomain       String
+  competitorDomain String
+  keyword          String
+  position         Int
+  searchVolume     Int?
+  cpc              Float?
+  url              String?
+  estTraffic       Float?
+  // Whether this keyword is a "gap" (they rank, you don't / you rank much lower)
+  isGap            Boolean  @default(false)
+  yourPosition     Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, yourDomain, competitorDomain, keyword])
+  @@index([userId, yourDomain])
+  @@index([userId, yourDomain, competitorDomain])
+  @@index([userId, yourDomain, isGap])
 }
 
 // Tracks every keyword/domain search a user runs — full session history

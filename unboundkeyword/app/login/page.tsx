@@ -2,15 +2,22 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Support ?callbackUrl= (from checkout redirect) and ?plan= (from register flow)
+  const callbackUrl = searchParams.get("callbackUrl");
+  const planParam = searchParams.get("plan");
+  const redirectTarget =
+    callbackUrl ?? (planParam ? `/api/billing/checkout?plan=${planParam}` : "/dashboard");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +32,12 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Invalid email or password");
     } else {
-      router.push("/dashboard");
+      // Use hard navigation for API routes so the browser follows the redirect properly
+      if (redirectTarget.startsWith("/api/")) {
+        window.location.href = redirectTarget;
+      } else {
+        router.push(redirectTarget);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import ProjectRequiredGate from "@/components/dashboard/ProjectRequiredGate";
 import { isJoeSuperAdmin } from "@/lib/superadmin";
 import PlanUpgradeBanner from "@/components/dashboard/PlanUpgradeBanner";
 import PageInsightCard from "@/components/dashboard/PageInsightCard";
+import { hasPlanAccess, normalizePlan, PLAN_LABELS } from "@/lib/plans";
 
 const NAV_GROUPS = [
   {
@@ -36,10 +37,10 @@ const NAV_GROUPS = [
       ) },
       { href: "/dashboard/local-keywords", label: "Local Keywords", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-      ) },
+      ), requiredPlan: "growth" },
       { href: "/dashboard/keyword-intent", label: "Keyword Intent", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-      ) },
+      ), requiredPlan: "growth" },
       { href: "/dashboard/hashtags", label: "Hashtag Research", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" /></svg>
       ) },
@@ -73,7 +74,7 @@ const NAV_GROUPS = [
       ) },
       { href: "/dashboard/decision-engine/content-map", label: "AI Content Map", icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
-      ) },
+      ), requiredPlan: "growth" },
     ],
   },
   {
@@ -102,8 +103,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: session } = useSession();
   const userName = session?.user?.name ?? "";
   const userEmail = session?.user?.email ?? "";
-  const userPlan = ((session?.user as { plan?: string })?.plan ?? "free").toLowerCase();
-  const planLabel = { free: "Free", solo: "Solo", growth: "Growth", agency: "Agency" }[userPlan] ?? "Free";
+  const userPlan = normalizePlan((session?.user as { plan?: string })?.plan);
+  const planLabel = PLAN_LABELS[userPlan];
   const canAccessSuperadmin = isJoeSuperAdmin(userEmail);
   const [projectCheckLoading, setProjectCheckLoading] = useState(true);
   const [hasProject, setHasProject] = useState(false);
@@ -161,6 +162,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 const query = item.href.includes("?") ? item.href.split("?")[1] : "";
                 const itemView = query.startsWith("view=") ? query.slice(5) : "";
                 const isCompetitorBase = normalizedHref === "/dashboard/competitor" && !itemView;
+                const itemRequiredPlan = "requiredPlan" in item ? item.requiredPlan : null;
+                const itemLocked = itemRequiredPlan ? !hasPlanAccess(userPlan, itemRequiredPlan) : false;
                 const active = itemView
                   ? path === normalizedHref && currentView === itemView
                   : isCompetitorBase
@@ -180,7 +183,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     )}
                   >
                     <NavIcon>{item.icon}</NavIcon>
-                    {item.label}
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    {itemRequiredPlan ? (
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide",
+                          itemLocked
+                            ? "bg-amber-100 text-amber-700 border border-amber-200"
+                            : "bg-slate-100 text-slate-500 border border-slate-200"
+                        )}
+                      >
+                        {itemLocked ? `Lock ${PLAN_LABELS[normalizePlan(itemRequiredPlan)]}` : PLAN_LABELS[normalizePlan(itemRequiredPlan)]}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -197,6 +212,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-2.2 0-4 1.8-4 4m4-4c2.2 0 4 1.8 4 4m-4-4v-2m0 10v2m8-6h-2M6 12H4m12.95 4.95-1.4-1.4M8.45 8.45l-1.4-1.4m9.9 0-1.4 1.4m-7.1 7.1-1.4 1.4" /></svg>
               Superadmin
+            </Link>
+          ) : null}
+          {userPlan !== "free" ? (
+            <Link
+              href="/api/billing/portal"
+              className="mb-2 w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-700 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+              Manage Billing
             </Link>
           ) : null}
           <button

@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { normalizePlan } from "@/lib/plans";
 
 const CHECK = <span className="text-[#f97316] text-base shrink-0">✓</span>;
 const DASH  = <span className="text-white/25 shrink-0">–</span>;
@@ -101,6 +104,27 @@ const PLANS = [
 ];
 
 export default function PricingPage() {
+  const searchParams = useSearchParams();
+  const highlightedPlan = normalizePlan(searchParams.get("plan"));
+  const { data: session } = useSession();
+  const isLoggedIn = !!session?.user;
+
+  /**
+   * For paid plans: logged-in users go straight to Stripe checkout;
+   * new visitors register first (which then redirects to checkout).
+   */
+  function ctaHref(planKey: string): string {
+    if (planKey === "free") return "/register?plan=free";
+    if (isLoggedIn) return `/api/billing/checkout?plan=${planKey}`;
+    return `/register?plan=${planKey}`;
+  }
+
+  function ctaLabel(plan: { name: string; cta: string }): string {
+    const planKey = plan.name.toLowerCase();
+    if (planKey === "free") return plan.cta;
+    return isLoggedIn ? `Upgrade to ${plan.name}` : plan.cta;
+  }
+
   return (
     <main className="ubk-bg min-h-screen text-white">
       {/* Nav */}
@@ -137,14 +161,28 @@ export default function PricingPage() {
       <section className="max-w-6xl mx-auto px-6 pb-16">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {PLANS.map((plan) => (
+            (() => {
+              const planKey = plan.name.toLowerCase();
+              const isHighlighted = highlightedPlan === planKey;
+
+              return (
             <div
               key={plan.name}
               className={`rounded-2xl p-8 flex flex-col relative ${
-                plan.popular
+                isHighlighted
+                  ? "bg-slate-900/80 border-2 border-[#f97316] shadow-[0_0_0_1px_rgba(249,115,22,0.35)]"
+                  : plan.popular
                   ? "bg-slate-900/70 border border-[rgba(241,91,39,0.45)] md:scale-105 md:z-10"
                   : "bg-slate-900/40 border border-white/[0.07]"
               }`}
             >
+              {isHighlighted && (
+                <div className="absolute -top-4 right-5">
+                  <div className="bg-[#f97316] text-white text-[11px] font-black px-3 py-1.5 rounded-full shadow-lg">
+                    Recommended for this feature
+                  </div>
+                </div>
+              )}
               {plan.popular && (
                 <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                   <div className="bg-gradient-to-r from-[#ea580c] to-[#f97316] text-white text-xs font-bold px-4 py-1.5 rounded-full whitespace-nowrap shadow-lg">
@@ -181,18 +219,20 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Link
-                href={plan.ctaHref}
+              <a
+                href={ctaHref(plan.name.toLowerCase())}
                 className={`w-full text-center font-bold py-3 rounded-full text-sm block transition ${
                   plan.popular
                     ? "ubk-btn-primary"
                     : "border border-white/20 text-white/80 hover:border-[rgba(241,91,39,0.5)] hover:text-white"
                 }`}
               >
-                {plan.cta}
-              </Link>
-              <p className="text-white/30 text-xs text-center mt-3">{plan.name === "Free" ? "Use free forever with monthly limits" : "Payment required at signup"}</p>
+                {ctaLabel(plan)}
+              </a>
+              <p className="text-white/30 text-xs text-center mt-3">{plan.name === "Free" ? "Use free forever with monthly limits" : "Secure checkout via Stripe"}</p>
             </div>
+              );
+            })()
           ))}
         </div>
 

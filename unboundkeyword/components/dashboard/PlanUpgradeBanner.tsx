@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { getCheckoutUrl, getNextPlan, normalizePlan, PLAN_LABELS, type UserPlan } from "@/lib/plans";
 
 const PLAN_LIMITS: Record<string, { label: string; hunts: number; lookups: number; lists: number; savedKw: number }> = {
   free:   { label: "Free",   hunts: 10,  lookups: 120,   lists: 2,   savedKw: 200 },
@@ -17,17 +17,23 @@ const LOCKED_FEATURES_BY_PLAN: Record<string, string[]> = {
   agency: [],
 };
 
+const NEXT_PLAN_COPY: Record<Exclude<UserPlan, "agency">, string> = {
+  free: "Solo ($25/mo)",
+  solo: "Growth ($49/mo)",
+  growth: "Agency ($99/mo)",
+};
+
 export default function PlanUpgradeBanner() {
   const { data: session } = useSession();
-  const plan = ((session?.user as { plan?: string })?.plan ?? "free").toLowerCase();
+  const plan = normalizePlan((session?.user as { plan?: string })?.plan);
 
   if (plan === "agency") return null; // fully unlocked
 
   const limits = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
   const lockedFeatures = LOCKED_FEATURES_BY_PLAN[plan] ?? LOCKED_FEATURES_BY_PLAN.free;
-
-  const nextPlan = plan === "free" ? "Solo ($25/mo)" : plan === "solo" ? "Growth ($49/mo)" : plan === "growth" ? "Agency ($99/mo)" : null;
-  const upgradeHref = plan === "free" ? "/pricing" : "/pricing";
+  const nextPlan = getNextPlan(plan);
+  const nextPlanCopy = nextPlan ? NEXT_PLAN_COPY[plan] : null;
+  const upgradeHref = nextPlan ? getCheckoutUrl(nextPlan) : "/pricing";
 
   return (
     <div className="mx-0 mb-4 rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 flex flex-wrap items-start gap-3">
@@ -47,13 +53,13 @@ export default function PlanUpgradeBanner() {
           </p>
         )}
       </div>
-      {nextPlan && (
-        <Link
+      {nextPlan && nextPlanCopy && (
+        <a
           href={upgradeHref}
           className="shrink-0 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white text-xs font-bold px-4 py-2 hover:opacity-90 transition shadow-sm"
         >
-          ↑ Upgrade to {nextPlan}
-        </Link>
+          ↑ Upgrade to {nextPlanCopy}
+        </a>
       )}
     </div>
   );
@@ -61,6 +67,8 @@ export default function PlanUpgradeBanner() {
 
 /** Drop this over any feature that's locked on the current plan */
 export function FeatureLockOverlay({ feature, requiredPlan = "Growth" }: { feature: string; requiredPlan?: string }) {
+  const normalizedRequiredPlan = normalizePlan(requiredPlan);
+
   return (
     <div className="relative rounded-2xl overflow-hidden">
       {/* Blurred content placeholder */}
@@ -69,14 +77,14 @@ export function FeatureLockOverlay({ feature, requiredPlan = "Growth" }: { featu
         <div>
           <p className="font-bold text-slate-800 text-sm mb-1">{feature} — Upgrade Required</p>
           <p className="text-xs text-slate-500 mb-4">
-            This feature is available on the <span className="font-semibold text-[#f15b27]">{requiredPlan}</span> plan and above.
+            This feature is available on the <span className="font-semibold text-[#f15b27]">{PLAN_LABELS[normalizedRequiredPlan]}</span> plan and above.
           </p>
-          <Link
-            href="/pricing"
+          <a
+            href={getCheckoutUrl(normalizedRequiredPlan)}
             className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white text-xs font-bold px-5 py-2.5 hover:opacity-90 transition shadow"
           >
-            View Plans & Upgrade
-          </Link>
+            See Upgrade Options
+          </a>
         </div>
       </div>
       {/* Blurred preview */}

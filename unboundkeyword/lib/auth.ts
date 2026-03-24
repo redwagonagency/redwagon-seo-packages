@@ -55,18 +55,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
-        // Superadmin always gets unlimited agency plan
-        if ((user.email ?? "").toLowerCase() === JOE_ADMIN_EMAIL) {
-          token.plan = "agency";
-        } else {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: user.id as string },
-            select: { plan: true },
-          });
-          token.plan = dbUser?.plan ?? "free";
+      }
+      // Re-fetch plan on first sign-in OR when session.update() is called
+      // (trigger === "update") — this picks up Stripe-activated plan changes.
+      if (user || trigger === "update") {
+        const id = (user?.id ?? token.id) as string | undefined;
+        if (id) {
+          if ((user?.email ?? token.email ?? "").toLowerCase() === JOE_ADMIN_EMAIL) {
+            token.plan = "agency";
+          } else {
+            const dbUser = await prisma.user.findUnique({
+              where: { id },
+              select: { plan: true },
+            });
+            token.plan = dbUser?.plan ?? "free";
+          }
         }
       }
       return token;

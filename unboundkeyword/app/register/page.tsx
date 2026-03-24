@@ -1,17 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Capture plan from URL so we can route to Stripe after sign-up
+  const planParam = searchParams.get("plan") ?? "free";
+  const isPaidPlan = planParam !== "free";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,11 +28,32 @@ export default function RegisterPage() {
       body: JSON.stringify({ name, email, password }),
     });
     const data = await res.json();
-    setLoading(false);
     if (!res.ok) {
+      setLoading(false);
       setError(data.error || "Registration failed");
+      return;
+    }
+
+    // Auto-sign in after successful registration
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    setLoading(false);
+
+    if (result?.error) {
+      // Sign-in failed — send to login with plan hint
+      router.push(isPaidPlan ? `/login?plan=${planParam}` : "/login?registered=1");
+      return;
+    }
+
+    // Redirect paid plans straight to Stripe checkout; free plan to dashboard
+    if (isPaidPlan) {
+      window.location.href = `/api/billing/checkout?plan=${planParam}`;
     } else {
-      router.push("/login?registered=1");
+      router.push("/dashboard");
     }
   }
 
