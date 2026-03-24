@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { normalizePlan } from "@/lib/plans";
+import { Suspense } from "react";
 
 const CHECK = <span className="text-[#f97316] text-base shrink-0">✓</span>;
 const DASH  = <span className="text-white/25 shrink-0">–</span>;
@@ -103,7 +104,7 @@ const PLANS = [
   },
 ];
 
-export default function PricingPage() {
+function PricingInner() {
   const searchParams = useSearchParams();
   const highlightedPlan = normalizePlan(searchParams.get("plan"));
   const { data: session } = useSession();
@@ -358,5 +359,13 @@ export default function PricingPage() {
         <Link href="/terms" className="hover:text-white/60 transition">Terms</Link>
       </footer>
     </main>
+  );
+}
+
+export default function PricingPage() {
+  return (
+    <Suspense>
+      <PricingInner />
+    </Suspense>
   );
 }

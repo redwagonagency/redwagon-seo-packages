@@ -11,9 +11,6 @@ function customerIdFrom(
   return typeof c === "string" ? c : c.id;
 }
 
-// Must disable Next.js body parser so we can validate the raw body signature
-export const config = { api: { bodyParser: false } };
-
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
   const signature = req.headers.get("stripe-signature");
