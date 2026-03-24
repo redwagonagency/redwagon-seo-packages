@@ -22,8 +22,8 @@ SRC_DIR = os.path.join(GITHUB_WORKSPACE, "unboundkeyword")
 
 # ── Credentials ───────────────────────────────────────────────────────────────
 NEXTAUTH_SECRET      = "ubk-prod-secret-2025-xK9mPq3wL7vN5rTy"
-GOOGLE_CLIENT_ID     = "311730143264-21mm0e88tvh72lviq18qbtrjfuqog44f.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
+GOOGLE_CLIENT_ID     = os.environ.get("UBK_GOOGLE_CLIENT_ID", "311730143264-21mm0e88tvh72lviq18qbtrjfuqog44f.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = os.environ.get("UBK_GOOGLE_CLIENT_SECRET", "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")
 DATAFORSEO_LOGIN     = os.environ.get("DATAFORSEO_LOGIN", "joe@redwagon.agency")
 DATAFORSEO_PASSWORD  = os.environ.get("DATAFORSEO_PASSWORD", "8e2f935e765ad0c7")
 
