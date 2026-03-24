@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PLAN_LABELS, normalizePlan } from "@/lib/plans";
 
-export default function BillingSuccessPage() {
+function BillingSuccessInner() {
   const { update } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -57,5 +57,13 @@ export default function BillingSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BillingSuccessPage() {
+  return (
+    <Suspense>
+      <BillingSuccessInner />
+    </Suspense>
   );
 }
