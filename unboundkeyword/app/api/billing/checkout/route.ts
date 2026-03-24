@@ -56,13 +56,30 @@ export async function GET(req: NextRequest) {
   const stripe = getStripe();
   const origin = appOrigin(req);
 
-  // Ensure user has a Stripe customer ID
+  // Ensure user has a valid Stripe customer ID in the current mode (live/test)
   let stripeCustomerId: string | null = null;
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
     select: { stripeCustomerId: true },
   });
   stripeCustomerId = dbUser?.stripeCustomerId ?? null;
+
+  // Validate existing customer ID — it may be from a different Stripe mode
+  // (e.g. test-mode cus_ ID stored when switching to live mode)
+  if (stripeCustomerId) {
+    try {
+      await stripe.customers.retrieve(stripeCustomerId);
+    } catch (err: unknown) {
+      const stripeErr = err as { code?: string };
+      if (stripeErr?.code === "resource_missing") {
+        // Stale ID from wrong mode — clear it so we create a fresh one below
+        stripeCustomerId = null;
+        await prisma.user.update({ where: { id: userId }, data: { stripeCustomerId: null } });
+      } else {
+        throw err;
+      }
+    }
+  }
 
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
