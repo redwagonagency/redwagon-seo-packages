@@ -13,6 +13,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      // Allow linking a Google account to an existing credentials account with
+      // the same email. Required for the GA4/GSC "connect" flow where the user
+      // is already signed in via email/password.
+      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           prompt: "consent",
