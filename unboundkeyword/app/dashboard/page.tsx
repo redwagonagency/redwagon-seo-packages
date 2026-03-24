@@ -1,6 +1,7 @@
 import Link from "next/link";
 import IntegrationConnectPanel from "@/components/dashboard/IntegrationConnectPanel";
 import AutoConnectHandler from "@/components/dashboard/AutoConnectHandler";
+import TrafficInsightsWidget from "@/components/dashboard/TrafficInsightsWidget";
 import { auth } from "@/lib/auth";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
@@ -116,6 +117,11 @@ export default async function DashboardPage() {
           <div className="text-4xl font-black text-slate-900">{keywordCount}</div>
         </div>
       </div>
+
+      {/* Traffic & Search Performance — shown when GA4 or GSC is connected */}
+      {(selectedSite?.ga4Connected || selectedSite?.gscConnected) && (
+        <TrafficInsightsWidget />
+      )}
 
       {/* Joe Insight — positioned between stats and nav cards */}
       <div className="mb-6 rounded-2xl border border-[#f15b27]/20 bg-[#fff8f5] p-5">
