@@ -42,3 +42,7 @@ README.deploy.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# runtime data (contains prod DB) and logs
+/data/
+/logs/
