@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markitech — The master MCP for marketing technology</title>
+<meta name="description" content="Markitech connects your AI to every marketing platform you run: ads, analytics and tags, in one conversation. Every change waits for your approval.">
+<link rel="canonical" href="https://markitech.app/"><meta name="robots" content="index,follow">
+<meta property="og:type" content="website"><meta property="og:site_name" content="Markitech"><meta property="og:title" content="Markitech — The master MCP for marketing technology"><meta property="og:description" content="Markitech connects your AI to every marketing platform you run: ads, analytics and tags, in one conversation. Every change waits for your approval."><meta property="og:url" content="https://markitech.app/"><meta property="og:image" content="https://markitech.app/media/scene1-title.jpg"><meta property="og:image:width" content="1920"><meta property="og:image:height" content="1080">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Markitech — The master MCP for marketing technology"><meta name="twitter:description" content="Markitech connects your AI to every marketing platform you run: ads, analytics and tags, in one conversation. Every change waits for your approval."><meta name="twitter:image" content="https://markitech.app/media/scene1-title.jpg">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "Markitech", "url": "https://markitech.app/", "logo": "https://markitech.app/apple-touch-icon.png"}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "Markitech", "url": "https://markitech.app/"}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Markitech", "applicationCategory": "BusinessApplication", "operatingSystem": "Web", "url": "https://markitech.app/", "description": "Markitech connects your AI to every marketing platform you run: ads, analytics and tags, in one conversation. Every change waits for your approval.", "offers": {"@type": "AggregateOffer", "lowPrice": "79", "highPrice": "249", "priceCurrency": "USD", "offerCount": "2"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What can Markitech read without asking?", "acceptedAnswer": {"@type": "Answer", "text": "Reporting and lookups — campaign lists, performance metrics, GA4 reports, and similar read-only data — run automatically so you don’t have to approve every question you ask."}}, {"@type": "Question", "name": "How are my credentials stored?", "acceptedAnswer": {"@type": "Answer", "text": "OAuth tokens are encrypted at rest and never leave Markitech’s servers. Markitech connects to your accounts through each platform’s own authorization flow — it never sees or stores your platform password."}}, {"@type": "Question", "name": "Which platforms are supported right now?", "acceptedAnswer": {"@type": "Answer", "text": "Google Ads, Google Analytics 4, Google Tag Manager, Search Console, Merchant Center, Business Profile, Display & Video 360, BigQuery, Google Sheets, Docs and Slides, Meta Ads, Facebook Pages, Instagram, WhatsApp Business and WordPress — 16 platforms today. LinkedIn Ads, Microsoft Advertising and TikTok Ads are coming soon."}}, {"@type": "Question", "name": "Is this affiliated with any other marketing AI product?", "acceptedAnswer": {"@type": "Answer", "text": "No. Markitech is an independent product, built from scratch, not affiliated with or reselling any other company’s service."}}]}</script>
+<link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+<style>@font-face{font-family:'Inter';font-style:normal;font-display:swap;font-weight:100 900;src:url(/fonts/inter-latin-var.woff2) format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+
+:root{
+  --p-50:#eff6ff; --p-100:#abceff; --p-400:#3186ff; --p-500:#086eff; --p-600:#0055cf; --p-700:#003e97;
+  --navy-900:#001027; --navy-950:#00040b;
+  --g-900:#111827; --g-700:#374151; --g-500:#6b7280; --g-200:#e5e7eb; --g-100:#f3f4f6; --g-50:#f9fafb;
+  --btn-grad:linear-gradient(to right,#5a9eff,#3186ff,#086eff);
+  --glow:0 4px 12px rgba(8,110,255,.08),0 0 12px rgba(8,110,255,.15);
+  --wrap:1152px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--g-900);background:#fff;line-height:1.5;font-size:16px;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+img,svg{display:block;max-width:100%}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px}
+.dotted{background-image:radial-gradient(circle at 1px 1px,#e5e7eb 1px,transparent 0);background-size:24px 24px}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:500 14px/1 Inter,sans-serif;padding:11px 18px;border-radius:6px;border:0;cursor:pointer;transition:transform .15s,box-shadow .15s,background .15s;box-shadow:0 1px 2px rgba(0,0,0,.05);white-space:nowrap}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background-image:var(--btn-grad);color:#fff}
+.btn-primary:hover{box-shadow:0 6px 18px rgba(8,110,255,.35)}
+.btn-white{background:#fff;color:#0f172a}
+.btn-white:hover{box-shadow:0 6px 18px rgba(0,0,0,.15)}
+.btn-ghost{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.35);backdrop-filter:blur(6px)}
+.btn-ghost:hover{background:rgba(255,255,255,.22)}
+.btn-lg{padding:14px 24px;font-size:15px}
+
+/* nav */
+header.nav{position:fixed;top:0;left:0;right:0;z-index:50;border-bottom:1px solid transparent;transition:background .25s,border-color .25s,backdrop-filter .25s}
+header.nav.scrolled{background:rgba(255,255,255,.86);backdrop-filter:blur(12px);border-color:var(--g-100)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:60px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:19px;letter-spacing:.14em;text-transform:uppercase;color:#fff;transition:color .25s}
+.logo svg{width:30px;height:20px}
+.scrolled .logo{color:var(--g-900)}
+.nav-links{display:none;gap:30px;font-size:14px;font-weight:500;color:rgba(255,255,255,.92)}
+.scrolled .nav-links{color:var(--g-700)}
+.nav-links a:hover{opacity:.7}
+.nav-cta{display:none;gap:10px;align-items:center}
+.nav-login{font-size:14px;font-weight:500;color:#fff;padding:8px 10px}
+.scrolled .nav-login{color:var(--g-700)}
+@media(min-width:860px){.nav-links,.nav-cta{display:flex}}
+.menu-btn{display:block;background:none;border:0;color:#fff;padding:6px;cursor:pointer}
+.scrolled .menu-btn{color:var(--g-900)}
+@media(min-width:860px){.menu-btn{display:none}}
+.mobile{display:none;position:fixed;inset:60px 0 auto 0;background:#fff;padding:16px 20px 24px;border-bottom:1px solid var(--g-100);z-index:49;box-shadow:0 20px 40px rgba(0,0,0,.08)}
+.mobile.open{display:block}
+.mobile a{display:block;padding:12px 0;font-weight:500;color:var(--g-700);border-bottom:1px solid var(--g-100)}
+.mobile .btn{margin-top:16px;width:100%;color:#fff;border-bottom:0}
+
+/* hero */
+.hero{position:relative;overflow:hidden;padding:128px 0 0;color:#fff;text-align:center}
+.sky{position:absolute;inset:0;background:linear-gradient(#125dd8,#2779ed 24%,#67a8ff,#b7d5ff 68%,#edf5ff 86%,#fff)}
+.grain{position:absolute;inset:0;opacity:.07;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.vignette{position:absolute;inset:0;background:radial-gradient(86% 34% at 50% 22%,rgba(255,255,255,.16),transparent 72%)}
+.cloud{position:absolute;background:#fff;border-radius:999px;filter:blur(28px);opacity:.55;animation:drift 38s ease-in-out infinite alternate}
+.c1{width:300px;height:90px;left:-80px;top:170px}
+.c2{width:380px;height:110px;right:-120px;top:130px;animation-delay:-12s}
+.c3{width:460px;height:130px;left:12%;top:430px;opacity:.4;animation-delay:-20s}
+.c4{width:340px;height:100px;right:6%;top:520px;opacity:.45;animation-delay:-6s}
+@keyframes drift{from{transform:translateX(-24px)}to{transform:translateX(34px)}}
+.hero .wrap{position:relative;z-index:2}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:500;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);backdrop-filter:blur(8px);margin-bottom:26px}
+.badge i{width:7px;height:7px;border-radius:50%;background:#7dffb3;box-shadow:0 0 8px #7dffb3}
+h1{font-size:clamp(2.1rem,9vw,4.5rem);font-weight:600;letter-spacing:-.045em;line-height:1.08;margin-bottom:22px}
+.glass{display:inline;color:transparent;background:linear-gradient(#fff 10%,#eff8ff 40%,#9dccff 90%) text;-webkit-background-clip:text;background-clip:text}
+.lede{max-width:672px;margin:0 auto 32px;font-size:clamp(1rem,2.4vw,1.15rem);line-height:1.6;color:rgba(255,255,255,.95)}
+.hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+.fine{margin-top:16px;font-size:13px;color:rgba(255,255,255,.85)}
+
+/* chat mock */
+.mock{position:relative;z-index:2;max-width:760px;margin:56px auto 0;background:#fff;color:var(--g-900);border-radius:12px 12px 0 0;border:1px solid var(--g-100);border-bottom:0;box-shadow:0 -4px 40px rgba(8,110,255,.18),0 20px 60px rgba(0,16,39,.18);text-align:left;overflow:hidden}
+.mock-bar{display:flex;align-items:center;gap:7px;padding:12px 16px;border-bottom:1px solid var(--g-100);background:var(--g-50);font-size:12px;color:var(--g-500)}
+.mock-bar i{width:10px;height:10px;border-radius:50%;background:var(--g-200)}
+.mock-bar span{margin-left:8px}
+.mock-body{padding:22px 20px 26px;display:grid;gap:14px}
+.msg{max-width:86%;padding:11px 15px;border-radius:12px;font-size:14.5px;line-height:1.5}
+.me{justify-self:end;background:var(--btn-grad);color:#fff;border-bottom-right-radius:4px}
+.ai{background:var(--g-100);color:var(--g-700);border-bottom-left-radius:4px}
+.approval{border:1px solid #cfe0ff;background:var(--p-50);border-radius:10px;padding:14px 16px;max-width:92%;box-shadow:var(--glow)}
+.approval b{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--p-600);margin-bottom:6px}
+.approval p{font-size:14px;color:var(--g-700);margin-bottom:12px}
+.approval .row{display:flex;gap:8px}
+.approval .btn{padding:8px 14px;font-size:13px}
+.btn-line{background:#fff;color:var(--g-700);border:1px solid var(--g-200)}
+
+/* sections */
+section{position:relative}
+.sec{padding:80px 0}
+@media(min-width:760px){.sec{padding:112px 0}}
+.eyebrow{display:inline-block;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--p-600);margin-bottom:14px}
+h2{font-size:clamp(1.9rem,5.5vw,3rem);font-weight:600;letter-spacing:-.03em;line-height:1.12;color:var(--g-900)}
+.sub{max-width:680px;margin-top:16px;color:var(--g-500);font-size:17px;line-height:1.6}
+.center{text-align:center}.center .sub{margin-left:auto;margin-right:auto}
+.chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:30px}
+.chip{font-size:14px;font-weight:500;color:var(--g-700);background:#fff;border:1px solid var(--g-100);border-radius:999px;padding:8px 16px;box-shadow:var(--glow)}
+
+/* cards */
+.grid{display:grid;gap:18px;margin-top:48px}
+@media(min-width:640px){.grid.g2{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:960px){.grid.g3{grid-template-columns:repeat(3,1fr)}.grid.g4{grid-template-columns:repeat(4,1fr)}}
+.card{background:#fff;border:1px solid var(--g-100);border-radius:8px;padding:22px;box-shadow:var(--glow);transition:transform .2s,box-shadow .2s}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 28px rgba(8,110,255,.16),0 0 14px rgba(8,110,255,.18)}
+.card h3{font-size:17px;font-weight:600;margin:14px 0 8px;letter-spacing:-.01em}
+.card p{font-size:14.5px;color:var(--g-500);line-height:1.6}
+.tag{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--p-600)}
+.ico{width:28px;height:28px;border-radius:7px;background:var(--p-50);border:1px solid #d6e6ff;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--p-600)}
+.quote{font-style:italic;color:var(--g-700)}
+
+/* dark band */
+.dark{background:linear-gradient(var(--navy-900),var(--navy-950),var(--navy-900));color:#fff;overflow:hidden;isolation:isolate}
+.dark::before{content:"";position:absolute;width:640px;height:640px;left:50%;top:-320px;transform:translateX(-50%);background:radial-gradient(circle,rgba(8,110,255,.35),transparent 65%);z-index:-1}
+.dark h2{color:#fff}.dark .sub{color:rgba(255,255,255,.7)}.dark .eyebrow{color:var(--p-100)}
+.dcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:26px;backdrop-filter:blur(6px)}
+.dcard h3{font-size:19px;font-weight:600;margin-bottom:10px;letter-spacing:-.01em}
+.dcard p{color:rgba(255,255,255,.68);font-size:15px;line-height:1.6}
+.dnum{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:var(--btn-grad);font-weight:600;font-size:14px;margin-bottom:18px}
+
+/* integrations */
+.int{display:flex;align-items:center;gap:14px}
+.int .ico{width:40px;height:40px;font-size:13px;flex:none}
+.int h3{margin:0;font-size:16px}
+.pill{display:inline-block;margin-top:4px;font-size:12px;font-weight:500;color:var(--p-600);background:var(--p-50);border:1px solid #d6e6ff;border-radius:999px;padding:3px 10px}.pill.soon-pill{color:#8a5a00;background:#fff4dc}
+
+.vid{max-width:960px;margin:40px auto 0;border-radius:12px;overflow:hidden;background:#0b1220;border:1px solid var(--g-100);box-shadow:0 10px 30px rgba(8,110,255,.18),0 0 14px rgba(8,110,255,.15)}
+.vid video{display:block;width:100%;height:auto;aspect-ratio:16/9;background:#0b1220}
+/* steps */
+.step .dnum{margin-bottom:16px}
+.step{padding:6px 0}
+.step h3{font-size:19px;font-weight:600;margin-bottom:8px;letter-spacing:-.01em}
+.step p{color:var(--g-500);font-size:15px;line-height:1.6}
+
+/* pricing */
+.price{max-width:460px;margin:48px auto 0;background:#fff;border-radius:8px;padding:32px;box-shadow:0 4px 12px rgba(8,110,255,.1),0 0 0 1px var(--g-200);position:relative}
+.price .pop{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background-image:var(--btn-grad);color:#fff;font-size:12px;font-weight:600;padding:4px 14px;border-radius:999px;letter-spacing:.03em}
+.price h3{font-size:14px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--p-600)}
+.amt{font-size:48px;font-weight:600;letter-spacing:-.04em;margin:10px 0 4px}
+.amt small{font-size:16px;font-weight:500;color:var(--g-500);letter-spacing:0}
+.price .note{font-size:14px;color:var(--g-500);margin-bottom:22px}
+.price ul{list-style:none;display:grid;gap:12px;margin:24px 0 28px}
+.price li{display:flex;gap:10px;font-size:15px;color:var(--g-700)}
+.price li::before{content:"";flex:none;width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--p-50) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230055cf' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/11px no-repeat}
+.price .btn{width:100%}
+
+/* plans (mirrors Markifact pricing layout) */
+.ea-banner{max-width:760px;margin:36px auto 0;text-align:center;font-size:14.5px;color:var(--p-700);background:var(--p-50);border:1px solid #d6e6ff;border-radius:8px;padding:12px 18px}
+.billing{display:flex;justify-content:center;gap:4px;width:max-content;max-width:100%;margin:28px auto 0;background:var(--g-100);border-radius:999px;padding:4px}
+.billing button{font:500 14px/1 Inter,sans-serif;border:0;background:transparent;color:var(--g-700);padding:10px 18px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.billing button.on{background:#fff;color:var(--g-900);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.billing button span{font-size:11px;font-weight:600;color:var(--p-600);background:var(--p-50);border-radius:999px;padding:3px 8px}
+.plans{display:grid;gap:18px;margin-top:36px;align-items:stretch}
+@media(min-width:900px){.plans{grid-template-columns:repeat(3,1fr)}}
+.plan{position:relative;background:#fff;border-radius:8px;padding:30px 26px;box-shadow:0 0 0 1px var(--g-200),0 1px 2px rgba(0,0,0,.05);display:flex;flex-direction:column}
+.plan.featured{box-shadow:0 4px 12px rgba(8,110,255,.1),0 0 0 1.5px var(--p-500)}
+.plan .pop{position:absolute;top:-12px;right:20px;background-image:var(--btn-grad);color:#fff;font-size:12px;font-weight:600;padding:4px 14px;border-radius:999px}
+.plan h3{font-size:20px;font-weight:600;letter-spacing:-.01em}
+.plan .who{font-size:14px;color:var(--g-500);margin:4px 0 18px}
+.plan .amt{font-size:40px;margin:0 0 20px}
+.plan .amt small{font-size:15px}
+.plan .btn{width:100%}
+.plan ul{list-style:none;display:grid;gap:12px;margin:26px 0 0}
+.plan li{display:flex;gap:10px;font-size:14.5px;color:var(--g-700)}
+.plan li::before{content:"";flex:none;width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--p-50) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230055cf' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center/11px no-repeat}
+
+.foot-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 24px;margin-top:28px}
+.foot-links h2{grid-column:1/-1;color:#fff;font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px}
+.foot-links a{color:rgba(255,255,255,.65);font-size:14px}.foot-links a:hover{color:#fff}
+
+.foot-links a+h2{margin-top:16px}
+/* faq */
+.faq{max-width:780px;margin:44px auto 0;display:grid;gap:12px}
+details{background:#fff;border:1px solid var(--g-100);border-radius:8px;box-shadow:var(--glow);overflow:hidden}
+summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 20px;font-weight:600;font-size:16px;letter-spacing:-.01em}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-size:22px;font-weight:400;color:var(--p-500);transition:transform .2s;flex:none}
+details[open] summary::after{transform:rotate(45deg)}
+details p{padding:0 20px 20px;color:var(--g-500);font-size:15px;line-height:1.65}
+
+/* cta */
+.cta{position:relative;overflow:hidden;text-align:center;color:#fff;padding:96px 0;isolation:isolate}
+.cta .sky{background:linear-gradient(#125dd8,#2779ed 40%,#4d94fb)}
+.cta h2{color:#fff}.cta p{max-width:540px;margin:16px auto 30px;color:rgba(255,255,255,.92);font-size:17px}
+.cta .cloud{opacity:.35}
+
+/* footer */
+footer{background:var(--navy-950);color:rgba(255,255,255,.6);padding:44px 0;font-size:14px}
+.foot{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+.foot .logo{font-size:16px;color:#fff}
+.foot nav{display:flex;gap:22px}
+.foot a:hover{color:#fff}
+.copy{margin-top:26px;padding-top:22px;border-top:1px solid rgba(255,255,255,.08);font-size:13px}
+
+@media(prefers-reduced-motion:reduce){.cloud{animation:none}html{scroll-behavior:auto}}
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .6s,transform .6s}
+.reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+
+<header class="nav" id="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="#top" aria-label="Markitech home">
+      <svg viewBox="0 0 30 20" fill="currentColor" aria-hidden="true"><path d="M0 20 7 0h6L6 20z"/><path d="M10 20 17 0h6l-7 20z" opacity=".75"/><path d="M20 20 27 4l3 6-4 10z" opacity=".5"/></svg>
+      Markitech
+    </a>
+    <nav class="nav-links" aria-label="Primary">
+      <a href="#workflows">Workflows</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="nav-login" href="https://app.markitech.app/login">Log in</a>
+      <a class="btn btn-primary" href="https://app.markitech.app/signup">Get started</a>
+    </div>
+    <button type="button" class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+<div class="mobile" id="mobile">
+  <a href="#workflows">Workflows</a><a href="#integrations">Integrations</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="https://app.markitech.app/login">Log in</a>
+  <a class="btn btn-primary" href="https://app.markitech.app/signup">Get started</a>
+</div>
+
+<main id="top">
+<!-- HERO -->
+<section class="hero">
+  <div class="sky"></div><div class="grain"></div><div class="vignette"></div>
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div><div class="cloud c4"></div>
+  <div class="wrap">
+    <span class="badge"><i></i>Approval-gated AI for your marketing stack</span>
+    <h1>One AI.<br>Every <span class="glass">marketing platform.</span></h1>
+    <p class="lede">Markitech is a conversational layer over your marketing stack — ads, analytics, and tags — so you can ask your AI to check performance, pause a campaign, or publish a tag change, without leaving the conversation. Every write action is shown to you before it happens.</p>
+    <div class="hero-cta">
+      <a class="btn btn-white btn-lg" href="https://app.markitech.app/signup">Create your account</a>
+      <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+    </div>
+
+    <div class="mock">
+      <div class="mock-bar"><i></i><i></i><i></i><span>Markitech chat</span></div>
+      <div class="mock-body">
+        <div class="msg me">Pause the Spring Sale campaign</div>
+        <div class="msg ai">Found it in Google Ads. Here’s the change I’m proposing — nothing happens until you approve.</div>
+        <div class="approval">
+          <b>Approval needed</b>
+          <p>Set campaign <strong>Spring Sale</strong> status to <strong>Paused</strong>.</p>
+          <div class="row"><span class="btn btn-primary">Approve</span><span class="btn btn-line">Cancel</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STACK -->
+<section class="sec dotted" id="stack">
+  <div class="wrap center reveal">
+    <span class="eyebrow">Built for your stack</span>
+    <h2>One connection, every category of marketing tech</h2>
+    <p class="sub">Markitech is designed to speak the language of the tools marketers already run — so your AI can act across all of them from one place, instead of switching tabs.</p>
+    <div class="chips">
+      <span class="chip">Paid media</span><span class="chip">Analytics &amp; reporting</span><span class="chip">Tag management</span><span class="chip">Social &amp; organic</span><span class="chip">Search &amp; SEO</span>
+    </div>
+  </div>
+</section>
+
+<!-- WORKFLOWS -->
+<section class="sec dotted" id="workflows" style="padding-top:0">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">What you can do today</span>
+      <h2>Real actions, not a demo</h2>
+      <p class="sub">Everything below is live in the product right now — connect an account and try it in the chat.</p>
+    </div>
+    <div class="grid g4">
+      <article class="card reveal"><span class="tag"><span class="ico">Ad</span>Google Ads</span><h3>Pause or enable a campaign</h3><p class="quote">“Pause the Spring Sale campaign” — proposed in chat, held for your approval, then executed.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">Ad</span>Google Ads</span><h3>Adjust a daily budget</h3><p>Change what a campaign spends per day without opening the Ads UI.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">GA</span>GA4</span><h3>Pull a performance report</h3><p>Sessions, conversions, channel mix — ask for any date range in plain language.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">TM</span>Tag Manager</span><h3>Publish a workspace</h3><p>Ship pending tag and trigger changes live, with the same approval step as an ad change.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">Me</span>Meta Ads</span><h3>Pause or activate a campaign</h3><p>Approval-gated status changes, plus Conversions API test events and image creatives.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">GT</span>Search Console</span><h3>Search performance</h3><p>Clicks, impressions and position by query and page, next to your paid data.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">So</span>LinkedIn, Microsoft &amp; TikTok</span><h3>Coming soon</h3><p>Reporting and approval-gated campaign changes are next. <a href="/integrations/" style="color:inherit;text-decoration:underline">See the roadmap</a>.</p></article>
+      <article class="card reveal"><span class="tag"><span class="ico">✓</span>Every platform</span><h3>Review before it runs</h3><p>Nothing changes in a live account until you approve it — no exceptions, regardless of how you phrase the request.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- WHY (dark) -->
+<section class="sec dark" id="why">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">Why Markitech</span>
+      <h2>Marketing ops shouldn’t require ten tabs</h2>
+      <p class="sub">The tools exist. The problem is stitching them together every time you need an answer or need to act. Markitech is built to close that gap.</p>
+    </div>
+    <div class="grid g3">
+      <div class="dcard reveal"><div class="dnum">1</div><h3>Ask, don’t dig</h3><p>Get straight answers about spend, performance, or account health in plain language — no dashboard-hopping required.</p></div>
+      <div class="dcard reveal"><div class="dnum">2</div><h3>Act, don’t just report</h3><p>Have your AI make the change — launch, pause, adjust budget — with a clear approval step before anything goes live.</p></div>
+      <div class="dcard reveal"><div class="dnum">3</div><h3>One layer, every tool</h3><p>Built to sit across your entire marketing stack, not just one platform, so context carries over between tools.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- INTEGRATIONS -->
+<section class="sec dotted" id="integrations">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">Integrations</span>
+      <h2>Connect the accounts you already run</h2>
+      <p class="sub">Google’s suite connects directly into Markitech, with changes held for approval. Meta connects for status changes, test events and image creatives. 16 platforms are live today — LinkedIn, Microsoft and TikTok are next.</p>
+    </div>
+    <div class="grid g3">
+      <div class="card int reveal"><span class="ico">Ad</span><div><h3>Google Ads</h3><span class="pill">Read + status &amp; budget</span></div></div>
+      <div class="card int reveal"><span class="ico">GA</span><div><h3>Google Analytics 4</h3><span class="pill">Read</span></div></div>
+      <div class="card int reveal"><span class="ico">TM</span><div><h3>Google Tag Manager</h3><span class="pill">Read + publish</span></div></div>
+      <div class="card int reveal"><span class="ico">Me</span><div><h3>Meta Ads</h3><span class="pill">Status changes + CAPI tests</span></div></div>
+      <div class="card int reveal"><span class="ico">GT</span><div><h3>Search Console</h3><span class="pill">Read</span></div></div>
+      <div class="card int reveal"><span class="ico">In</span><div><h3>LinkedIn Ads</h3><span class="pill soon-pill">Coming soon</span></div></div>
+      <div class="card int reveal"><span class="ico">Ms</span><div><h3>Microsoft Ads</h3><span class="pill soon-pill">Coming soon</span></div></div>
+      <div class="card int reveal"><span class="ico">Tk</span><div><h3>TikTok Ads</h3><span class="pill soon-pill">Coming soon</span></div></div>
+      <div class="card int reveal"><span class="ico">•</span><div><h3><a href="/integrations/" style="color:inherit">+10 more</a></h3><span class="pill">See all</span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW -->
+<section class="sec" id="how" style="background:var(--g-50)">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>Three steps, start to finish</h2>
+    </div>
+    <div class="vid reveal"><video controls playsinline preload="metadata" poster="/media/markitech-how-it-works-poster.jpg?v=20261103"><source src="/media/markitech-how-it-works.mp4?v=20261103" type="video/mp4">Your browser can't play this video.</video></div>
+    <div class="grid g3">
+      <div class="card step reveal"><div class="dnum" style="color:#fff">1</div><h3>Connect your accounts</h3><p>Securely link the marketing platforms you already use. Markitech never stores your platform passwords.</p></div>
+      <div class="card step reveal"><div class="dnum" style="color:#fff">2</div><h3>Talk to your AI</h3><p>Ask questions or give instructions in plain language, right in the Markitech chat.</p></div>
+      <div class="card step reveal"><div class="dnum" style="color:#fff">3</div><h3>Review, then it runs</h3><p>Every write action is shown to you before it executes — nothing goes live without your say-so.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="sec dotted" id="pricing">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">Pricing</span>
+      <h2>Simple, transparent pricing</h2>
+      <p class="sub">Every plan includes the core Markitech platform: connect your accounts, ask in plain language, and approve every change before it goes live.</p>
+    </div>
+    <div class="billing reveal" role="group" aria-label="Billing period">
+      <button type="button" class="on" data-period="monthly">Monthly</button>
+      <button type="button" data-period="annual">Annually <span>2 months free</span></button>
+    </div>
+    <div class="plans">
+      <div class="plan reveal">
+        <h3>Pro</h3>
+        <p class="who">For solo marketers and freelancers</p>
+        <div class="amt"><span class="num" data-m="79" data-a="66">$79</span> <small>/month</small></div>
+        <a class="btn btn-line btn-lg" href="https://app.markitech.app/signup">Get started</a>
+        <ul>
+          <li>1 user seat</li>
+          <li>Unlimited connected accounts</li>
+          <li>All supported platforms</li>
+          <li>Approval-gated write access</li>
+          <li>Standard support</li>
+        </ul>
+      </div>
+      <div class="plan featured reveal">
+        <span class="pop">Popular</span>
+        <h3>Team</h3>
+        <p class="who">For agencies and marketing teams</p>
+        <div class="amt"><span class="num" data-m="249" data-a="208">$249</span> <small>/month</small></div>
+        <a class="btn btn-primary btn-lg" href="https://app.markitech.app/signup">Get started</a>
+        <ul>
+          <li>Multiple user seats</li>
+          <li>Unlimited connected accounts</li>
+          <li>All supported platforms</li>
+          <li>Approval-gated write access</li>
+          <li>Shared workspace</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+      <div class="plan reveal">
+        <h3>Managed</h3>
+        <p class="who">For teams who want us to build it</p>
+        <div class="amt"><span class="num custom">Custom</span></div>
+        <a class="btn btn-line btn-lg" href="mailto:joe@redwagon.agency?subject=Markitech%20Managed%20plan">Contact us</a>
+        <ul>
+          <li>Done-for-you setup</li>
+          <li>Live onboarding sessions</li>
+          <li>Dedicated support</li>
+          <li>Custom integrations</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="sec" id="faq" style="padding-top:0">
+  <div class="wrap">
+    <div class="center reveal">
+      <span class="eyebrow">FAQ</span>
+      <h2>Questions people ask</h2>
+    </div>
+    <div class="faq">
+      <details open><summary>Will Markitech make changes to my accounts without asking?</summary><p>No. Every write action — pausing a campaign, changing a budget, publishing a tag — is proposed in chat and held until you approve it. This is enforced by the system, not just by the AI following instructions, so it holds even if you tell it to skip confirmation.</p></details>
+      <details><summary>What can Markitech read without asking?</summary><p>Reporting and lookups — campaign lists, performance metrics, GA4 reports, and similar read-only data — run automatically so you don’t have to approve every question you ask.</p></details>
+      <details><summary>How are my credentials stored?</summary><p>OAuth tokens are encrypted at rest and never leave Markitech’s servers. Markitech connects to your accounts through each platform’s own authorization flow — it never sees or stores your platform password.</p></details>
+      <details><summary>Which platforms are supported right now?</summary><p>Google Ads, Google Analytics 4, Google Tag Manager, Search Console, Merchant Center, Business Profile, Display &amp; Video 360, BigQuery, Google Sheets, Docs and Slides, Meta Ads, Facebook Pages, Instagram, WhatsApp Business and WordPress &mdash; 16 platforms today. LinkedIn Ads, Microsoft Advertising and TikTok Ads are coming soon. See <a href="/integrations/" style="color:var(--p-600);text-decoration:underline">all integrations</a>.</p></details>
+      <details><summary>Is this affiliated with any other marketing AI product?</summary><p>No. Markitech is an independent product, built from scratch, not affiliated with or reselling any other company’s service.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <div class="sky"></div><div class="grain"></div><div class="vignette"></div>
+  <div class="cloud c1" style="top:20px"></div><div class="cloud c2" style="top:200px"></div>
+  <div class="wrap" style="position:relative;z-index:2">
+    <h2>Ready to connect your first account?</h2>
+    <p>Create your account and connect a platform in under two minutes.</p>
+    <a class="btn btn-white btn-lg" href="https://app.markitech.app/signup">Get started</a>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <a class="logo" href="#top"><svg viewBox="0 0 30 20" fill="currentColor" aria-hidden="true"><path d="M0 20 7 0h6L6 20z"/><path d="M10 20 17 0h6l-7 20z" opacity=".75"/><path d="M20 20 27 4l3 6-4 10z" opacity=".5"/></svg>Markitech</a>
+      <nav aria-label="Footer">
+        <a href="https://app.markitech.app/login">Log in</a>
+        <a href="https://app.markitech.app/signup">Sign up</a>
+        <a href="mailto:joe@redwagon.agency">Contact</a>
+      </nav>
+    </div>
+    <div class="foot-links"><h2>Solutions</h2><a href="/marketing-mcp-server/">Marketing MCP Server</a><a href="/google-ads-ai-agent/">Google Ads AI Agent</a><a href="/ga4-ai-agent/">GA4 AI Agent</a><a href="/google-tag-manager-ai/">Google Tag Manager AI</a><a href="/server-side-tracking/">Server-Side Tracking</a><a href="/meta-ads-ai-agent/">Meta Ads AI Agent</a><a href="/linkedin-ads-ai-agent/">LinkedIn Ads AI Agent</a><a href="/microsoft-ads-ai-agent/">Microsoft Ads AI Agent</a><a href="/tiktok-ads-ai-agent/">TikTok Ads AI Agent</a><h2>Use cases</h2><a href="/use-cases/">All use cases</a><a href="/use-cases/agencies/">For Agencies</a><a href="/use-cases/ecommerce/">For Ecommerce</a><a href="/use-cases/b2b-saas/">For B2B SaaS</a><a href="/use-cases/in-house-teams/">For In-House Teams</a><h2>Integrations</h2><a href="/integrations/">All integrations</a><a href="/integrations/google-ads-mcp/">Google Ads</a><a href="/integrations/ga4-mcp/">Google Analytics 4</a><a href="/integrations/google-tag-manager-mcp/">Google Tag Manager</a><a href="/integrations/google-search-console-mcp/">Google Search Console</a><a href="/integrations/google-merchant-center-mcp/">Google Merchant Center</a><a href="/integrations/google-business-profile-mcp/">Google Business Profile</a><h2>Resources</h2><a href="/faq/">FAQ</a><a href="/prompts/">Prompt library</a><a href="/glossary/">Glossary</a><a href="/marketing-mcp-server/what-is-mcp-for-marketing/">What is MCP?</a><a href="/markitech-vs-markifact/">Markitech vs Markifact</a><h2>Company</h2><a href="/about/">About</a><a href="/security/">Security</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:joe@redwagon.agency">Contact</a></div>
+    <p class="copy">© 2026 Markitech. All rights reserved.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var nav=document.getElementById('nav');
+  function onScroll(){nav.classList.toggle('scrolled',window.scrollY>24)}
+  onScroll();window.addEventListener('scroll',onScroll,{passive:true});
+  var btn=document.getElementById('menuBtn'),m=document.getElementById('mobile');
+  btn.addEventListener('click',function(){var o=m.classList.toggle('open');btn.setAttribute('aria-expanded',o);nav.classList.toggle('scrolled',o||window.scrollY>24)});
+  m.addEventListener('click',function(e){if(e.target.tagName==='A'){m.classList.remove('open');btn.setAttribute('aria-expanded','false')}});
+  document.querySelectorAll('.billing button').forEach(function(b){
+    b.addEventListener('click',function(){
+      var a=b.getAttribute('data-period')==='annual';
+      document.querySelectorAll('.billing button').forEach(function(x){x.classList.toggle('on',x===b)});
+      document.querySelectorAll('.plan .num[data-m]').forEach(function(n){n.textContent='$'+(a?n.getAttribute('data-a'):n.getAttribute('data-m'))});
+    });
+  });
+  var els=document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12});
+    els.forEach(function(e){io.observe(e)});
+  } else {els.forEach(function(e){e.classList.add('in')})}
+})();
+</script>
+<script id="mk-track">(function(){var w=window,dl=w.dataLayer=w.dataLayer||[];function tx(e){return(e.textContent||'').replace(/\s+/g,' ').trim().slice(0,100)}function where(e){var s=e.closest('header,footer,section');if(!s)return'page';if(s.id)return s.id;if(s.tagName==='HEADER')return'nav';if(s.tagName==='FOOTER')return'footer';return(s.className||'section').split(' ')[0]}document.addEventListener('click',function(ev){var t=ev.target;if(!t||!t.closest)return;var sm=t.closest('summary');if(sm&&sm.parentNode&&sm.parentNode.tagName==='DETAILS'){if(!sm.parentNode.open)dl.push({event:'faq_open',faq_question:tx(sm)});return}var b=t.closest('.billing button');if(b){dl.push({event:'pricing_toggle',billing_interval:b.getAttribute('data-period')||tx(b)});return}var a=t.closest('a');if(!a)return;var u;try{u=new URL(a.getAttribute('href')||'',location.href)}catch(x){return}var app=u.hostname==='app.markitech.app';if(!(app||a.classList.contains('btn')||a.closest('nav')))return;var ty=app?(/^\/signup/.test(u.pathname)?'signup':/^\/login/.test(u.pathname)?'login':'app'):u.hostname!==location.hostname?'outbound':(u.hash&&u.pathname===location.pathname?'anchor':'internal');var o={event:'cta_click',cta_text:tx(a),cta_location:where(a),cta_type:ty,link_url:u.origin+u.pathname+u.hash};var p=a.closest('.plan');if(p){var on=document.querySelector('.billing button.on');o.event='plan_click';o.plan=tx(p.querySelector('h3')||p).toLowerCase();o.billing_interval=on?on.getAttribute('data-period'):'monthly'}dl.push(o)},true);[].forEach.call(document.querySelectorAll('video'),function(v){var st=0,m={},ti=v.getAttribute('data-title')||'Markitech how it works';v.addEventListener('play',function(){if(st)return;st=1;dl.push({event:'video_start',video_title:ti,video_provider:'html5',video_duration:Math.round(v.duration||0)})});v.addEventListener('timeupdate',function(){if(!v.duration)return;var pc=v.currentTime/v.duration*100;[25,50,75].forEach(function(q){if(pc>=q&&!m[q]){m[q]=1;dl.push({event:'video_progress',video_title:ti,video_provider:'html5',video_percent:q})}})});v.addEventListener('ended',function(){dl.push({event:'video_complete',video_title:ti,video_provider:'html5',video_percent:100})})})})();</script>
+</body>
+</html>
