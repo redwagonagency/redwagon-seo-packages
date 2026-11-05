@@ -1,0 +1,141 @@
+# Markitech
+
+> Markitech is an AI agent and MCP server for marketing operations. It connects to Google Ads, Google Analytics 4, Google Tag Manager, Search Console, Merchant Center, Business Profile, Meta Ads and more, with changes held for approval in the Markitech app. The MCP server for outside AI assistants is read-only. LinkedIn Ads, Microsoft Advertising and TikTok Ads are coming soon.
+
+## Product
+- [Home](https://markitech.app/): what Markitech does, pricing and FAQ
+- [Marketing MCP Server](https://markitech.app/marketing-mcp-server/): overview of the MCP server and platforms
+- [FAQ](https://markitech.app/faq/): approval, security, pricing, platforms
+
+## Solutions
+- [Marketing MCP Server](https://markitech.app/marketing-mcp-server/): Markitech's marketing MCP server connects Claude and other AI assistants to Google Ads, GA4, Tag Manager and more, with approved changes in the Markitech app.
+- [Google Ads AI Agent](https://markitech.app/google-ads-ai-agent/): Use AI with Google Ads: campaign performance in plain language, wasted-spend checks, approval-gated pauses and budget changes, and campaign plans.
+- [GA4 AI Agent](https://markitech.app/ga4-ai-agent/): Ask Google Analytics 4 anything in plain language. Markitech pulls GA4 reports, explains changes, and designs the events and parameters behind them.
+- [Google Tag Manager AI](https://markitech.app/google-tag-manager-ai/): An AI that reads your Tag Manager containers, diffs versions, finds broken triggers, builds tags and variables, and publishes after you approve.
+- [Server-Side Tracking](https://markitech.app/server-side-tracking/): Build server-side tracking with AI: a server-side GTM container that sends clean, deduplicated events to GA4, Google Ads, Meta CAPI, LinkedIn and TikTok.
+- [Meta Ads AI Agent](https://markitech.app/meta-ads-ai-agent/): A Meta Ads AI agent for Facebook and Instagram: approval-gated campaign control, Conversions API test events, pixel checks and AI ad images.
+- [LinkedIn Ads AI Agent](https://markitech.app/linkedin-ads-ai-agent/): LinkedIn Ads tracking with AI: Insight Tag and Conversions API setup through Tag Manager, checked in a real browser. Direct LinkedIn connection coming soon.
+- [Microsoft Ads AI Agent](https://markitech.app/microsoft-ads-ai-agent/): Microsoft Advertising with AI: UET tag and consent setup through Tag Manager, and Bing reports analyzed next to Google Ads. Direct connection coming soon.
+- [TikTok Ads AI Agent](https://markitech.app/tiktok-ads-ai-agent/): TikTok Ads with AI: Pixel and Events API setup through Tag Manager, reports analyzed from your exports, and 9:16 ad images. Direct connection coming soon.
+
+## Use cases
+- [All use cases](https://markitech.app/use-cases/): how agencies, ecommerce, B2B SaaS and in-house teams use Markitech
+- [Markitech for Agencies](https://markitech.app/use-cases/agencies/): Run Google Ads, GA4, Tag Manager and Meta for every client from one AI, with approval on every change and a shared team workspace.
+- [Markitech for Ecommerce](https://markitech.app/use-cases/ecommerce/): Clean purchase tracking, enhanced conversions, Meta CAPI checks and Merchant Center health for ecommerce, from an AI that asks before it changes anything.
+- [Markitech for B2B SaaS](https://markitech.app/use-cases/b2b-saas/): Measure B2B ads on qualified pipeline, not form fills: offline conversion plans, server-side tracking for Google and LinkedIn, and Google Ads control.
+- [Markitech for In-House Teams](https://markitech.app/use-cases/in-house-teams/): Give your in-house marketing team specialist-level tracking, analytics and paid media operations through one AI, with approval on every change.
+
+## Guides
+- [What is MCP, and why should marketers care?](https://markitech.app/marketing-mcp-server/what-is-mcp-for-marketing/): What the Model Context Protocol is, how an MCP server lets an AI work in Google Ads, GA4 and Tag Manager, and what marketers should check first.
+- [Connect your AI to your marketing platforms](https://markitech.app/marketing-mcp-server/connect-ai-to-marketing-platforms/): Connect an AI assistant to Google Ads, GA4, Tag Manager, Search Console, Meta and more through one MCP server, safely and in minutes.
+- [Approval-gated AI: nothing changes until you say so](https://markitech.app/marketing-mcp-server/approval-gated-ai-actions/): Why AI changes to ad accounts, analytics and tags should be approval-gated, and how Markitech holds every write action until you review it.
+- [Security checklist for a marketing MCP server](https://markitech.app/marketing-mcp-server/marketing-mcp-security/): How to judge a marketing MCP server’s security: OAuth instead of passwords, encrypted tokens, least-privilege access and approval on every write.
+- [Google Ads campaign planning with senior-level structure](https://markitech.app/google-ads-ai-agent/google-ads-campaign-builder/): Plan Google Ads Search campaigns with AI: themed ad groups, keywords, responsive search ad copy, bidding and conversion goals, ready for you to build.
+- [Search term audit: stop paying for the wrong queries](https://markitech.app/google-ads-ai-agent/search-term-audit/): Audit Google Ads search terms for wasted spend: zero-conversion queries, irrelevant intent and missing negatives, turned into a negative list you can add.
+- [Smart bidding, set up to learn the right thing](https://markitech.app/google-ads-ai-agent/smart-bidding-strategy/): Choose and tune Google Ads smart bidding: Maximize Conversions, Target CPA and Target ROAS, conversion goals and the measurement they depend on.
+- [Budget pacing that keeps the month on track](https://markitech.app/google-ads-ai-agent/budget-pacing/): Track Google Ads budget pacing against monthly targets, find campaigns limited by budget below target CPA, and reallocate spend with approval.
+- [A GA4 event tracking plan that scales](https://markitech.app/ga4-ai-agent/ga4-event-tracking-plan/): Build a GA4 event tracking plan: recommended events, parameters, key events, naming rules and implementation through Google Tag Manager.
+- [GA4 custom dimensions, chosen on purpose](https://markitech.app/ga4-ai-agent/ga4-custom-dimensions/): Choose and register the right GA4 custom dimensions and metrics: event vs user scope, limits, naming and how they map to your data layer.
+- [GA4 audiences that make remarketing work](https://markitech.app/ga4-ai-agent/ga4-audiences/): Build GA4 audiences for Google Ads: engaged visitors, cart and trial abandoners, high-value customers and exclusions, with consent-aware setup.
+- [GA4 reporting without the report builder](https://markitech.app/ga4-ai-agent/ga4-reporting/): Get GA4 answers without explorations: channel performance, landing pages, funnels and period comparisons, explained in plain language.
+- [GTM container audit, done in minutes](https://markitech.app/google-tag-manager-ai/gtm-container-audit/): Audit a Google Tag Manager container: orphaned tags, broken triggers, duplicate pixels, naming, consent order and unused variables, with fixes you approve.
+- [GTM debugging: find what broke after the last publish](https://markitech.app/google-tag-manager-ai/gtm-debugging/): Debug Google Tag Manager by diffing container versions, tracing why a tag stopped firing, and checking triggers, variables and consent after a publish.
+- [Data layer design your developers can implement](https://markitech.app/google-tag-manager-ai/data-layer-design/): Design a data layer for GA4 ecommerce and lead events, ad conversions and pixels: event names, parameters, IDs and user data, documented for developers.
+- [A GTM publishing workflow with approvals built in](https://markitech.app/google-tag-manager-ai/gtm-publishing-workflow/): A safe Google Tag Manager publishing workflow: workspaces, readable change lists, approval before publish, version notes and post-publish checks.
+- [Server-side GTM setup, step by step](https://markitech.app/server-side-tracking/server-side-gtm-setup/): How to set up a server-side Google Tag Manager container on your own subdomain, route GA4 and ad platform events through it, and verify it works.
+- [Enhanced conversions setup that actually matches](https://markitech.app/server-side-tracking/enhanced-conversions-setup/): Set up Google Ads enhanced conversions with hashed first-party data through Tag Manager or server-side GTM, and verify match rates for smart bidding.
+- [Meta Conversions API setup and deduplication](https://markitech.app/server-side-tracking/meta-conversions-api-setup/): Set up the Meta Conversions API alongside the pixel, deduplicate with event_id, and raise Event Match Quality with properly hashed customer parameters.
+- [Consent Mode v2, configured correctly](https://markitech.app/server-side-tracking/consent-mode-v2/): Implement Google Consent Mode v2 in Tag Manager: default and update states, ad_user_data and ad_personalization, region-specific defaults, and verification.
+- [Meta Ads campaign planning](https://markitech.app/meta-ads-ai-agent/meta-campaign-builder/): Plan Meta Ads campaigns with AI: objective, structure, audiences, Advantage+ settings and conversion events, with ad images made for each placement.
+- [Ad images and creative concepts, made with AI](https://markitech.app/meta-ads-ai-agent/ai-ad-creatives/): Make ad images with AI for Meta, Google and other platforms: every aspect ratio, variations for testing, plus hooks and video scripts, reviewed before use.
+- [Meta audiences that pull their weight](https://markitech.app/meta-ads-ai-agent/meta-audiences/): Plan Meta Ads audiences: website and CRM custom audiences, lookalikes, broad targeting and the exclusions that stop wasted spend.
+- [Meta Ads audit in one conversation](https://markitech.app/meta-ads-ai-agent/meta-ads-audit/): Audit a Meta Ads account: tracking and CAPI health, structure, learning status, frequency, creative fatigue, audiences and budget distribution.
+- [LinkedIn Ads reporting from your exports, next to GA4](https://markitech.app/linkedin-ads-ai-agent/linkedin-ads-reporting/): LinkedIn Ads reporting in plain language: cost per lead, pacing, frequency and campaign group results from your exports, compared with GA4.
+- [LinkedIn Insight Tag setup, verified end to end](https://markitech.app/linkedin-ads-ai-agent/linkedin-insight-tag-setup/): Install and verify the LinkedIn Insight Tag with Google Tag Manager, set up conversion tracking on the right pages, and respect consent where it applies.
+- [LinkedIn Conversions API through server-side GTM](https://markitech.app/linkedin-ads-ai-agent/linkedin-conversions-api/): Send LinkedIn conversions server-side through server-side Tag Manager, with hashed user data and deduplication against the LinkedIn Insight Tag.
+- [LinkedIn Ads budget optimization by CPL](https://markitech.app/linkedin-ads-ai-agent/linkedin-ads-budget-optimization/): Cut wasted LinkedIn Ads spend: find campaigns over target CPL in your exports and get a specific list of pauses and budget moves to make.
+- [Microsoft Ads UET tag setup and consent](https://markitech.app/microsoft-ads-ai-agent/microsoft-ads-uet-setup/): Set up the Microsoft Advertising UET tag in Google Tag Manager, define conversion goals, pass consent signals and verify that conversions are recorded.
+- [Microsoft Ads reporting next to Google Ads](https://markitech.app/microsoft-ads-ai-agent/microsoft-ads-reporting/): Microsoft Advertising reporting in plain language: spend, conversions, CPA and search queries from your exports, compared side by side with Google Ads.
+- [Google Ads to Microsoft Ads: the import checklist](https://markitech.app/microsoft-ads-ai-agent/google-ads-to-microsoft-ads/): A checklist for importing Google Ads campaigns into Microsoft Advertising: what carries over, what to fix afterwards and how to compare results.
+- [Negative keywords for Microsoft Ads, kept in step](https://markitech.app/microsoft-ads-ai-agent/microsoft-ads-negative-keywords/): Find wasted Microsoft Ads spend in search query reports, build shared negative keyword lists and keep them in step with Google Ads.
+- [TikTok Events API setup with deduplication](https://markitech.app/tiktok-ads-ai-agent/tiktok-events-api-setup/): Set up the TikTok Events API through server-side Tag Manager, deduplicate with the TikTok Pixel using event_id, and improve match quality with hashed user data.
+- [TikTok Pixel setup through Tag Manager](https://markitech.app/tiktok-ads-ai-agent/tiktok-pixel-setup/): Install the TikTok Pixel through Google Tag Manager, map standard events with value and currency, respect consent, and verify events before you optimize.
+- [TikTok ad creatives that keep up with fatigue](https://markitech.app/tiktok-ads-ai-agent/tiktok-ad-creatives/): Spot TikTok creative fatigue in your reports, then refresh with AI: 9:16 images, video scripts and new hooks, ready for your review.
+- [TikTok Ads reporting you can act on](https://markitech.app/tiktok-ads-ai-agent/tiktok-ads-reporting/): TikTok Ads reporting in plain language: CPA, ROAS, CTR and creative trends from your Ads Manager exports, compared with GA4 in one conversation.
+
+## Comparisons
+- [Markitech vs Markifact](https://markitech.app/markitech-vs-markifact/): Markitech vs Markifact compared on platforms, approvals, automation and pricing, so you can pick the marketing AI that fits how your team works.
+
+## FAQ
+- [What is Markitech?](https://markitech.app/faq/what-is-markitech/): Markitech is an AI agent for marketing ops that works in Google Ads, GA4, Tag Manager, Meta and 12 more platforms, with approval on every change.
+- [How does approval work in Markitech?](https://markitech.app/faq/how-does-approval-work/): Every write action in Markitech, such as a budget change, a paused campaign or a Tag Manager publish, is proposed in chat and held until you approve it.
+- [What can Markitech read without asking?](https://markitech.app/faq/what-can-markitech-read/): Reporting and lookups such as campaign lists, performance metrics and GA4 reports run automatically in Markitech. Only changes to live accounts need approval.
+- [Which platforms does Markitech support?](https://markitech.app/faq/which-platforms-are-supported/): Markitech supports 16 platforms, including Google Ads, GA4, Tag Manager, Search Console, Merchant Center and Meta Ads. LinkedIn, Microsoft and TikTok are next.
+- [Which AI assistants work with Markitech?](https://markitech.app/faq/which-ai-assistants-work-with-markitech/): Markitech's MCP server works with Claude and other AI clients that support remote MCP servers. MCP access is read-only; changes happen in the Markitech app.
+- [How does Markitech store my credentials?](https://markitech.app/faq/how-are-credentials-stored/): Markitech uses each platform’s own authorization flow and never sees your passwords. OAuth tokens are encrypted at rest on Markitech’s servers.
+- [How much does Markitech cost?](https://markitech.app/faq/how-much-does-markitech-cost/): Markitech Pro is $79 a month for one user with 5,000 credits. Team is $249 a month with multiple seats and 20,000 shared credits. Managed plans are custom.
+- [What are Markitech credits?](https://markitech.app/faq/what-are-markitech-credits/): Credits are Markitech’s monthly usage allowance. Pro includes 5,000 a month, Team includes 20,000 shared, and credit packs can be added on any plan.
+- [Can agencies use Markitech for client accounts?](https://markitech.app/faq/can-agencies-use-markitech/): Agencies use Markitech’s Team plan for multiple seats, unlimited connected client accounts, a shared workspace and 20,000 shared credits a month.
+- [Is Markitech affiliated with other marketing AI products?](https://markitech.app/faq/is-markitech-affiliated/): Markitech is an independent product, built from scratch. It is not affiliated with or reselling any other company’s marketing AI service.
+- [What is an MCP server?](https://markitech.app/faq/what-is-an-mcp-server/): An MCP server exposes tools that an AI assistant can call through the Model Context Protocol. A marketing MCP server exposes ad, analytics and tag platforms.
+- [Is it safe to let AI manage ad accounts?](https://markitech.app/faq/is-it-safe-to-let-ai-manage-ad-accounts/): It can be, with the right controls: OAuth instead of passwords, access limited to the accounts you choose, and every change held for human approval.
+- [Can AI manage Google Ads campaigns?](https://markitech.app/faq/can-ai-manage-google-ads/): With Markitech, an AI can report on Google Ads, flag wasted spend, plan campaigns, and pause campaigns or change budgets, each change approved by you first.
+- [Can AI publish changes in Google Tag Manager?](https://markitech.app/faq/can-ai-publish-google-tag-manager/): Markitech can build tags, triggers and variables in Google Tag Manager and publish the workspace after you approve a readable diff of every change.
+- [Does Markitech support server-side tagging?](https://markitech.app/faq/does-markitech-support-server-side-tagging/): Yes. Markitech plans and configures server-side Tag Manager setups for GA4, Google Ads enhanced conversions, Meta CAPI, LinkedIn CAPI and the TikTok Events API.
+- [Can Markitech fix GA4 tracking?](https://markitech.app/faq/can-markitech-fix-ga4-tracking/): Markitech finds GA4 tracking problems by reading GA4 and Tag Manager together, then fixes them through approval-gated Tag Manager changes.
+- [Does Markitech work with the Meta Conversions API?](https://markitech.app/faq/does-markitech-work-with-meta-capi/): Markitech sends Meta Conversions API test events, checks event_id deduplication in Tag Manager and builds server-side CAPI tags, with every change approved.
+- [Can Markitech make ad creatives?](https://markitech.app/faq/can-markitech-make-ad-creatives/): Markitech makes and edits ad images in any aspect ratio and writes ad copy, hooks and video scripts. It does not render video or upload ads.
+- [Does Markitech support Consent Mode v2?](https://markitech.app/faq/does-markitech-support-consent-mode/): Markitech configures Google Consent Mode v2 in Tag Manager, including ad_user_data and ad_personalization, region-specific defaults and verification.
+- [How long does it take to set up Markitech?](https://markitech.app/faq/how-long-does-setup-take/): Connecting a platform to Markitech takes under two minutes. Most teams connect Google Ads, GA4 and Tag Manager and ask their first question the same day.
+
+## Glossary
+- [Model Context Protocol (MCP)](https://markitech.app/glossary/model-context-protocol/): The Model Context Protocol (MCP) is an open standard that lets AI assistants call tools in other systems, such as ad platforms, analytics and tag managers.
+- [MCP server](https://markitech.app/glossary/mcp-server/): MCP server definition: a program that gives AI assistants callable tools over the Model Context Protocol, such as reading ad accounts or publishing tags.
+- [Server-side tagging](https://markitech.app/glossary/server-side-tagging/): Server-side tagging sends website events to a server container you control, which forwards them to GA4, ad platforms and other destinations.
+- [Data layer](https://markitech.app/glossary/data-layer/): A data layer is a JavaScript object that holds event and page data for Tag Manager, so tags read consistent values instead of scraping the page.
+- [Google tag (gtag.js)](https://markitech.app/glossary/google-tag/): The Google tag (gtag.js) is a single tag that sends data to Google Analytics 4 and Google Ads. It can be installed directly or through Tag Manager.
+- [Key event (GA4)](https://markitech.app/glossary/ga4-key-event/): A key event is a GA4 event marked as important to your business, such as a purchase or sign up. GA4 renamed conversions to key events in 2024.
+- [Custom dimension (GA4)](https://markitech.app/glossary/ga4-custom-dimension/): A GA4 custom dimension registers an event or user parameter so it appears in reports. Data is only available from the moment it is registered.
+- [Enhanced conversions](https://markitech.app/glossary/enhanced-conversions/): Enhanced conversions send hashed first-party data such as email with Google Ads conversions, so Google can match and attribute more of them.
+- [Google Consent Mode](https://markitech.app/glossary/consent-mode/): Google Consent Mode passes visitors’ consent choices to Google tags through ad_storage, analytics_storage, ad_user_data and ad_personalization.
+- [Conversions API (CAPI)](https://markitech.app/glossary/conversions-api/): The Meta Conversions API sends web events from your server to Meta, alongside the pixel, to recover conversions lost in the browser.
+- [Event deduplication](https://markitech.app/glossary/event-deduplication/): Event deduplication lets ad platforms count a conversion once when both the browser pixel and a server API report it, using a shared event ID.
+- [Event Match Quality](https://markitech.app/glossary/event-match-quality/): Event Match Quality is Meta’s 0 to 10 score for how well an event’s customer information can be matched to a Meta account.
+- [GCLID](https://markitech.app/glossary/gclid/): The GCLID is the Google Click Identifier added to landing page URLs by Google Ads auto-tagging, used to tie conversions back to ad clicks.
+- [UTM parameters](https://markitech.app/glossary/utm-parameters/): UTM parameters are tags added to URLs, such as utm_source and utm_campaign, that tell analytics where a visit came from.
+- [Smart Bidding](https://markitech.app/glossary/smart-bidding/): Smart Bidding is Google Ads’ set of automated bid strategies that use machine learning to optimize for conversions or conversion value in each auction.
+- [Target CPA (tCPA)](https://markitech.app/glossary/target-cpa/): Target CPA is a Google Ads Smart Bidding setting that aims to get as many conversions as possible at or below a set average cost per acquisition.
+- [Target ROAS (tROAS)](https://markitech.app/glossary/target-roas/): Target ROAS is a Google Ads Smart Bidding setting that aims for a set average return on ad spend, using the conversion values you send.
+- [Data-driven attribution](https://markitech.app/glossary/data-driven-attribution/): Data-driven attribution credits conversions to touchpoints based on how each one actually contributed. It is the default model in GA4 and Google Ads.
+- [UET tag (Microsoft Advertising)](https://markitech.app/glossary/uet-tag/): Universal Event Tracking (UET) is the Microsoft Advertising tag that records conversions and builds remarketing audiences for Bing campaigns.
+- [LinkedIn Insight Tag](https://markitech.app/glossary/linkedin-insight-tag/): The LinkedIn Insight Tag is a JavaScript tag that enables LinkedIn Ads conversion tracking, retargeting and website demographics.
+- [Search terms report](https://markitech.app/glossary/search-terms-report/): The search terms report shows the actual searches that triggered your Google Ads, so you can add negatives and new keywords.
+- [Negative keywords](https://markitech.app/glossary/negative-keywords/): Negative keywords stop ads from showing on searches that contain them. They can be added to campaigns, ad groups or shared lists.
+
+## Integrations
+- [All integrations](https://markitech.app/integrations/): every connected platform and what is coming next
+- [Google Ads](https://markitech.app/integrations/google-ads-mcp/): Ask how campaigns are performing, find spend that is not converting and make status and budget changes from one conversation. Markitech read
+- [Google Analytics 4](https://markitech.app/integrations/ga4-mcp/): Get answers from GA4 without building explorations, and manage the property itself: key events, custom dimensions and metrics, data streams 
+- [Google Tag Manager](https://markitech.app/integrations/google-tag-manager-mcp/): The deepest integration in Markitech: 48 tools covering web and server containers. Audit a container in one call, build tags, triggers and v
+- [Google Search Console](https://markitech.app/integrations/google-search-console-mcp/): Bring organic search into the same conversation as paid and analytics. See which queries and pages drive clicks and submit sitemaps when a s
+- [Google Merchant Center](https://markitech.app/integrations/google-merchant-center-mcp/): Keep Shopping ads healthy: find disapproved or limited products, see why, and update availability when stock changes.
+- [Google Business Profile](https://markitech.app/integrations/google-business-profile-mcp/): For local businesses and multi-location brands: check how each location performs in Search and Maps and answer customer questions.
+- [Display & Video 360](https://markitech.app/integrations/dv360-mcp/): List advertisers and campaigns across Display & Video 360 and pause or enable campaigns with approval, alongside your Google Ads and GA4 dat
+- [BigQuery](https://markitech.app/integrations/bigquery-mcp/): Query your warehouse in plain language, including the GA4 BigQuery export, and combine the answer with live platform data.
+- [Google Sheets](https://markitech.app/integrations/google-sheets-mcp/): Read budgets, plans and trackers from Sheets and write results back, so reports land where your team already works.
+- [Google Docs](https://markitech.app/integrations/google-docs-mcp/): Pull briefs and SOPs from Docs into the conversation and append findings, so audits and summaries are written down where your team reads the
+- [Google Slides](https://markitech.app/integrations/google-slides-mcp/): Update recurring client decks without copying numbers by hand. Markitech reads a deck and replaces placeholder text with fresh results.
+- [Meta Ads](https://markitech.app/integrations/meta-ads-mcp/): Control Meta campaigns, test your Conversions API setup and make new ad images, from the same conversation as your Google and tracking work.
+- [Facebook Pages](https://markitech.app/integrations/facebook-pages-mcp/): See what your Pages have published and post new updates with approval, without switching to Meta Business Suite.
+- [Instagram](https://markitech.app/integrations/instagram-mcp/): Review what you have posted on Instagram professional accounts and publish new posts with approval.
+- [WhatsApp Business](https://markitech.app/integrations/whatsapp-mcp/): Check your WhatsApp Business message templates and number status, and send messages with approval.
+- [WordPress](https://markitech.app/integrations/wordpress-mcp/): Read and update the pages and posts on your WordPress site, so landing page copy and blog content can change in the same conversation as the
+
+## Prompt library
+- [Prompt library](https://markitech.app/prompts/): copyable prompts by platform
+
+## Company
+- [About](https://markitech.app/about/)
+- [Security](https://markitech.app/security/)
+- [Privacy Policy](https://markitech.app/privacy/)
+- [Terms of Service](https://markitech.app/terms/)

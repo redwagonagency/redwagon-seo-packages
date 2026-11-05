@@ -1,0 +1,514 @@
+{
+ "marketing-mcp-server": {
+  "kicker": "Solution",
+  "title": "A marketing MCP server for ads, analytics and tags"
+ },
+ "marketing-mcp-server--what-is-mcp-for-marketing": {
+  "kicker": "Marketing MCP Server",
+  "title": "What is MCP, and why should marketers care?"
+ },
+ "marketing-mcp-server--connect-ai-to-marketing-platforms": {
+  "kicker": "Marketing MCP Server",
+  "title": "Connect your AI to your marketing platforms"
+ },
+ "marketing-mcp-server--approval-gated-ai-actions": {
+  "kicker": "Marketing MCP Server",
+  "title": "Approval-gated AI: nothing changes until you say so"
+ },
+ "marketing-mcp-server--marketing-mcp-security": {
+  "kicker": "Marketing MCP Server",
+  "title": "Security checklist for a marketing MCP server"
+ },
+ "google-ads-ai-agent": {
+  "kicker": "Solution",
+  "title": "Google Ads AI agent that does the work"
+ },
+ "google-ads-ai-agent--google-ads-campaign-builder": {
+  "kicker": "Google Ads AI Agent",
+  "title": "Google Ads campaign planning with senior-level structure"
+ },
+ "google-ads-ai-agent--search-term-audit": {
+  "kicker": "Google Ads AI Agent",
+  "title": "Search term audit: stop paying for the wrong queries"
+ },
+ "google-ads-ai-agent--smart-bidding-strategy": {
+  "kicker": "Google Ads AI Agent",
+  "title": "Smart bidding, set up to learn the right thing"
+ },
+ "google-ads-ai-agent--budget-pacing": {
+  "kicker": "Google Ads AI Agent",
+  "title": "Budget pacing that keeps the month on track"
+ },
+ "ga4-ai-agent": {
+  "kicker": "Solution",
+  "title": "GA4 AI agent: ask Google Analytics anything"
+ },
+ "ga4-ai-agent--ga4-event-tracking-plan": {
+  "kicker": "GA4 AI Agent",
+  "title": "A GA4 event tracking plan that scales"
+ },
+ "ga4-ai-agent--ga4-custom-dimensions": {
+  "kicker": "GA4 AI Agent",
+  "title": "GA4 custom dimensions, chosen on purpose"
+ },
+ "ga4-ai-agent--ga4-audiences": {
+  "kicker": "GA4 AI Agent",
+  "title": "GA4 audiences that make remarketing work"
+ },
+ "ga4-ai-agent--ga4-reporting": {
+  "kicker": "GA4 AI Agent",
+  "title": "GA4 reporting without the report builder"
+ },
+ "google-tag-manager-ai": {
+  "kicker": "Solution",
+  "title": "Google Tag Manager AI that builds and debugs tags"
+ },
+ "google-tag-manager-ai--gtm-container-audit": {
+  "kicker": "Google Tag Manager AI",
+  "title": "GTM container audit, done in minutes"
+ },
+ "google-tag-manager-ai--gtm-debugging": {
+  "kicker": "Google Tag Manager AI",
+  "title": "GTM debugging: find what broke after the last publish"
+ },
+ "google-tag-manager-ai--data-layer-design": {
+  "kicker": "Google Tag Manager AI",
+  "title": "Data layer design your developers can implement"
+ },
+ "google-tag-manager-ai--gtm-publishing-workflow": {
+  "kicker": "Google Tag Manager AI",
+  "title": "A GTM publishing workflow with approvals built in"
+ },
+ "server-side-tracking": {
+  "kicker": "Solution",
+  "title": "Server-side tracking, engineered by AI"
+ },
+ "server-side-tracking--server-side-gtm-setup": {
+  "kicker": "Server-Side Tracking",
+  "title": "Server-side GTM setup, step by step"
+ },
+ "server-side-tracking--enhanced-conversions-setup": {
+  "kicker": "Server-Side Tracking",
+  "title": "Enhanced conversions setup that actually matches"
+ },
+ "server-side-tracking--meta-conversions-api-setup": {
+  "kicker": "Server-Side Tracking",
+  "title": "Meta Conversions API setup and deduplication"
+ },
+ "server-side-tracking--consent-mode-v2": {
+  "kicker": "Server-Side Tracking",
+  "title": "Consent Mode v2, configured correctly"
+ },
+ "meta-ads-ai-agent": {
+  "kicker": "Solution",
+  "title": "Meta Ads AI agent for Facebook and Instagram"
+ },
+ "meta-ads-ai-agent--meta-campaign-builder": {
+  "kicker": "Meta Ads AI Agent",
+  "title": "Meta Ads campaign planning"
+ },
+ "meta-ads-ai-agent--ai-ad-creatives": {
+  "kicker": "Meta Ads AI Agent",
+  "title": "Ad images and creative concepts, made with AI"
+ },
+ "meta-ads-ai-agent--meta-audiences": {
+  "kicker": "Meta Ads AI Agent",
+  "title": "Meta audiences that pull their weight"
+ },
+ "meta-ads-ai-agent--meta-ads-audit": {
+  "kicker": "Meta Ads AI Agent",
+  "title": "Meta Ads audit in one conversation"
+ },
+ "linkedin-ads-ai-agent": {
+  "kicker": "Solution",
+  "title": "LinkedIn Ads tracking and analysis for B2B teams"
+ },
+ "linkedin-ads-ai-agent--linkedin-ads-reporting": {
+  "kicker": "LinkedIn Ads AI Agent",
+  "title": "LinkedIn Ads reporting from your exports, next to GA4"
+ },
+ "linkedin-ads-ai-agent--linkedin-insight-tag-setup": {
+  "kicker": "LinkedIn Ads AI Agent",
+  "title": "LinkedIn Insight Tag setup, verified end to end"
+ },
+ "linkedin-ads-ai-agent--linkedin-conversions-api": {
+  "kicker": "LinkedIn Ads AI Agent",
+  "title": "LinkedIn Conversions API through server-side GTM"
+ },
+ "linkedin-ads-ai-agent--linkedin-ads-budget-optimization": {
+  "kicker": "LinkedIn Ads AI Agent",
+  "title": "LinkedIn Ads budget optimization by CPL"
+ },
+ "microsoft-ads-ai-agent": {
+  "kicker": "Solution",
+  "title": "Microsoft Ads tracking and analysis for Bing campaigns"
+ },
+ "microsoft-ads-ai-agent--microsoft-ads-uet-setup": {
+  "kicker": "Microsoft Ads AI Agent",
+  "title": "Microsoft Ads UET tag setup and consent"
+ },
+ "microsoft-ads-ai-agent--microsoft-ads-reporting": {
+  "kicker": "Microsoft Ads AI Agent",
+  "title": "Microsoft Ads reporting next to Google Ads"
+ },
+ "microsoft-ads-ai-agent--google-ads-to-microsoft-ads": {
+  "kicker": "Microsoft Ads AI Agent",
+  "title": "Google Ads to Microsoft Ads: the import checklist"
+ },
+ "microsoft-ads-ai-agent--microsoft-ads-negative-keywords": {
+  "kicker": "Microsoft Ads AI Agent",
+  "title": "Negative keywords for Microsoft Ads, kept in step"
+ },
+ "tiktok-ads-ai-agent": {
+  "kicker": "Solution",
+  "title": "TikTok Ads tracking, analysis and creative"
+ },
+ "tiktok-ads-ai-agent--tiktok-events-api-setup": {
+  "kicker": "TikTok Ads AI Agent",
+  "title": "TikTok Events API setup with deduplication"
+ },
+ "tiktok-ads-ai-agent--tiktok-pixel-setup": {
+  "kicker": "TikTok Ads AI Agent",
+  "title": "TikTok Pixel setup through Tag Manager"
+ },
+ "tiktok-ads-ai-agent--tiktok-ad-creatives": {
+  "kicker": "TikTok Ads AI Agent",
+  "title": "TikTok ad creatives that keep up with fatigue"
+ },
+ "tiktok-ads-ai-agent--tiktok-ads-reporting": {
+  "kicker": "TikTok Ads AI Agent",
+  "title": "TikTok Ads reporting you can act on"
+ },
+ "faq": {
+  "kicker": "FAQ",
+  "title": "Markitech questions, answered"
+ },
+ "faq--what-is-markitech": {
+  "kicker": "FAQ",
+  "title": "What is Markitech?"
+ },
+ "faq--how-does-approval-work": {
+  "kicker": "FAQ",
+  "title": "How does approval work in Markitech?"
+ },
+ "faq--what-can-markitech-read": {
+  "kicker": "FAQ",
+  "title": "What can Markitech read without asking?"
+ },
+ "faq--which-platforms-are-supported": {
+  "kicker": "FAQ",
+  "title": "Which platforms does Markitech support?"
+ },
+ "faq--which-ai-assistants-work-with-markitech": {
+  "kicker": "FAQ",
+  "title": "Which AI assistants work with Markitech?"
+ },
+ "faq--how-are-credentials-stored": {
+  "kicker": "FAQ",
+  "title": "How does Markitech store my credentials?"
+ },
+ "faq--how-much-does-markitech-cost": {
+  "kicker": "FAQ",
+  "title": "How much does Markitech cost?"
+ },
+ "faq--what-are-markitech-credits": {
+  "kicker": "FAQ",
+  "title": "What are Markitech credits?"
+ },
+ "faq--can-agencies-use-markitech": {
+  "kicker": "FAQ",
+  "title": "Can agencies use Markitech for client accounts?"
+ },
+ "faq--is-markitech-affiliated": {
+  "kicker": "FAQ",
+  "title": "Is Markitech affiliated with other marketing AI products?"
+ },
+ "faq--what-is-an-mcp-server": {
+  "kicker": "FAQ",
+  "title": "What is an MCP server?"
+ },
+ "faq--is-it-safe-to-let-ai-manage-ad-accounts": {
+  "kicker": "FAQ",
+  "title": "Is it safe to let AI manage ad accounts?"
+ },
+ "faq--can-ai-manage-google-ads": {
+  "kicker": "FAQ",
+  "title": "Can AI manage Google Ads campaigns?"
+ },
+ "faq--can-ai-publish-google-tag-manager": {
+  "kicker": "FAQ",
+  "title": "Can AI publish changes in Google Tag Manager?"
+ },
+ "faq--does-markitech-support-server-side-tagging": {
+  "kicker": "FAQ",
+  "title": "Does Markitech support server-side tagging?"
+ },
+ "faq--can-markitech-fix-ga4-tracking": {
+  "kicker": "FAQ",
+  "title": "Can Markitech fix GA4 tracking?"
+ },
+ "faq--does-markitech-work-with-meta-capi": {
+  "kicker": "FAQ",
+  "title": "Does Markitech work with the Meta Conversions API?"
+ },
+ "faq--can-markitech-make-ad-creatives": {
+  "kicker": "FAQ",
+  "title": "Can Markitech make ad creatives?"
+ },
+ "faq--does-markitech-support-consent-mode": {
+  "kicker": "FAQ",
+  "title": "Does Markitech support Consent Mode v2?"
+ },
+ "faq--how-long-does-setup-take": {
+  "kicker": "FAQ",
+  "title": "How long does it take to set up Markitech?"
+ },
+ "glossary": {
+  "kicker": "Glossary",
+  "title": "Marketing technology glossary"
+ },
+ "glossary--model-context-protocol": {
+  "kicker": "Glossary",
+  "title": "Model Context Protocol (MCP)"
+ },
+ "glossary--mcp-server": {
+  "kicker": "Glossary",
+  "title": "MCP server"
+ },
+ "glossary--server-side-tagging": {
+  "kicker": "Glossary",
+  "title": "Server-side tagging"
+ },
+ "glossary--data-layer": {
+  "kicker": "Glossary",
+  "title": "Data layer"
+ },
+ "glossary--google-tag": {
+  "kicker": "Glossary",
+  "title": "Google tag (gtag.js)"
+ },
+ "glossary--ga4-key-event": {
+  "kicker": "Glossary",
+  "title": "Key event (GA4)"
+ },
+ "glossary--ga4-custom-dimension": {
+  "kicker": "Glossary",
+  "title": "Custom dimension (GA4)"
+ },
+ "glossary--enhanced-conversions": {
+  "kicker": "Glossary",
+  "title": "Enhanced conversions"
+ },
+ "glossary--consent-mode": {
+  "kicker": "Glossary",
+  "title": "Google Consent Mode"
+ },
+ "glossary--conversions-api": {
+  "kicker": "Glossary",
+  "title": "Conversions API (CAPI)"
+ },
+ "glossary--event-deduplication": {
+  "kicker": "Glossary",
+  "title": "Event deduplication"
+ },
+ "glossary--event-match-quality": {
+  "kicker": "Glossary",
+  "title": "Event Match Quality"
+ },
+ "glossary--gclid": {
+  "kicker": "Glossary",
+  "title": "GCLID"
+ },
+ "glossary--utm-parameters": {
+  "kicker": "Glossary",
+  "title": "UTM parameters"
+ },
+ "glossary--smart-bidding": {
+  "kicker": "Glossary",
+  "title": "Smart Bidding"
+ },
+ "glossary--target-cpa": {
+  "kicker": "Glossary",
+  "title": "Target CPA (tCPA)"
+ },
+ "glossary--target-roas": {
+  "kicker": "Glossary",
+  "title": "Target ROAS (tROAS)"
+ },
+ "glossary--data-driven-attribution": {
+  "kicker": "Glossary",
+  "title": "Data-driven attribution"
+ },
+ "glossary--uet-tag": {
+  "kicker": "Glossary",
+  "title": "UET tag (Microsoft Advertising)"
+ },
+ "glossary--linkedin-insight-tag": {
+  "kicker": "Glossary",
+  "title": "LinkedIn Insight Tag"
+ },
+ "glossary--search-terms-report": {
+  "kicker": "Glossary",
+  "title": "Search terms report"
+ },
+ "glossary--negative-keywords": {
+  "kicker": "Glossary",
+  "title": "Negative keywords"
+ },
+ "use-cases--agencies": {
+  "kicker": "Use case",
+  "title": "An AI marketing ops engineer for every client account"
+ },
+ "use-cases--ecommerce": {
+  "kicker": "Use case",
+  "title": "Ecommerce growth on tracking you can trust"
+ },
+ "use-cases--b2b-saas": {
+  "kicker": "Use case",
+  "title": "B2B demand generation measured on pipeline"
+ },
+ "use-cases--in-house-teams": {
+  "kicker": "Use case",
+  "title": "Specialist marketing ops for in-house teams"
+ },
+ "use-cases": {
+  "kicker": "Use cases",
+  "title": "How teams use Markitech"
+ },
+ "markitech-vs-markifact": {
+  "kicker": "Comparison",
+  "title": "Markitech vs Markifact"
+ },
+ "privacy": {
+  "kicker": "Legal",
+  "title": "Privacy Policy"
+ },
+ "terms": {
+  "kicker": "Legal",
+  "title": "Terms of Service"
+ },
+ "security": {
+  "kicker": "Trust",
+  "title": "Security"
+ },
+ "about": {
+  "kicker": "Company",
+  "title": "About Markitech"
+ },
+ "integrations": {
+  "kicker": "Integrations",
+  "title": "Every Markitech integration"
+ },
+ "integrations--google-ads-mcp": {
+  "kicker": "Integration",
+  "title": "Google Ads"
+ },
+ "integrations--ga4-mcp": {
+  "kicker": "Integration",
+  "title": "Google Analytics 4"
+ },
+ "integrations--google-tag-manager-mcp": {
+  "kicker": "Integration",
+  "title": "Google Tag Manager"
+ },
+ "integrations--google-search-console-mcp": {
+  "kicker": "Integration",
+  "title": "Google Search Console"
+ },
+ "integrations--google-merchant-center-mcp": {
+  "kicker": "Integration",
+  "title": "Google Merchant Center"
+ },
+ "integrations--google-business-profile-mcp": {
+  "kicker": "Integration",
+  "title": "Google Business Profile"
+ },
+ "integrations--dv360-mcp": {
+  "kicker": "Integration",
+  "title": "Display & Video 360"
+ },
+ "integrations--bigquery-mcp": {
+  "kicker": "Integration",
+  "title": "BigQuery"
+ },
+ "integrations--google-sheets-mcp": {
+  "kicker": "Integration",
+  "title": "Google Sheets"
+ },
+ "integrations--google-docs-mcp": {
+  "kicker": "Integration",
+  "title": "Google Docs"
+ },
+ "integrations--google-slides-mcp": {
+  "kicker": "Integration",
+  "title": "Google Slides"
+ },
+ "integrations--meta-ads-mcp": {
+  "kicker": "Integration",
+  "title": "Meta Ads"
+ },
+ "integrations--facebook-pages-mcp": {
+  "kicker": "Integration",
+  "title": "Facebook Pages"
+ },
+ "integrations--instagram-mcp": {
+  "kicker": "Integration",
+  "title": "Instagram"
+ },
+ "integrations--whatsapp-mcp": {
+  "kicker": "Integration",
+  "title": "WhatsApp Business"
+ },
+ "integrations--wordpress-mcp": {
+  "kicker": "Integration",
+  "title": "WordPress"
+ },
+ "integrations--linkedin-ads": {
+  "kicker": "Integration",
+  "title": "LinkedIn Ads"
+ },
+ "integrations--microsoft-advertising": {
+  "kicker": "Integration",
+  "title": "Microsoft Advertising"
+ },
+ "integrations--tiktok-ads": {
+  "kicker": "Integration",
+  "title": "TikTok Ads"
+ },
+ "integrations--amazon-ads": {
+  "kicker": "Integration",
+  "title": "Amazon Ads"
+ },
+ "integrations--pinterest-ads": {
+  "kicker": "Integration",
+  "title": "Pinterest Ads"
+ },
+ "integrations--reddit-ads": {
+  "kicker": "Integration",
+  "title": "Reddit Ads"
+ },
+ "integrations--snapchat-ads": {
+  "kicker": "Integration",
+  "title": "Snapchat Ads"
+ },
+ "integrations--hubspot": {
+  "kicker": "Integration",
+  "title": "HubSpot"
+ },
+ "integrations--shopify": {
+  "kicker": "Integration",
+  "title": "Shopify"
+ },
+ "integrations--klaviyo": {
+  "kicker": "Integration",
+  "title": "Klaviyo"
+ },
+ "integrations--slack": {
+  "kicker": "Integration",
+  "title": "Slack"
+ },
+ "prompts": {
+  "kicker": "Prompts",
+  "title": "Markitech prompt library"
+ }
+}
