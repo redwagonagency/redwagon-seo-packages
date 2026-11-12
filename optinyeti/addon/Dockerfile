@@ -18,4 +18,5 @@ RUN python patch_engine.py popup-engine.js
 FROM base
 COPY --from=build /out/OptinYeti.Leads.dll /app/OptinYeti.Leads.dll
 COPY --from=js /work/popup-engine.js /app/wwwroot/js/popup-engine.js
+ENV DOTNET_STARTUP_HOOKS=/app/OptinYeti.Leads.dll
 ENV ASPNETCORE_HOSTINGSTARTUPASSEMBLIES=OptinYeti.Leads
