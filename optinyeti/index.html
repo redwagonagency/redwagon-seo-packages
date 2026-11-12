@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OptinYeti — Popup & Lead Capture for Growing Websites</title>
+<meta name="description" content="OptinYeti helps you build exit-intent popups, floating bars, and lead-capture campaigns that turn visitors into subscribers.">
+<link rel="icon" href="img/yeti-logo.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --teal-900:#063b3f; --teal-700:#0a7a80; --teal-500:#13c2c2; --teal-400:#2dd9d2;
+    --mint-100:#eafffb; --ink:#0b2730; --muted:#5b7c82; --card:#ffffff; --bg:#f4fbfb;
+    --radius:18px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5;}
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px;}
+  header{position:sticky;top:0;background:rgba(244,251,251,0.92);backdrop-filter:blur(6px);z-index:20;border-bottom:1px solid #dff2f1;}
+  nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;}
+  .brand img{width:36px;height:36px;}
+  .navlinks{display:flex;gap:28px;font-weight:600;color:var(--teal-900);}
+  .cta{background:var(--teal-500);color:#fff;padding:10px 20px;border-radius:999px;font-weight:700;}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:#fff8e0;color:#8a6d00;border:1px solid #f0dfa0;padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700;margin-bottom:18px;}
+
+  .hero{padding:72px 0 40px;}
+  .hero-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:40px;align-items:center;}
+  h1{font-size:46px;line-height:1.1;margin:0 0 20px;font-weight:800;letter-spacing:-0.5px;}
+  h1 span{color:var(--teal-500);}
+  .sub{font-size:18px;color:var(--muted);max-width:520px;margin-bottom:28px;}
+  .hero-actions{display:flex;gap:14px;align-items:center;}
+  .btn-primary{background:var(--teal-500);color:#fff;padding:14px 26px;border-radius:12px;font-weight:700;font-size:16px;}
+  .btn-secondary{padding:14px 22px;border-radius:12px;font-weight:700;font-size:16px;border:2px solid #d7eeee;color:var(--teal-900);}
+  .hero-art{display:flex;justify-content:center;}
+  .hero-art img{max-width:360px;width:100%;filter:drop-shadow(0 20px 30px rgba(10,122,128,0.18));}
+
+  section{padding:64px 0;}
+  .section-head{max-width:680px;margin:0 auto 40px;text-align:center;}
+  .section-head h2{font-size:32px;margin:0 0 12px;font-weight:800;}
+  .section-head p{color:var(--muted);font-size:17px;}
+
+  .problem{background:#fff;border-top:1px solid #e7f4f3;border-bottom:1px solid #e7f4f3;}
+  .problem-grid{display:grid;grid-template-columns:0.8fr 1.2fr;gap:48px;align-items:center;}
+  .problem-grid img{width:100%;max-width:300px;}
+  .problem-list{list-style:none;padding:0;margin:0;display:grid;gap:16px;}
+  .problem-list li{display:flex;gap:12px;font-size:16px;color:var(--ink);}
+  .problem-list li b{color:var(--teal-700);}
+
+  .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;}
+  .feature{background:var(--card);border:1px solid #e3f1f0;border-radius:var(--radius);padding:28px;}
+  .feature .icon{width:44px;height:44px;border-radius:12px;background:var(--mint-100);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;}
+  .feature h3{margin:0 0 8px;font-size:18px;font-weight:700;}
+  .feature p{margin:0;color:var(--muted);font-size:15px;}
+
+  .analytics{background:linear-gradient(135deg,var(--teal-900),var(--teal-700));color:#fff;border-radius:28px;margin:0 24px;}
+  .analytics .wrap{padding:0 40px;}
+  .analytics-grid{display:grid;grid-template-columns:1.1fr 0.9fr;gap:40px;align-items:center;padding:56px 0;}
+  .analytics h2{font-size:30px;margin:0 0 16px;font-weight:800;}
+  .analytics p{color:#cdeceb;font-size:16px;}
+  .analytics img{max-width:280px;width:100%;}
+
+  .pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch;}
+  .plan{background:var(--card);border:1px solid #e3f1f0;border-radius:var(--radius);padding:32px 28px;display:flex;flex-direction:column;}
+  .plan.popular{border:2px solid var(--teal-500);position:relative;transform:translateY(-8px);}
+  .plan.popular:before{content:"MOST POPULAR";position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--teal-500);color:#fff;font-size:11px;font-weight:800;letter-spacing:0.5px;padding:4px 12px;border-radius:999px;}
+  .plan h3{margin:0;font-size:20px;font-weight:800;}
+  .plan .price{font-size:40px;font-weight:800;margin:14px 0 4px;}
+  .plan .price span{font-size:15px;font-weight:600;color:var(--muted);}
+  .plan .desc{color:var(--muted);font-size:14px;margin-bottom:20px;}
+  .plan ul{list-style:none;margin:0 0 24px;padding:0;display:grid;gap:10px;flex:1;}
+  .plan ul li{font-size:14.5px;display:flex;gap:8px;align-items:flex-start;}
+  .plan ul li:before{content:"✓";color:var(--teal-500);font-weight:800;}
+  .plan .btn-primary, .plan .btn-secondary{text-align:center;display:block;}
+
+  footer{border-top:1px solid #e3f1f0;padding:40px 0;color:var(--muted);font-size:14px;}
+  .footer-grid{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+
+  @media (max-width:860px){
+    .hero-grid, .problem-grid, .analytics-grid{grid-template-columns:1fr;}
+    .features-grid, .pricing-grid{grid-template-columns:1fr;}
+    h1{font-size:34px;}
+    .plan.popular{transform:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="wrap">
+    <div class="brand"><img src="img/yeti-logo.png" alt="OptinYeti"> OptinYeti</div>
+    <div class="navlinks">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+    </div>
+    <a class="cta" href="#pricing">Start Free</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="badge">🧊 New — built for exit-intent & lead capture</span>
+      <h1>Turn more visitors into <span>subscribers</span>, without the bloated CRO suite.</h1>
+      <p class="sub">OptinYeti is a purpose-built popup and lead-capture tool — exit-intent detection, targeted campaigns, and a template library, without burying lead-gen inside an analytics platform.</p>
+      <div class="hero-actions">
+        <a class="btn-primary" href="#pricing">Start Free — No Card Required</a>
+        <a class="btn-secondary" href="#features">See Features</a>
+      </div>
+    </div>
+    <div class="hero-art"><img src="img/yeti-hero.png" alt="OptinYeti mascot"></div>
+  </div>
+</section>
+
+<section class="problem">
+  <div class="wrap problem-grid">
+    <img src="img/yeti-overwhelmed.png" alt="Overwhelmed by a bolted-on popup tool">
+    <div>
+      <div class="section-head" style="text-align:left;margin:0 0 24px;">
+        <h2>Pop-ups shouldn't be a side feature.</h2>
+        <p>Most CRO and analytics suites bolt on a popup builder as an afterthought. That means no exit-intent, no dedicated lead-gen templates, and integrations scattered across settings pages instead of living on the campaign itself.</p>
+      </div>
+      <ul class="problem-list">
+        <li>🧩 <span><b>Buried in a bigger tool</b> — destination and integration settings live outside the popup, not on it.</span></li>
+        <li>🚪 <span><b>No exit-intent</b> — visitors leave with no last attempt to capture them.</span></li>
+        <li>📉 <span><b>No attribution</b> — no way to tie a popup conversion back to revenue.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Everything a dedicated lead-capture tool should have</h2>
+      <p>Built around the features that actually drive conversions — not bolted on after the fact.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature"><div class="icon">🚪</div><h3>Exit-Intent Technology</h3><p>Detect when a visitor is about to leave and trigger an offer at the exact moment you'd otherwise lose them.</p></div>
+      <div class="feature"><div class="icon">💰</div><h3>Revenue Attribution</h3><p>Tie popup conversions directly to downstream revenue — see which campaigns actually influence pipeline.</p></div>
+      <div class="feature"><div class="icon">⏱️</div><h3>Countdown Timers</h3><p>Native urgency campaigns for deadline-driven promotions and limited-time offers.</p></div>
+      <div class="feature"><div class="icon">🔗</div><h3>Webhooks + Zapier</h3><p>Route leads directly into your CRM or marketing automation platform — no manual exports.</p></div>
+      <div class="feature"><div class="icon">🎯</div><h3>Referrer & UTM Targeting</h3><p>Show different offers based on where traffic came from — a Google ad, an email link, or organic search.</p></div>
+      <div class="feature"><div class="icon">📅</div><h3>Campaign Scheduling</h3><p>Start and stop campaigns automatically — built for time-boxed promotions and seasonal pushes.</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="analytics">
+    <div class="wrap">
+      <div class="analytics-grid">
+        <div>
+          <h2>Know exactly what's converting</h2>
+          <p>Every campaign reports views, conversion rate, and performance by template and trigger — so you know what to keep running and what to retire.</p>
+        </div>
+        <div style="text-align:center;"><img src="img/yeti-analytics.png" alt="OptinYeti analytics"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Simple, honest pricing</h2>
+      <p>Start free. Upgrade only when you need more popups, more views, or advanced targeting.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="plan">
+        <h3>Free</h3>
+        <div class="price">$0<span>/mo</span></div>
+        <div class="desc">Perfect for getting started</div>
+        <ul>
+          <li>3 active popups</li>
+          <li>1,000 popup views/mo</li>
+          <li>1 user</li>
+          <li>Standard templates</li>
+        </ul>
+        <a class="btn-secondary" href="#">Start Free</a>
+      </div>
+      <div class="plan popular">
+        <h3>Professional</h3>
+        <div class="price">$29<span>/mo</span></div>
+        <div class="desc">For growing businesses</div>
+        <ul>
+          <li>25 active popups</li>
+          <li>50,000 popup views/mo</li>
+          <li>5 users</li>
+          <li>Advanced targeting</li>
+          <li>Analytics dashboard</li>
+          <li>API access</li>
+        </ul>
+        <a class="btn-primary" href="#">Start Free Trial</a>
+      </div>
+      <div class="plan">
+        <h3>Enterprise</h3>
+        <div class="price">$99<span>/mo</span></div>
+        <div class="desc">For large organizations</div>
+        <ul>
+          <li>Unlimited popups</li>
+          <li>Unlimited views</li>
+          <li>Unlimited users</li>
+          <li>Advanced targeting + analytics</li>
+          <li>API access</li>
+          <li>Priority support</li>
+          <li>White label</li>
+        </ul>
+        <a class="btn-secondary" href="#">Talk to Us</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div class="brand"><img src="img/yeti-logo.png" alt="OptinYeti" style="width:28px;height:28px;"> OptinYeti</div>
+    <div>© 2026 OptinYeti. All rights reserved.</div>
+  </div>
+</footer>
+
+</body>
+</html>
