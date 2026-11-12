@@ -134,7 +134,7 @@
       <div id="form-state">
         <h2>Join the beta</h2>
         <p class="sub">Takes 10 seconds. No credit card.</p>
-        <div class="form-error" id="form-error">Something went wrong — please try again, or email us at hello@optinyeti.com.</div>
+        <div class="form-error" id="form-error">Something went wrong. Please try again in a moment.</div>
         <form id="beta-form" novalidate>
           <div class="field">
             <label for="beta-name">Name</label>
@@ -184,9 +184,9 @@
   var errorBox = document.getElementById('form-error');
   var submitBtn = document.getElementById('beta-submit');
 
-  // The live "OptinYeti Free Trial - Exit Intent" EmailCollector campaign (id 5/4 on this tenant)
-  // is the real, published lead-capture campaign already tracked on the Dashboard/Analytics.
-  // We tie this landing page's signups into that same campaign's conversion tracking.
+  // Signups are filed under the published "OptinYeti Free Trial - Exit Intent" campaign
+  // (popup 4, tenant 5), so they appear in Leads and count in Analytics.
+  var TENANT_ID = 5;
   var CAMPAIGN_ID = 4;
 
   form.addEventListener('submit', function(e){
@@ -215,17 +215,32 @@
       document.getElementById('success-state').style.display = 'block';
     }
 
-    if (window.PopupManager && typeof window.PopupManager.track === 'function'){
-      window.PopupManager.track('conversion', CAMPAIGN_ID, { formName: 'beta-landing' }, payload);
-      // track() queues + fires immediately for 'conversion' events via sendTrackingEvent
-      setTimeout(showSuccess, 250);
-    } else {
-      // Tenant script not loaded (e.g. blocked) — still don't dead-end the visitor
-      errorBox.textContent = 'Could not reach the signup service — please email hello@optinyeti.com directly.';
+    function showFailure(){
+      errorBox.textContent = 'Could not save your signup. Please try again in a moment.';
       errorBox.style.display = 'block';
       submitBtn.disabled = false;
       submitBtn.textContent = 'Join the beta';
     }
+
+    // Save the lead itself (name + email) to OptinYeti's lead store.
+    fetch('https://optinyeti.com/api/leads/capture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantId: TENANT_ID,
+        popupId: CAMPAIGN_ID,
+        email: payload.email,
+        name: payload.name,
+        source: 'beta-landing-page' + (payload.website ? ' | site: ' + payload.website : '')
+      })
+    }).then(function(res){
+      if (!res.ok) throw new Error('capture failed: ' + res.status);
+      // Count it as a conversion in Analytics as well.
+      if (window.PopupManager && typeof window.PopupManager.track === 'function'){
+        window.PopupManager.track('conversion', CAMPAIGN_ID, { formName: 'beta-landing' }, payload);
+      }
+      showSuccess();
+    }).catch(showFailure);
   });
 })();
 </script>
