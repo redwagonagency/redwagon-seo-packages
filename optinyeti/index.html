@@ -145,10 +145,19 @@
   .plan.pro .btn-outline{border-color:var(--thaw);color:var(--thaw-deep);}
   .plan.pro .btn-outline:hover{background:var(--thaw);color:#fff;border-color:var(--thaw);}
 
-  footer{background:var(--ink);color:#9fc6c3;padding:40px 0;font-size:14px;}
-  .footer-grid{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
-  .footer-brand{display:flex;align-items:center;gap:10px;font-family:'Baloo 2',sans-serif;font-weight:600;color:#fff;}
-  .footer-brand img{width:26px;height:26px;border-radius:50%;}
+  footer{background:var(--ink);color:#9fc6c3;font-size:14px;}
+  .footer-brand{display:flex;align-items:center;gap:10px;font-family:'Baloo 2',sans-serif;font-weight:600;color:#fff;font-size:18px;}
+  .footer-brand img{width:28px;height:28px;border-radius:50%;}
+  .footer-main{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:40px;padding:56px 0 44px;}
+  .footer-about p{color:#7ea8a5;font-size:14.5px;line-height:1.6;max-width:270px;margin:16px 0 0;}
+  .footer-col h4{color:#fff;font-size:14.5px;font-weight:600;font-family:'IBM Plex Sans',sans-serif;margin:0 0 16px;}
+  .footer-col ul{list-style:none;margin:0;padding:0;display:grid;gap:11px;}
+  .footer-col a{color:#9fc6c3;font-size:14px;}
+  .footer-col a:hover{color:#fff;}
+  .footer-bottom{border-top:1px solid rgba(255,255,255,0.1);padding:22px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;color:#7ea8a5;font-size:13.5px;}
+  .footer-legal{display:flex;gap:22px;}
+  .footer-bottom a{color:#7ea8a5;}
+  .footer-bottom a:hover{color:#fff;}
 
   @media (max-width:860px){
     .hero-inner{grid-template-columns:1fr;}
@@ -163,6 +172,8 @@
     .shelf{flex-direction:column;}
     .plan.pro{order:-1;}
     .analytics-wrap{margin:0 16px;}
+    .footer-main{grid-template-columns:1fr 1fr;gap:36px 24px;}
+    .footer-about{grid-column:1 / -1;}
   }
 
   @media (max-width:600px){
@@ -170,7 +181,10 @@
     .brand{font-size:17px;}
     .brand img{width:28px;height:28px;}
     .navlinks{display:none;}
+    .login-link{display:none;}
     .btn-thaw{padding:9px 16px;font-size:14px;white-space:nowrap;}
+    .footer-main{grid-template-columns:1fr;gap:30px;padding:44px 0 36px;}
+    .footer-bottom{flex-direction:column;align-items:flex-start;}
   }
 </style>
 </head>
@@ -181,9 +195,14 @@
     <div class="brand"><img src="img/yeti-logo.png" alt="OptinYeti"> OptinYeti</div>
     <div class="navlinks">
       <a href="#features">Features</a>
+      <a href="#analytics">Analytics</a>
       <a href="#pricing">Pricing</a>
+      <a href="https://optinyeti.com/Blog">Blog</a>
     </div>
-    <a class="btn btn-thaw" href="#pricing">Start free</a>
+    <div style="display:flex;align-items:center;gap:18px;">
+      <a class="login-link" href="https://optinyeti.com/Account/Login" style="font-weight:500;font-size:15px;color:var(--ink-soft);">Log in</a>
+      <a class="btn btn-thaw" href="https://optinyeti.com/Account/Register">Start free</a>
+    </div>
   </nav>
 </header>
 
@@ -193,7 +212,7 @@
       <h1>Capture the visitors who were about to leave.</h1>
       <p>OptinYeti watches for exit intent, times offers around real campaigns, and ties every conversion back to revenue, so lead capture stops being an afterthought bolted onto your analytics suite.</p>
       <div class="hero-actions">
-        <a class="btn btn-thaw" href="#pricing">Start free</a>
+        <a class="btn btn-thaw" href="https://optinyeti.com/Account/Register">Start free</a>
         <small>No card required</small>
       </div>
     </div>
@@ -263,7 +282,7 @@
   </div>
 </section>
 
-<section>
+<section id="analytics">
   <div class="wrap analytics-wrap">
     <div class="aurora"></div>
     <div class="wrap analytics-grid">
@@ -294,7 +313,7 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 1 user</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Standard templates</li>
         </ul>
-        <a class="btn btn-outline" href="#">Start free</a>
+        <a class="btn btn-outline" href="https://optinyeti.com/Account/Register">Start free</a>
       </div>
       <div class="plan pro">
         <h3>Professional</h3>
@@ -309,7 +328,7 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Analytics dashboard</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> API access</li>
         </ul>
-        <a class="btn btn-outline" href="#">Start free trial</a>
+        <a class="btn btn-outline" href="https://optinyeti.com/Account/Register">Start free trial</a>
       </div>
       <div class="plan ent">
         <h3>Enterprise</h3>
@@ -324,18 +343,54 @@
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Priority support</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> White label</li>
         </ul>
-        <a class="btn btn-outline" href="#">Talk to us</a>
+        <a class="btn btn-outline" href="https://optinyeti.com/Home/Contact">Talk to us</a>
       </div>
     </div>
   </div>
 </section>
 
 <footer>
-  <div class="wrap footer-grid">
-    <div class="footer-brand"><img src="img/yeti-logo.png" alt="OptinYeti"> OptinYeti</div>
+  <div class="wrap footer-main">
+    <div class="footer-about">
+      <div class="footer-brand"><img src="img/yeti-logo.png" alt="OptinYeti"> OptinYeti</div>
+      <p>Exit-intent popups and lead capture built as the main feature, not a bolt-on to an analytics suite.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#analytics">Analytics</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="https://optinyeti.com/Account/Register">Start free</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Resources</h4>
+      <ul>
+        <li><a href="https://optinyeti.com/Blog">Blog</a></li>
+        <li><a href="https://optinyeti.com/Account/Login">Log in</a></li>
+        <li><a href="https://optinyeti.com/Account/Register">Create an account</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="https://optinyeti.com/Home/Contact">Contact</a></li>
+        <li><a href="https://optinyeti.com/Home/Privacy">Privacy policy</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="wrap footer-bottom">
     <div>© 2026 OptinYeti. All rights reserved.</div>
+    <div class="footer-legal">
+      <a href="https://optinyeti.com/Home/Privacy">Privacy policy</a>
+      <a href="https://optinyeti.com/Home/Contact">Contact</a>
+    </div>
   </div>
 </footer>
+
+<!-- OptinYeti tenant-wide popup tracking -->
+<script src="https://optinyeti.com/Popup/GetTenantScript/5"></script>
 
 </body>
 </html>
