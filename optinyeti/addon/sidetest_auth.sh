@@ -46,7 +46,19 @@ echo "EXPORT=$(curl -s -b $J -D /tmp/oy_h.txt $T/admin/Leads/export | tail -1 | 
 echo "EXPORT_TYPE=$(grep -i -E 'content-type|content-disposition' /tmp/oy_h.txt | tr -d '\r' | tr '\n' ' ')"
 echo "DELETE_BAD_ORIGIN=$(curl -s -b $J -o /dev/null -w '%{http_code}' -H 'Origin: https://evil.example' -d "id=$LEAD_ID" $T/admin/Leads/delete) rows_after=$(sqlite3 $DB 'select count(*) from EmailCaptures')"
 echo "DELETE_OK=$(curl -s -b $J -o /dev/null -w '%{http_code}' -H "Origin: $T" -d "id=$LEAD_ID" $T/admin/Leads/delete) rows_after=$(sqlite3 $DB 'select count(*) from EmailCaptures')"
+curl -s -b $J -o /tmp/oy_dash.html $T/
+echo "MENU: leads_links=$(grep -o 'href="/admin/Leads"' /tmp/oy_dash.html | wc -l) analytics_links=$(grep -o 'href="/admin/Analytics"' /tmp/oy_dash.html | wc -l) dashboard_ok=$(grep -c 'Recent Popups\|Quick Actions' /tmp/oy_dash.html) html_closed=$(grep -c '</html>' /tmp/oy_dash.html)"
+echo "MENU_LINK=$(grep -o '<a[^>]*href="/admin/Leads"[^>]*>[^<]*' /tmp/oy_dash.html | head -1 | tr -s ' \n' ' ' | cut -c1-140)"
+echo "LOGGED_OUT_HOME_UNCHANGED=$(curl -s $T/Account/Login | grep -c 'href="/admin/Leads"')"
+echo "INTEG_PAGE=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/admin/Integrations) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/admin/Integrations)"
+save() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" --data-urlencode "url=$1" -d enabled=1 $T/admin/Integrations/save | sed 's/.*msg=//'; }
+echo "SAVE_HTTP=$(save http://example.com/hook) SAVE_PRIVATE=$(save https://10.0.0.5/hook) SAVE_LOCALHOST=$(save https://localhost/hook) SAVE_GOOD=$(save https://example.com/jpw-test-hook)"
+echo "SAVE_NO_ORIGIN=$(curl -s -b $J -o /dev/null -w '%{http_code}' -d url=https://example.com/x $T/admin/Integrations/save)"
+echo "HOOK_ROW=$(sqlite3 $DB 'select TenantId, Url, IsEnabled from LeadWebhooks')"
+echo "TEST_SEND=$(curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" -X POST $T/admin/Integrations/test | sed 's/.*msg=//') status=$(sqlite3 $DB 'select LastStatus from LeadWebhooks')"
+curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":4,"email":"jpw-hook@example.com"}' $T/api/leads/capture; sleep 4
+echo "CAPTURE_FIRES_HOOK=$(sqlite3 $DB 'select LastStatus, LastAttemptAt from LeadWebhooks')"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1
-rm -rf $D $J /tmp/oy_l1.html /tmp/oy_l2.html /tmp/oy_h.txt
+rm -rf $D $J /tmp/oy_dash.html /tmp/oy_l1.html /tmp/oy_l2.html /tmp/oy_h.txt

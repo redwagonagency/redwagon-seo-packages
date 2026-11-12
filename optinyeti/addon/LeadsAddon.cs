@@ -6,11 +6,14 @@
 //   GET  /admin/Leads            leads list for the signed-in user's tenant
 //   GET  /admin/Leads/export     CSV export
 //   POST /admin/Leads/delete     delete one lead
-// plus a few baseline security headers on every response.
+//   GET  /admin/Integrations     webhook settings (send each new lead to Zapier, Make, n8n, a CRM...)
+//   POST /admin/Integrations/save, /admin/Integrations/test
+// plus a "Leads" link in the app's own menu and a few baseline security headers.
 
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -102,6 +105,21 @@ public sealed class LeadsMiddleware
                 await HandleDelete(ctx);
                 return;
             }
+            if (path.Equals("/admin/integrations", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleIntegrations(ctx);
+                return;
+            }
+            if (path.Equals("/admin/integrations/save", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleIntegrationSave(ctx);
+                return;
+            }
+            if (path.Equals("/admin/integrations/test", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleIntegrationTest(ctx);
+                return;
+            }
         }
         catch (Exception ex) when (!ctx.Response.HasStarted)
         {
@@ -112,7 +130,76 @@ public sealed class LeadsMiddleware
             return;
         }
 
+        if (ShouldAddMenuLink(ctx, path))
+        {
+            await AddMenuLink(ctx);
+            return;
+        }
+
         await _next(ctx);
+    }
+
+    // ------------------------------------------------------------- menu link
+
+    private static readonly Regex AnalyticsLink = new(
+        "<a\\b[^>]*href=\"/admin/Analytics\"[^>]*>.*?</a>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+    // Signed-in page views only; never scripts, APIs or static files.
+    private static bool ShouldAddMenuLink(HttpContext ctx, string path)
+    {
+        if (!HttpMethods.IsGet(ctx.Request.Method)) return false;
+        if (ctx.Request.Headers.ContainsKey("Upgrade")) return false;
+        if (path.Contains('.')) return false;
+        if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)) return false;
+        if (path.StartsWith("/Popup/GetTenant", StringComparison.OrdinalIgnoreCase)) return false;
+        return ctx.Request.Cookies.ContainsKey(".AspNetCore.Identity.Application");
+    }
+
+    private async Task AddMenuLink(HttpContext ctx)
+    {
+        ctx.Request.Headers.Remove("Accept-Encoding");
+        var original = ctx.Response.Body;
+        using var buffer = new MemoryStream();
+        ctx.Response.Body = buffer;
+        try
+        {
+            await _next(ctx);
+        }
+        finally
+        {
+            ctx.Response.Body = original;
+        }
+
+        var type = ctx.Response.ContentType ?? "";
+        if (ctx.Response.StatusCode == 200 &&
+            type.StartsWith("text/html", StringComparison.OrdinalIgnoreCase) &&
+            !ctx.Response.Headers.ContainsKey("Content-Encoding") &&
+            buffer.Length > 0 && buffer.Length < 2 * 1024 * 1024)
+        {
+            var html = Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+            var updated = InjectLeadsLink(html);
+            if (!ReferenceEquals(updated, html))
+            {
+                var bytes = Encoding.UTF8.GetBytes(updated);
+                if (ctx.Response.ContentLength != null) ctx.Response.ContentLength = bytes.Length;
+                await original.WriteAsync(bytes);
+                return;
+            }
+        }
+
+        buffer.Position = 0;
+        await buffer.CopyToAsync(original);
+    }
+
+    private static string InjectLeadsLink(string html)
+    {
+        if (html.Contains("href=\"/admin/Leads\"", StringComparison.OrdinalIgnoreCase)) return html;
+        var match = AnalyticsLink.Match(html);
+        if (!match.Success) return html;
+        var link = match.Value.Replace("/admin/Analytics", "/admin/Leads", StringComparison.OrdinalIgnoreCase);
+        link = Regex.Replace(link, "\\bAnalytics\\b", "Leads");
+        return html.Insert(match.Index, link + "\n");
     }
 
     // ---------------------------------------------------------------- capture
@@ -262,6 +349,14 @@ public sealed class LeadsMiddleware
             await cmd.ExecuteNonQueryAsync();
         }
 
+        var webhookUrl = await EnabledWebhook(db, tenantId.Value);
+        if (webhookUrl != null)
+        {
+            var payload = LeadPayload("lead.captured", email, firstName, lastName, phone, popupId.Value, tenantId.Value, source, now);
+            var tenant = tenantId.Value;
+            _ = Task.Run(() => DeliverWebhook(tenant, webhookUrl, payload));
+        }
+
         await Json(ctx, 200, true, "Lead captured");
     }
 
@@ -399,11 +494,11 @@ public sealed class LeadsMiddleware
             : "<div class=\"card\"><table><thead><tr><th>Email</th><th>Name</th><th>Phone</th><th>Popup</th><th>Source</th><th>Captured (UTC)</th><th></th></tr></thead><tbody>" +
               rows + "</tbody></table></div>" + pager;
 
-        var html = PageTop + "<div class=\"head\"><div><h1>Leads</h1><p class=\"sub\">" +
+        var html = Chrome("Leads") + "<div class=\"head\"><div><h1>Leads</h1><p class=\"sub\">" +
                    total.ToString("N0", CultureInfo.InvariantCulture) + (total == 1 ? " lead" : " leads") +
                    (q.Length > 0 ? " matching “" + H(q) + "”" : "") + "</p></div>" +
                    "<div class=\"actions\"><form method=\"get\" action=\"/admin/Leads\"><input type=\"search\" name=\"q\" placeholder=\"Search email or name\" value=\"" + H(q) + "\"><button type=\"submit\" class=\"btn ghost\">Search</button></form>" +
-                   "<a class=\"btn\" href=\"/admin/Leads/export" + (q.Length > 0 ? "?q=" + Uri.EscapeDataString(q) : "") + "\">Export CSV</a></div></div>" +
+                   "<a class=\"btn ghost\" href=\"/admin/Integrations\">Integrations</a><a class=\"btn\" href=\"/admin/Leads/export" + (q.Length > 0 ? "?q=" + Uri.EscapeDataString(q) : "") + "\">Export CSV</a></div></div>" +
                    table + PageBottom;
 
         ctx.Response.ContentType = "text/html; charset=utf-8";
@@ -462,10 +557,7 @@ public sealed class LeadsMiddleware
         }
 
         // Only accept the form post from our own pages.
-        var origin = ctx.Request.Headers.Origin.ToString();
-        if (origin.Length == 0) origin = ctx.Request.Headers.Referer.ToString();
-        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri) ||
-            !string.Equals(originUri.Host, ctx.Request.Host.Host, StringComparison.OrdinalIgnoreCase))
+        if (!SameOrigin(ctx))
         {
             ctx.Response.StatusCode = 403;
             await ctx.Response.WriteAsync("Forbidden");
@@ -490,7 +582,296 @@ public sealed class LeadsMiddleware
         ctx.Response.Redirect("/admin/Leads");
     }
 
+    // ----------------------------------------------------------- integrations
+
+    private static readonly HttpClient WebhookClient = new(new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false,
+        ConnectTimeout = TimeSpan.FromSeconds(5),
+        // Connect only to public addresses, checked at connect time so DNS tricks cannot
+        // point a webhook at this server or its private network.
+        ConnectCallback = async (context, cancel) =>
+        {
+            var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancel);
+            var target = addresses.FirstOrDefault(a => !IsPrivateAddress(a))
+                         ?? throw new HttpRequestException("Webhook host does not resolve to a public address");
+            var socket = new Socket(target.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(target, context.DnsEndPoint.Port), cancel);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(8)
+    };
+
+    private static bool IsPrivateAddress(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
+        if (IPAddress.IsLoopback(address)) return true;
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var b = address.GetAddressBytes();
+            return b[0] == 0 || b[0] == 10 || b[0] == 127 ||
+                   (b[0] == 100 && b[1] >= 64 && b[1] <= 127) ||
+                   (b[0] == 169 && b[1] == 254) ||
+                   (b[0] == 172 && b[1] >= 16 && b[1] <= 31) ||
+                   (b[0] == 192 && b[1] == 168) ||
+                   b[0] >= 224;
+        }
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            var b = address.GetAddressBytes();
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6Multicast ||
+                   (b[0] & 0xFE) == 0xFC || address.Equals(IPAddress.IPv6Any);
+        }
+        return true;
+    }
+
+    private static bool IsAcceptableWebhookUrl(string url) =>
+        url.Length <= 500 &&
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+        uri.Scheme == Uri.UriSchemeHttps &&
+        uri.Host.Contains('.') &&
+        !(IPAddress.TryParse(uri.Host, out var literal) && IsPrivateAddress(literal));
+
+    private static string LeadPayload(string eventName, string email, string firstName, string lastName, string phone,
+        long popupId, long tenantId, string source, string capturedAt) =>
+        JsonSerializer.Serialize(new
+        {
+            @event = eventName,
+            email,
+            firstName,
+            lastName,
+            phone,
+            popupId,
+            tenantId,
+            source,
+            capturedAt
+        });
+
+    private static async Task<string?> EnabledWebhook(SqliteConnection db, long tenantId)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "select Url from LeadWebhooks where TenantId = @t and IsEnabled = 1";
+        cmd.Parameters.AddWithValue("@t", tenantId);
+        var url = await cmd.ExecuteScalarAsync() as string;
+        return !string.IsNullOrEmpty(url) && IsAcceptableWebhookUrl(url) ? url : null;
+    }
+
+    private static async Task<string> DeliverWebhook(long tenantId, string url, string payload)
+    {
+        string status;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(payload, Encoding.UTF8, "application/json")
+            };
+            request.Headers.UserAgent.ParseAdd("OptinYeti-Webhook/1.0");
+            using var response = await WebhookClient.SendAsync(request);
+            status = ((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) +
+                     (response.IsSuccessStatusCode ? " OK" : " " + response.ReasonPhrase);
+        }
+        catch (Exception ex)
+        {
+            status = "Failed: " + Clip(ex.Message, 150);
+        }
+
+        try
+        {
+            await using var db = await Open();
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = "update LeadWebhooks set LastStatus = @s, LastAttemptAt = @at where TenantId = @t";
+            cmd.Parameters.AddWithValue("@s", status);
+            cmd.Parameters.AddWithValue("@at", Timestamp(DateTime.UtcNow));
+            cmd.Parameters.AddWithValue("@t", tenantId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("[OptinYeti.Leads] webhook status not saved: " + ex.Message);
+        }
+        return status;
+    }
+
+    private static bool SameOrigin(HttpContext ctx)
+    {
+        var origin = ctx.Request.Headers.Origin.ToString();
+        if (origin.Length == 0) origin = ctx.Request.Headers.Referer.ToString();
+        return Uri.TryCreate(origin, UriKind.Absolute, out var originUri) &&
+               string.Equals(originUri.Host, ctx.Request.Host.Host, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task HandleIntegrations(HttpContext ctx)
+    {
+        if (!HttpMethods.IsGet(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+
+        string url = "", lastStatus = "", lastAttempt = "";
+        var enabled = false;
+        await using (var db = await Open())
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Url, IsEnabled, LastStatus, LastAttemptAt from LeadWebhooks where TenantId = @t";
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                url = Text(reader, 0);
+                enabled = !reader.IsDBNull(1) && reader.GetInt64(1) != 0;
+                lastStatus = Text(reader, 2);
+                lastAttempt = FormatWhen(Text(reader, 3));
+            }
+        }
+
+        var notice = ctx.Request.Query["msg"].ToString() switch
+        {
+            "saved" => "<div class=\"notice ok\">Webhook saved.</div>",
+            "badurl" => "<div class=\"notice bad\">That URL can't be used. It must be a public https:// address.</div>",
+            "nourl" => "<div class=\"notice bad\">Save a webhook URL first.</div>",
+            "tested" => "<div class=\"notice ok\">Test lead sent. Result: " + H(lastStatus) + "</div>",
+            _ => ""
+        };
+
+        var status = lastStatus.Length == 0
+            ? "No deliveries yet."
+            : "Last delivery: " + H(lastStatus) + " at " + H(lastAttempt) + " UTC";
+
+        var body =
+            "<div class=\"head\"><div><h1>Integrations</h1><p class=\"sub\">Send every new lead to your other tools the moment it is captured.</p></div></div>" +
+            notice +
+            "<div class=\"card pad\"><h2>Webhook</h2>" +
+            "<p class=\"sub\">Paste a webhook URL from Zapier, Make, n8n or your CRM. Each new lead is sent there as JSON (email, name, phone, popup, source, time).</p>" +
+            "<form method=\"post\" action=\"/admin/Integrations/save\" class=\"stack\">" +
+            "<label for=\"url\">Webhook URL</label>" +
+            "<input type=\"url\" id=\"url\" name=\"url\" placeholder=\"https://hooks.zapier.com/hooks/catch/...\" value=\"" + H(url) + "\">" +
+            "<label class=\"check\"><input type=\"checkbox\" name=\"enabled\" value=\"1\"" + (enabled || url.Length == 0 ? " checked" : "") + "> Send new leads to this URL</label>" +
+            "<div class=\"row\"><button type=\"submit\" class=\"btn\">Save webhook</button></div></form>" +
+            "<form method=\"post\" action=\"/admin/Integrations/test\" class=\"row\"><button type=\"submit\" class=\"btn ghost\">Send a test lead</button>" +
+            "<span class=\"sub\">" + status + "</span></form></div>";
+
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        await ctx.Response.WriteAsync(Chrome("Integrations") + body + PageBottom);
+    }
+
+    private static async Task HandleIntegrationSave(HttpContext ctx)
+    {
+        if (!HttpMethods.IsPost(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        if (!SameOrigin(ctx))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+        if (viewer.TenantId < 0)
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+
+        var form = await ctx.Request.ReadFormAsync();
+        var url = Clip(form["url"].ToString(), 600);
+        var enabled = form["enabled"].ToString() == "1";
+
+        await using var db = await Open();
+        await using var cmd = db.CreateCommand();
+        if (url.Length == 0)
+        {
+            cmd.CommandText = "delete from LeadWebhooks where TenantId = @t";
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await cmd.ExecuteNonQueryAsync();
+            ctx.Response.Redirect("/admin/Integrations?msg=saved");
+            return;
+        }
+        if (!IsAcceptableWebhookUrl(url))
+        {
+            ctx.Response.Redirect("/admin/Integrations?msg=badurl");
+            return;
+        }
+
+        cmd.CommandText =
+            "insert into LeadWebhooks (TenantId, Url, IsEnabled, UpdatedAt) values (@t, @u, @e, @at) " +
+            "on conflict(TenantId) do update set Url = excluded.Url, IsEnabled = excluded.IsEnabled, UpdatedAt = excluded.UpdatedAt";
+        cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+        cmd.Parameters.AddWithValue("@u", url);
+        cmd.Parameters.AddWithValue("@e", enabled ? 1 : 0);
+        cmd.Parameters.AddWithValue("@at", Timestamp(DateTime.UtcNow));
+        await cmd.ExecuteNonQueryAsync();
+        ctx.Response.Redirect("/admin/Integrations?msg=saved");
+    }
+
+    private static async Task HandleIntegrationTest(HttpContext ctx)
+    {
+        if (!HttpMethods.IsPost(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        if (!SameOrigin(ctx))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+
+        string url;
+        await using (var db = await Open())
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Url from LeadWebhooks where TenantId = @t";
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            url = await cmd.ExecuteScalarAsync() as string ?? "";
+        }
+        if (url.Length == 0 || !IsAcceptableWebhookUrl(url))
+        {
+            ctx.Response.Redirect("/admin/Integrations?msg=nourl");
+            return;
+        }
+
+        var payload = LeadPayload("lead.test", "test-lead@example.com", "Test", "Lead", "", 0, viewer.TenantId,
+            "OptinYeti test", Timestamp(DateTime.UtcNow));
+        await DeliverWebhook(viewer.TenantId, url, payload);
+        ctx.Response.Redirect("/admin/Integrations?msg=tested");
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private static int _schemaReady;
+
+    private static async Task EnsureSchema(SqliteConnection db)
+    {
+        if (Volatile.Read(ref _schemaReady) == 1) return;
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText =
+            "create table if not exists LeadWebhooks (" +
+            "TenantId integer not null primary key, Url text not null, IsEnabled integer not null default 1, " +
+            "UpdatedAt text not null, LastStatus text null, LastAttemptAt text null)";
+        await cmd.ExecuteNonQueryAsync();
+        Volatile.Write(ref _schemaReady, 1);
+    }
 
     private static async Task<SqliteConnection> Open()
     {
@@ -502,6 +883,7 @@ public sealed class LeadsMiddleware
         };
         var db = new SqliteConnection(builder.ConnectionString);
         await db.OpenAsync();
+        await EnsureSchema(db);
         return db;
     }
 
@@ -614,7 +996,7 @@ public sealed class LeadsMiddleware
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Leads - OptinYeti</title>
+<title>{{TITLE}} - OptinYeti</title>
 <style>
   :root{--ink:#0B1F2B;--ink-soft:#15323f;--glacier:#EAF6F7;--teal:#0F6B6B;--thaw:#FF8A3D;--thaw-deep:#e0701f;--line:#cfe8e6;--muted:#4d6b70;}
   *{box-sizing:border-box;}
@@ -652,6 +1034,16 @@ public sealed class LeadsMiddleware
   .empty h2{margin:0 0 6px;font-size:20px;}
   .empty p{margin:0;color:var(--muted);}
   .pager{display:flex;gap:18px;justify-content:center;align-items:center;margin-top:20px;color:var(--muted);}
+  .card.pad{padding:26px 28px;max-width:720px;}
+  .card.pad h2{margin:0 0 6px;font-size:19px;}
+  .stack{display:grid;gap:10px;margin:18px 0 16px;}
+  .stack label{font-size:13.5px;font-weight:600;color:var(--ink-soft);}
+  .stack input[type=url]{padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;}
+  .stack .check{font-weight:500;display:flex;gap:8px;align-items:center;}
+  .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+  .notice{padding:12px 16px;border-radius:10px;margin-bottom:18px;font-size:14.5px;max-width:720px;}
+  .notice.ok{background:#e3f6ee;color:#0b5b3b;border:1px solid #b5e3cf;}
+  .notice.bad{background:#fdeee6;color:#9a3b12;border:1px solid #f6c9a9;}
   :focus-visible{outline:3px solid var(--thaw);outline-offset:2px;}
 </style>
 </head>
@@ -660,12 +1052,18 @@ public sealed class LeadsMiddleware
   <a class="brand" href="/">OptinYeti</a>
   <a href="/">Dashboard</a>
   <a href="/Popup">Popups</a>
-  <a class="current" href="/admin/Leads">Leads</a>
+  <a class="{{LEADS}}" href="/admin/Leads">Leads</a>
+  <a class="{{INTEGRATIONS}}" href="/admin/Integrations">Integrations</a>
   <a href="/admin/Analytics">Analytics</a>
   <a href="/admin/Settings">Settings</a>
 </nav></header>
 <main>
 """;
+
+    private static string Chrome(string current) =>
+        PageTop.Replace("{{TITLE}}", current)
+            .Replace("{{LEADS}}", current == "Leads" ? "current" : "")
+            .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "");
 
     private const string PageBottom = """
 </main>
