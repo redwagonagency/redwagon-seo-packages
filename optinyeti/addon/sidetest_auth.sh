@@ -138,6 +138,15 @@ const P=window.PopupManager;const pop={id:1,name:'t',type:'EmailCollector',conte
 try{P.renderPopup(pop);process.stdout.write('ok');}catch(e){process.stdout.write('render:'+e.message);}
 " 2>&1 | tail -1)"
 rm -f /tmp/oy_eng.js
+# ---- reporting and heat maps
+cro() { curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d "$1" $T/api/cro/collect; }
+echo "CRO_COLLECT=$(cro '{"tenantId":5,"url":"https://jpw.example/blog/post?utm_source=x","referrer":"https://www.google.com/","utmSource":"newsletter","utmCampaign":"jpw","vw":1280,"docH":3000,"depth":80,"duration":42,"clicks":[{"x":0.5,"y":400,"s":"main > a.btn"},{"x":0.52,"y":410,"s":"main > a.btn"},{"x":2,"y":1,"s":"bad"}]}') $(cro '{"tenantId":5,"url":"https://jpw.example/blog/post","vw":390,"docH":3000,"depth":30,"duration":5,"clicks":[]}') bad=$(cro 'x') unknown_site=$(cro '{"tenantId":999999,"url":"https://a.b/c"}') rows=$(sqlite3 $DB "select count(*)||'/'||sum(Clicks)||'/'||group_concat(Device) from CroPageviews where TenantId=5") clicks=$(sqlite3 $DB "select count(*) from CroClicks where TenantId=5") url_norm=$(sqlite3 $DB "select count(distinct Url) from CroPageviews where TenantId=5") src=$(sqlite3 $DB "select UtmSource||'/'||ReferrerDomain from CroPageviews where TenantId=5 and UtmSource is not null")"
+curl -s -b $J -o /tmp/oy_rep.html $T/admin/Reports
+echo "REPORTS=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/admin/Reports) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/admin/Reports) kpis=$(grep -o 'class=\"kpi\"' /tmp/oy_rep.html | wc -l) chart=$(grep -c '<svg' /tmp/oy_rep.html) page_row=$(grep -c 'jpw.example/blog/post' /tmp/oy_rep.html) source_row=$(grep -c '>newsletter<' /tmp/oy_rep.html) heat_link=$(grep -c 'Reports/heat?url=' /tmp/oy_rep.html) menu=$(grep -o 'href=\"/admin/Reports\"' /tmp/oy_rep.html | wc -l) export=$(curl -s -b $J $T/admin/Reports/export | head -2 | tail -1 | cut -c1-60)"
+HEAT_LOC=$(curl -s -b $J -o /dev/null -w '%{redirect_url}' "$T/admin/Reports/heat?url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost")
+TOK=$(echo "$HEAT_LOC" | sed 's/.*oyheat=5://')
+echo "HEAT_OPEN=$(echo "$HEAT_LOC" | cut -c1-40) data=$(curl -s "$T/api/cro/heat?tenantId=5&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=$TOK" | cut -c1-120) bad_token=$(curl -s -o /dev/null -w '%{http_code}' "$T/api/cro/heat?tenantId=5&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=1.x") other_tenant=$(curl -s -o /dev/null -w '%{http_code}' "$T/api/cro/heat?tenantId=1&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=$TOK") engine_cro=$(curl -s $T/js/popup-engine.js | grep -c 'startCro\|drawHeatmap')"
+rm -f /tmp/oy_rep.html
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

@@ -13,6 +13,7 @@
 //   GET  /about/joe-whyte, /exit-intent-popups, ...   public marketing pages (SeoPages.cs)
 //   GET/POST /Popup/Test/{id}    A/B test: second version of a popup, results, pick a winner
 //   GET  /api/ab/variants, POST /api/ab/track   used by the popup script on customer sites
+//   POST /api/cro/collect, GET /api/cro/heat, GET /admin/Reports...   reporting and heat maps (Reports.cs)
 //   GET/POST /Popup/Wheel/{id}   prize editor for spin-to-win popups
 //   POST /Popup/UseTemplate      creates a ready-to-edit draft popup from a template
 // plus a "Leads" link in the app's own menu and a few baseline security headers.
@@ -59,7 +60,7 @@ public sealed class LeadsStartupFilter : IStartupFilter
 
 public sealed class LeadsMiddleware
 {
-    private const string IdentityScheme = "Identity.Application";
+    internal const string IdentityScheme = "Identity.Application";
     private const int MaxBodyBytes = 16 * 1024;
     private const int PageSize = 100;
     private const int CapturesPerMinutePerIp = 10;
@@ -111,6 +112,10 @@ public sealed class LeadsMiddleware
             {
                 await HandleDelete(ctx);
                 return;
+            }
+            if (path.StartsWith("/api/cro/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/Reports", StringComparison.OrdinalIgnoreCase))
+            {
+                if (await Reports.Handle(ctx, path)) return;
             }
             if (path.Equals("/api/ab/variants", StringComparison.OrdinalIgnoreCase))
             {
@@ -437,7 +442,7 @@ public sealed class LeadsMiddleware
         var match = AnalyticsLink.Match(html);
         if (!match.Success) return html;
         var added = new StringBuilder();
-        foreach (var (href, label) in new[] { ("/Popup/SelectTemplate", "Templates"), ("/admin/Leads", "Leads"), ("/admin/Integrations", "Integrations") })
+        foreach (var (href, label) in new[] { ("/Popup/SelectTemplate", "Templates"), ("/admin/Leads", "Leads"), ("/admin/Integrations", "Integrations"), ("/admin/Reports", "Reports") })
         {
             if (html.Contains("href=\"" + href + "\"", StringComparison.OrdinalIgnoreCase)) continue;
             var link = match.Value.Replace("/admin/Analytics", href, StringComparison.OrdinalIgnoreCase);
@@ -640,9 +645,9 @@ public sealed class LeadsMiddleware
 
     // ------------------------------------------------------------------ admin
 
-    private sealed record Viewer(bool SeesAllTenants, long TenantId, string UserId);
+    internal sealed record Viewer(bool SeesAllTenants, long TenantId, string UserId);
 
-    private static async Task<Viewer?> RequireViewer(HttpContext ctx)
+    internal static async Task<Viewer?> RequireViewer(HttpContext ctx)
     {
         var auth = await ctx.AuthenticateAsync(IdentityScheme);
         var userId = auth.Succeeded ? auth.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) : null;
@@ -901,7 +906,7 @@ public sealed class LeadsMiddleware
 
     private static readonly Regex HexColor = new("^#[0-9a-fA-F]{3,8}$", RegexOptions.Compiled);
 
-    private static JsonElement ParseOptions(string json)
+    internal static JsonElement ParseOptions(string json)
     {
         try
         {
@@ -915,7 +920,7 @@ public sealed class LeadsMiddleware
         }
     }
 
-    private static string Opt(JsonElement options, string key, string fallback = "")
+    internal static string Opt(JsonElement options, string key, string fallback = "")
     {
         if (options.ValueKind != JsonValueKind.Object) return fallback;
         var value = Str(options, key);
@@ -1410,7 +1415,7 @@ public sealed class LeadsMiddleware
 
     private static readonly ConcurrentDictionary<string, (long Window, int Count)> TrackWindows = new();
 
-    private static bool AllowTrack(string ip)
+    internal static bool AllowTrack(string ip)
     {
         var window = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60;
         if (TrackWindows.Count > 5000)
@@ -1422,7 +1427,7 @@ public sealed class LeadsMiddleware
         return state.Count <= 60;
     }
 
-    private static void OpenCors(HttpResponse res)
+    internal static void OpenCors(HttpResponse res)
     {
         res.Headers["Access-Control-Allow-Origin"] = "*";
         res.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
@@ -1525,11 +1530,11 @@ public sealed class LeadsMiddleware
         return m.Success ? WebUtility.HtmlDecode(Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")).Trim() : "";
     }
 
-    private static string Percent(long part, long whole) =>
+    internal static string Percent(long part, long whole) =>
         whole <= 0 ? "-" : (100.0 * part / whole).ToString("0.0", CultureInfo.InvariantCulture) + "%";
 
     // Plain-language read of the numbers: a two-proportion z-test once both versions have enough views.
-    private static string Verdict(long viewsA, long convA, long viewsB, long convB)
+    internal static string Verdict(long viewsA, long convA, long viewsB, long convB)
     {
         if (viewsA < 100 || viewsB < 100)
             return "Too early to call. Wait until each version has at least 100 views.";
@@ -2346,7 +2351,7 @@ public sealed class LeadsMiddleware
         return status;
     }
 
-    private static bool SameOrigin(HttpContext ctx)
+    internal static bool SameOrigin(HttpContext ctx)
     {
         var origin = ctx.Request.Headers.Origin.ToString();
         if (origin.Length == 0) origin = ctx.Request.Headers.Referer.ToString();
@@ -2505,7 +2510,7 @@ public sealed class LeadsMiddleware
 
     private static int _schemaReady;
 
-    private static async Task EnsureSchema(SqliteConnection db)
+    internal static async Task EnsureSchema(SqliteConnection db)
     {
         if (Volatile.Read(ref _schemaReady) == 1) return;
         await using var cmd = db.CreateCommand();
@@ -2517,12 +2522,20 @@ public sealed class LeadsMiddleware
             "PopupId integer not null primary key, TenantId integer not null, Html text not null, IsRunning integer not null default 0, " +
             "ViewsA integer not null default 0, ConversionsA integer not null default 0, " +
             "ViewsB integer not null default 0, ConversionsB integer not null default 0, " +
-            "CreatedAt text not null, UpdatedAt text not null)";
+            "CreatedAt text not null, UpdatedAt text not null); " +
+            "create table if not exists CroPageviews (Id integer primary key autoincrement, TenantId integer not null, Url text not null, Device text not null, " +
+            "ReferrerDomain text null, UtmSource text null, UtmMedium text null, UtmCampaign text null, ViewportW integer not null, DocH integer not null, " +
+            "ScrollDepth integer not null, Duration integer not null, Clicks integer not null, At text not null); " +
+            "create index if not exists IX_CroPageviews_Tenant_At on CroPageviews (TenantId, At); " +
+            "create table if not exists CroClicks (Id integer primary key autoincrement, TenantId integer not null, Url text not null, X real not null, Y integer not null, " +
+            "DocH integer not null, Selector text null, At text not null); " +
+            "create index if not exists IX_CroClicks_Tenant_Url on CroClicks (TenantId, Url); " +
+            "create table if not exists AddonSettings (Key text primary key, Value text not null)";
         await cmd.ExecuteNonQueryAsync();
         Volatile.Write(ref _schemaReady, 1);
     }
 
-    private static async Task<SqliteConnection> Open()
+    internal static async Task<SqliteConnection> Open()
     {
         var builder = new SqliteConnectionStringBuilder
         {
@@ -2536,7 +2549,7 @@ public sealed class LeadsMiddleware
         return db;
     }
 
-    private static async Task<string?> ReadBody(HttpContext ctx, int maxBytes)
+    internal static async Task<string?> ReadBody(HttpContext ctx, int maxBytes)
     {
         if (ctx.Request.ContentLength > maxBytes) return null;
         using var buffer = new MemoryStream();
@@ -2550,21 +2563,21 @@ public sealed class LeadsMiddleware
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    private static Task Json(HttpContext ctx, int status, bool success, string message)
+    internal static Task Json(HttpContext ctx, int status, bool success, string message)
     {
         ctx.Response.StatusCode = status;
         ctx.Response.ContentType = "application/json; charset=utf-8";
         return ctx.Response.WriteAsync(JsonSerializer.Serialize(new { success, message }));
     }
 
-    private static string ClientIp(HttpContext ctx)
+    internal static string ClientIp(HttpContext ctx)
     {
         var real = ctx.Request.Headers["X-Real-IP"].ToString();
         if (real.Length > 0 && IPAddress.TryParse(real, out _)) return real;
         return ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
-    private static bool TryGet(JsonElement root, string name, out JsonElement value)
+    internal static bool TryGet(JsonElement root, string name, out JsonElement value)
     {
         foreach (var property in root.EnumerateObject())
         {
@@ -2578,7 +2591,7 @@ public sealed class LeadsMiddleware
         return false;
     }
 
-    private static string Str(JsonElement root, string name)
+    internal static string Str(JsonElement root, string name)
     {
         if (!TryGet(root, name, out var v)) return "";
         return v.ValueKind switch
@@ -2589,7 +2602,7 @@ public sealed class LeadsMiddleware
         };
     }
 
-    private static long? Int(JsonElement root, string name)
+    internal static long? Int(JsonElement root, string name)
     {
         if (!TryGet(root, name, out var v)) return null;
         if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n)) return n;
@@ -2598,7 +2611,7 @@ public sealed class LeadsMiddleware
         return null;
     }
 
-    private static bool Bool(JsonElement root, string name)
+    internal static bool Bool(JsonElement root, string name)
     {
         if (!TryGet(root, name, out var v)) return false;
         return v.ValueKind switch
@@ -2610,18 +2623,18 @@ public sealed class LeadsMiddleware
         };
     }
 
-    private static string Clip(string? value, int max)
+    internal static string Clip(string? value, int max)
     {
         var text = (value ?? "").Trim();
         return text.Length <= max ? text : text[..max];
     }
 
-    private static object Nullable(string value) => value.Length == 0 ? DBNull.Value : value;
+    internal static object Nullable(string value) => value.Length == 0 ? DBNull.Value : value;
 
-    private static string Timestamp(DateTime utc) =>
+    internal static string Timestamp(DateTime utc) =>
         utc.ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture);
 
-    private static string Text(SqliteDataReader reader, int index) =>
+    internal static string Text(SqliteDataReader reader, int index) =>
         reader.IsDBNull(index) ? "" : Convert.ToString(reader.GetValue(index), CultureInfo.InvariantCulture) ?? "";
 
     private static string FormatWhen(string stored) =>
@@ -2629,9 +2642,9 @@ public sealed class LeadsMiddleware
             ? when.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
             : stored;
 
-    private static string H(string value) => WebUtility.HtmlEncode(value);
+    internal static string H(string value) => WebUtility.HtmlEncode(value);
 
-    private static string Csv(string value)
+    internal static string Csv(string value)
     {
         // Neutralise spreadsheet formulas, then quote.
         if (value.Length > 0 && "=+-@\t\r".IndexOf(value[0]) >= 0) value = "'" + value;
@@ -2750,17 +2763,19 @@ public sealed class LeadsMiddleware
   <a class="{{TEMPLATES}}" href="/Popup/SelectTemplate">Templates</a>
   <a class="{{LEADS}}" href="/admin/Leads">Leads</a>
   <a class="{{INTEGRATIONS}}" href="/admin/Integrations">Integrations</a>
+  <a class="{{REPORTS}}" href="/admin/Reports">Reports</a>
   <a href="/admin/Analytics">Analytics</a>
   <a href="/admin/Settings">Settings</a>
 </nav></header>
 <main>
 """;
 
-    private static string Chrome(string current) =>
+    internal static string Chrome(string current) =>
         PageTop.Replace("{{TITLE}}", current)
             .Replace("{{TEMPLATES}}", current == "Templates" ? "current" : "")
             .Replace("{{LEADS}}", current == "Leads" ? "current" : "")
-            .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "");
+            .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "")
+            .Replace("{{REPORTS}}", current == "Reports" ? "current" : "");
 
     // The public gallery wears the marketing site's own design: its stylesheet, fonts and menu.
     private const string PublicNav = """
@@ -2816,7 +2831,7 @@ public sealed class LeadsMiddleware
         return top[..start] + nav + top[end..] + body;
     }
 
-    private const string PageBottom = """
+    internal const string PageBottom = """
 </main>
 </body>
 </html>

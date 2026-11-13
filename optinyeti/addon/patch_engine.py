@@ -39,7 +39,7 @@ src = sub_once(
 )
 
 # 2b. A/B tests: load version B data up front, swap it in at render time, count the view.
-src = sub_once(r"this\.tenantId = tenantId \|\| 1;", lambda m: m.group(0) + "\n      try { this.loadVariants(); } catch (e) {}", src, "variants-load")
+src = sub_once(r"this\.tenantId = tenantId \|\| 1;", lambda m: m.group(0) + "\n      try { this.loadVariants(); } catch (e) {}\n      try { this.startCro(); } catch (e) {}", src, "variants-load")
 src = sub_once(
     r"const content = typeof popup\.content === 'string' \? JSON\.parse\(popup\.content\) : popup\.content;",
     lambda m: "let content = typeof popup.content === 'string' ? JSON.parse(popup.content) : popup.content;\n"
@@ -216,6 +216,106 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         document.head.appendChild(st);
       }
       return false;
+    },
+
+    // ---- Page measurement for Reports and heat maps (positions and element names only).
+    startCro: function() {
+      var self = this;
+      if (!this.tenantId || !window.fetch) return;
+      var hash = (window.location.hash || '').match(/oyheat=(\d+):([^&]+)/);
+      if (hash) { this.drawHeatmap(hash[1], hash[2]); return; }
+      if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
+      var start = Date.now(), clicks = [], depth = 0, sent = false;
+      var docH = function() { return Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, 1); };
+      var docW = function() { return Math.max(document.documentElement.scrollWidth, 1); };
+      function path(el) {
+        var parts = [], n = 0;
+        while (el && el.nodeType === 1 && n < 4) {
+          var tag = el.tagName.toLowerCase();
+          if (tag === 'body' || tag === 'html') break;
+          var piece = tag;
+          if (el.id) { parts.unshift(piece + '#' + el.id); break; }
+          var cls = (el.className && typeof el.className === 'string') ? el.className.trim().split(/\s+/)[0] : '';
+          if (cls) piece += '.' + cls;
+          parts.unshift(piece);
+          el = el.parentElement; n++;
+        }
+        return parts.join(' > ').slice(0, 120);
+      }
+      function measure() {
+        var d = Math.round((window.scrollY + window.innerHeight) / docH() * 100);
+        if (d > depth) depth = Math.min(100, d);
+      }
+      document.addEventListener('click', function(e) {
+        if (clicks.length >= 200) return;
+        var overlay = e.target && e.target.closest ? e.target.closest('[id^="popup-overlay-"]') : null;
+        if (overlay) return; // clicks inside popups are tracked as popup clicks already
+        clicks.push({ x: Math.round(e.pageX / docW() * 10000) / 10000, y: Math.round(e.pageY), s: path(e.target) });
+      }, true);
+      window.addEventListener('scroll', measure, { passive: true });
+      measure();
+      var utm = function(k) { try { return new URLSearchParams(window.location.search).get(k) || ''; } catch (e) { return ''; } };
+      function send() {
+        if (sent) return;
+        sent = true;
+        var payload = JSON.stringify({
+          tenantId: self.tenantId, url: window.location.href.split('#')[0], referrer: document.referrer || '',
+          utmSource: utm('utm_source'), utmMedium: utm('utm_medium'), utmCampaign: utm('utm_campaign'),
+          vw: window.innerWidth, docH: docH(), depth: depth, duration: Math.round((Date.now() - start) / 1000), clicks: clicks
+        });
+        var url = self.baseUrl + '/api/cro/collect';
+        try {
+          if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }))) return;
+        } catch (e) {}
+        try { fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, keepalive: true }).catch(function() {}); } catch (e) {}
+      }
+      document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'hidden') send(); });
+      window.addEventListener('pagehide', send);
+    },
+
+    drawHeatmap: function(tenantId, token) {
+      var self = this;
+      var url = window.location.href.split('#')[0];
+      fetch(this.baseUrl + '/api/cro/heat?tenantId=' + encodeURIComponent(tenantId) + '&url=' + encodeURIComponent(url) + '&token=' + encodeURIComponent(token))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var box = document.createElement('div');
+          box.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;background:#0B1F2B;color:#fff;font:13px/1.4 system-ui,sans-serif;padding:12px 14px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-width:320px;';
+          if (!d || d.success === false) { box.textContent = (d && d.message) || 'Heat map data unavailable.'; document.body.appendChild(box); return; }
+          var docW = Math.max(document.documentElement.scrollWidth, 1);
+          var docH = Math.min(Math.max(document.documentElement.scrollHeight, 1), 20000);
+          var layer = document.createElement('div');
+          layer.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:' + docH + 'px;pointer-events:none;z-index:2147483000;';
+          var canvas = document.createElement('canvas');
+          canvas.width = docW; canvas.height = docH;
+          canvas.style.cssText = 'display:block;width:100%;height:100%;';
+          var g = canvas.getContext('2d');
+          // Scroll-depth bands down the left edge: darker means more visitors reached it.
+          for (var b = 0; b < 10; b++) {
+            var share = d.pageviews ? d.depth[b] / d.pageviews : 0;
+            g.fillStyle = 'rgba(15,107,107,' + (0.08 + share * 0.5).toFixed(2) + ')';
+            g.fillRect(0, docH * b / 10, 26, docH / 10);
+            g.fillStyle = '#fff'; g.font = 'bold 11px system-ui,sans-serif';
+            g.fillText(Math.round(share * 100) + '%', 2, docH * b / 10 + 14);
+          }
+          g.globalCompositeOperation = 'lighter';
+          d.clicks.forEach(function(c) {
+            var x = c.x * docW, y = c.h ? c.y * (docH / Math.max(c.h, 1)) : c.y;
+            var r = g.createRadialGradient(x, y, 0, x, y, 22);
+            r.addColorStop(0, 'rgba(255,90,0,0.55)'); r.addColorStop(1, 'rgba(255,90,0,0)');
+            g.fillStyle = r; g.beginPath(); g.arc(x, y, 22, 0, Math.PI * 2); g.fill();
+          });
+          layer.appendChild(canvas);
+          document.body.appendChild(layer);
+          var top = (d.top || []).slice(0, 5).map(function(t) { return '<div style="opacity:.85">' + t.clicks + ' × ' + String(t.selector).replace(/</g, '&lt;') + '</div>'; }).join('');
+          box.innerHTML = '<div style="font-weight:700;margin-bottom:4px">OptinYeti heat map</div><div>' + d.pageviews + ' pageviews · ' + d.clicks.length + ' clicks</div>' +
+            '<div style="margin-top:6px;font-size:12px">Left edge: share of visitors who scrolled this far.</div>' +
+            (top ? '<div style="margin-top:8px;font-size:12px"><div style="font-weight:600">Most clicked</div>' + top + '</div>' : '') +
+            '<button type="button" style="margin-top:10px;background:#FF8A3D;color:#fff;border:0;border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer">Close</button>';
+          box.querySelector('button').addEventListener('click', function() { layer.remove(); box.remove(); });
+          document.body.appendChild(box);
+        })
+        .catch(function() {});
     },
 
     loadVariants: function() {
