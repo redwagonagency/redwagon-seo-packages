@@ -32,6 +32,18 @@ rm -f "$DATA/PopupManager.db-wal" "$DATA/PopupManager.db-shm"
 echo "BACKUP=$BACKUPS/PopupManager.db.$STAMP INTEGRITY=$(sqlite3 "$BACKUPS/PopupManager.db.$STAMP" 'pragma integrity_check')"
 
 docker rename optinyeti optinyeti-prev
+# Secrets (Stripe keys etc.) live outside the repo and the image, in a root-only file that the
+# owner writes himself, one KEY=value per line, e.g. Stripe__SecretKey=sk_live_...
+SECRETS_FILE=/srv/apps/optinyeti-secrets.env
+SECRETS_ARGS=""
+if [ -f "$SECRETS_FILE" ]; then
+  chmod 600 "$SECRETS_FILE"
+  SECRETS_ARGS="--env-file $SECRETS_FILE"
+  echo "SECRETS=$(grep -c '^[A-Za-z_]*=' "$SECRETS_FILE") settings loaded from $SECRETS_FILE (values not shown)"
+else
+  echo "SECRETS=none ($SECRETS_FILE not present)"
+fi
+
 docker run -d --name optinyeti --restart unless-stopped -p 127.0.0.1:3201:80 \
   -v "$DATA:/data" \
   -v "$KEYS:/root/.aspnet/DataProtection-Keys" \
@@ -40,6 +52,7 @@ docker run -d --name optinyeti --restart unless-stopped -p 127.0.0.1:3201:80 \
   -e "PopupManagerSettings__SiteName=OptinYeti" \
   -e "PopupManagerSettings__CompanyName=OptinYeti" \
   -e "PopupManagerSettings__SupportEmail=contact@optinyeti.com" \
+  $SECRETS_ARGS \
   "$IMG" >/dev/null
 
 OK=0
