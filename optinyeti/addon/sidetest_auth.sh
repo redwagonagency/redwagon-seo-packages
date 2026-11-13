@@ -89,7 +89,10 @@ echo "USE_AT_LIMIT=$(use "$(sqlite3 $DB 'select Id from PopupTemplates where IsA
 curl -s -o /tmp/oy_pub.html $T/Templates
 echo "PUBLIC_TEMPLATES=$(curl -s -o /dev/null -w '%{http_code}' $T/Templates) cards=$(grep -o 'class="tpl"' /tmp/oy_pub.html | wc -l) previews=$(grep -o '<template>' /tmp/oy_pub.html | wc -l) dialog=$(grep -c 'dialog id="pv"' /tmp/oy_pub.html) noindex=$(grep -c 'noindex' /tmp/oy_pub.html) use_forms=$(grep -c 'UseTemplate' /tmp/oy_pub.html) signed_in_previews=$(grep -o '<template>' /tmp/oy_gal.html | wc -l) html_closed=$(grep -c '</html>' /tmp/oy_pub.html)"
 echo "MENU_TEMPLATES: pricing_page=$(curl -s $T/Home/Pricing | grep -o 'href="/Templates"' | wc -l) login_page=$(curl -s $T/Account/Login | grep -o 'href="/Templates"' | wc -l) link=$(curl -s $T/Home/Pricing | grep -o '<a[^>]*href="/Templates"[^>]*>[^<]*' | head -1 | tr -s ' \n' ' ' | cut -c1-120)"
-rm -f /tmp/oy_gal.html /tmp/oy_pub.html
+P=$(sqlite3 $DB 'select Id from PopupTemplates where IsActive=1 and Type=7 limit 1')
+echo "START_NEW=$(curl -s -o /dev/null -D /tmp/oy_sh.txt -w '%{http_code} %{redirect_url}' "$T/Templates/Start?id=$P" | sed "s#$T##") cookie=$(grep -c -i 'set-cookie: oy_tpl=' /tmp/oy_sh.txt) START_HAVE=$(curl -s -o /dev/null -w '%{redirect_url}' "$T/Templates/Start?have=1&id=$P" | sed "s#$T##") START_BAD=$(curl -s -o /dev/null -w '%{redirect_url}' "$T/Templates/Start?id=abc" | sed "s#$T##")"
+echo "AFTER_SIGNIN=$(curl -s -b $J -b "oy_tpl=$P" -o /dev/null -D /tmp/oy_sh.txt -w '%{http_code} %{redirect_url}' $T/ | sed "s#$T##") cookie_cleared=$(grep -c -i 'set-cookie: oy_tpl=;' /tmp/oy_sh.txt) SIGNED_OUT_WITH_COOKIE=$(curl -s -b "oy_tpl=$P" -o /dev/null -w '%{http_code}' $T/Home/Pricing) REGISTER_WITH_COOKIE=$(curl -s -b "oy_tpl=$P" -o /dev/null -w '%{http_code}' $T/Account/Register) PICK_PAGE=$(curl -s -b $J -o /dev/null -w '%{http_code}' "$T/Popup/SelectTemplate?pick=$P") start_links=$(grep -o 'href="/Templates/Start?id=' /tmp/oy_pub.html | wc -l)"
+rm -f /tmp/oy_gal.html /tmp/oy_pub.html /tmp/oy_sh.txt
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

@@ -108,6 +108,11 @@ public sealed class LeadsMiddleware
                 await HandleDelete(ctx);
                 return;
             }
+            if (path.Equals("/Templates/Start", StringComparison.OrdinalIgnoreCase))
+            {
+                HandleTemplateStart(ctx);
+                return;
+            }
             if (path.Equals("/Templates", StringComparison.OrdinalIgnoreCase))
             {
                 await HandlePublicTemplates(ctx);
@@ -165,6 +170,19 @@ public sealed class LeadsMiddleware
 
         if (IsPageView(ctx, path))
         {
+            // A visitor who picked a template before signing up lands back on it once signed in.
+            if (ctx.Request.Cookies.TryGetValue(PickCookie, out var picked) &&
+                !path.StartsWith("/Account", StringComparison.OrdinalIgnoreCase) &&
+                !path.StartsWith("/Popup/SelectTemplate", StringComparison.OrdinalIgnoreCase) &&
+                (await ctx.AuthenticateAsync(IdentityScheme)).Succeeded)
+            {
+                ctx.Response.Cookies.Delete(PickCookie);
+                ctx.Response.Headers["Cache-Control"] = "no-store";
+                ctx.Response.Redirect(long.TryParse(picked, NumberStyles.None, CultureInfo.InvariantCulture, out var pickedId)
+                    ? "/Popup/SelectTemplate?pick=" + pickedId.ToString(CultureInfo.InvariantCulture)
+                    : "/Popup/SelectTemplate");
+                return;
+            }
             await PolishPage(ctx);
             return;
         }
@@ -943,6 +961,40 @@ public sealed class LeadsMiddleware
         await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
     }
 
+    private const string PickCookie = "oy_tpl";
+
+    // Remembers the chosen template through sign-up or sign-in, then sends the visitor on.
+    private static void HandleTemplateStart(HttpContext ctx)
+    {
+        if (!HttpMethods.IsGet(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        if (!long.TryParse(ctx.Request.Query["id"], NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id <= 0)
+        {
+            ctx.Response.Redirect("/Templates");
+            return;
+        }
+        var pick = id.ToString(CultureInfo.InvariantCulture);
+        if (ctx.Request.Query["have"] == "1" || ctx.Request.Cookies.ContainsKey(".AspNetCore.Identity.Application"))
+        {
+            // The sign-in page keeps this address as its return target.
+            ctx.Response.Redirect("/Popup/SelectTemplate?pick=" + pick);
+            return;
+        }
+        ctx.Response.Cookies.Append(PickCookie, pick, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            MaxAge = TimeSpan.FromDays(2),
+            Path = "/"
+        });
+        ctx.Response.Redirect("/Account/Register");
+    }
+
     private static async Task HandlePublicTemplates(HttpContext ctx)
     {
         if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method))
@@ -958,7 +1010,7 @@ public sealed class LeadsMiddleware
             .Append("<div class=\"actions\"><a class=\"btn\" href=\"/Account/Register\">Start free</a></div></div>")
             .Append(sections)
             .Append(PreviewDialog.Replace("{{ACTION}}",
-                "<a class=\"btn\" href=\"/Account/Register\">Start free with this template</a><a class=\"btn ghost\" href=\"/Popup/SelectTemplate\">I have an account</a>"));
+                "<a class=\"btn\" data-start=\"/Templates/Start?id=\" href=\"/Account/Register\">Start free with this template</a><a class=\"btn ghost\" data-start=\"/Templates/Start?have=1&amp;id=\" href=\"/Popup/SelectTemplate\">I have an account</a>"));
 
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers["Cache-Control"] = "public, max-age=300";
@@ -1004,7 +1056,7 @@ public sealed class LeadsMiddleware
                     .Append("<button type=\"button\" class=\"btn ghost pv-open\">Preview</button>")
                     .Append(signedIn
                         ? "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"" + id + "\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"
-                        : "<a class=\"btn\" href=\"/Account/Register\">Use it free</a>")
+                        : "<a class=\"btn\" href=\"/Templates/Start?id=" + id + "\">Use it free</a>")
                     .Append("</div></div><template>")
                     .Append(RenderTemplateHtml(reader.GetInt64(6), ParseOptions(Text(reader, 7))))
                     .Append("</template></article>");
@@ -1040,6 +1092,9 @@ public sealed class LeadsMiddleware
     title.textContent = card.getAttribute('data-name');
     var idField = dlg.querySelector('input[name=id]');
     if (idField) idField.value = card.getAttribute('data-id');
+    dlg.querySelectorAll('a[data-start]').forEach(function(a){
+      a.href = a.getAttribute('data-start') + card.getAttribute('data-id');
+    });
     stage.querySelectorAll('form').forEach(function(f){
       f.addEventListener('submit', function(e){
         e.preventDefault();
@@ -1060,6 +1115,9 @@ public sealed class LeadsMiddleware
   dlg.querySelector('.pv-close').addEventListener('click', function(){ dlg.close(); });
   dlg.addEventListener('click', function(e){ if (e.target === dlg) dlg.close(); });
   dlg.addEventListener('close', function(){ stage.innerHTML = ''; });
+  var pick = (new URLSearchParams(location.search).get('pick') || '').replace(/\D/g, '');
+  var picked = pick ? document.querySelector('.tpl[data-id="' + pick + '"]') : null;
+  if (picked) { picked.scrollIntoView({ block: 'center' }); open(picked); }
 })();
 </script>
 """;
