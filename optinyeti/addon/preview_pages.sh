@@ -19,6 +19,8 @@ sqlite3 $DB "update PopupTests set ViewsA=412, ConversionsA=21, ViewsB=398, Conv
 curl -s -b $J -o $O/wheel.html $T/Popup/Wheel/$W
 curl -s -b $J -o $O/test.html $T/Popup/Test/$E
 curl -s -b $J -o $O/edit.html $T/Popup/Edit/$W
+curl -s -b $J -o /dev/null -H "Origin: $T" --data-urlencode 'Heading=JPW: Grab the spring lookbook' --data-urlencode 'SubHeading=Fresh looks, first access, zero spam.' --data-urlencode 'ButtonText=Send it over' --data-urlencode 'ImageUrl=https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=900&q=70' -d CollectName=1 -d BackgroundColor=%23FFF7ED -d ButtonColor=%230F6B6B $T/Popup/Content/$E
+curl -s -b $J -o $O/content.html $T/Popup/Content/$E
 chmod -R a+rX $O
 side_stop
 echo "PREVIEW_DIR=$R $(wc -c < $O/wheel.html) $(wc -c < $O/test.html) $(wc -c < $O/edit.html)"
