@@ -981,7 +981,7 @@ public sealed class LeadsMiddleware
             case 1: // email collector
             {
                 var bg = ColorOpt(o, "BackgroundColor", "#ffffff");
-                var text = ColorOpt(o, "TextColor", TextOn(bg));
+                var text = TextOn(bg); // always readable on the chosen background
                 var button = ColorOpt(o, "ButtonColor", "#0F6B6B");
                 var success = "<div style=\"text-align:center;padding:30px 10px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;\"><h3 style=\"font-size:24px;margin:0 0 10px;color:#0B1F2B;\">Thank you!</h3><p style=\"font-size:16px;margin:0;color:#4d6b70;\">" +
                               H(Opt(o, "SuccessMessage", "You're on the list.")) + "</p></div>";
