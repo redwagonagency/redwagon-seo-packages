@@ -1,7 +1,8 @@
 #!/bin/sh
 # Saves rendered copies of the signed-in app pages for visual review.
 # Runs the image on a side port against a COPY of the database with a throwaway JPW user,
-# and writes the pages to a randomly named folder under the static site. Remove with:
+# and writes the pages to a randomly named folder under the static site. Pages that can show
+# keys or account details (Settings, Subscription, Profile, Admin) are deliberately not saved. Remove with:
 #   rm -rf /srv/apps/optinyeti-site/img/pv-*
 IMG="${1:-optinyeti:leads-6}"
 T=http://127.0.0.1:3299
@@ -40,13 +41,9 @@ save /Popup/Designer/4 designer
 save /Popup/Preview/4 preview
 save /admin/Templates templates
 save /admin/Analytics analytics
-save /admin/Settings settings
-save /admin/Subscription subscription
 save /admin/Support support
 save /admin/Leads leads
 save /admin/Integrations integrations
-save /admin admin
-save /Account/Profile profile
 sqlite3 -json $DB 'select * from PopupTemplates' > "$OUT/templates.json"
 sqlite3 -json $DB 'select Id, Name, Type, Status, Trigger, Frequency, Content from Popups' > "$OUT/popups.json"
 grep -o -E 'href="/[A-Za-z][^"#]*"' "$OUT"/*.html | cut -d'"' -f2 | sort | uniq -c | sort -rn | head -40 > "$OUT/links.txt"
