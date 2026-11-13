@@ -1,0 +1,30 @@
+:root{
+  --oy-ink:#0B1F2B;--oy-ink-soft:#15323f;--oy-glacier:#EAF6F7;--oy-teal:#0F6B6B;--oy-teal-deep:#0a4d4d;
+  --oy-cyan:#4DD9D2;--oy-thaw:#FF8A3D;--oy-thaw-deep:#e0701f;--oy-line:#cfe8e6;
+  --bs-primary:#0F6B6B;--bs-primary-rgb:15,107,107;--bs-link-color:#0F6B6B;--bs-link-color-rgb:15,107,107;
+  --bs-link-hover-color:#0a4d4d;--bs-body-font-family:"IBM Plex Sans",system-ui,sans-serif;--bs-body-color:#0B1F2B;
+}
+body{font-family:"IBM Plex Sans",system-ui,sans-serif;color:var(--oy-ink);}
+h1,h2,h3,.navbar-brand{font-family:"Baloo 2","IBM Plex Sans",system-ui,sans-serif;letter-spacing:-0.2px;}
+header nav a[href="/"] span{font-family:"Baloo 2",system-ui,sans-serif;font-size:21px;color:var(--oy-ink);}
+/* Yeti mark in place of the old window icon */
+header nav a[href="/"] > i{display:none;}
+header nav a[href="/"]::before{content:"";flex:none;width:34px;height:34px;margin-right:10px;border-radius:50%;background:url(/img/yeti-logo.png) center/cover no-repeat;}
+header{border-bottom:1px solid var(--oy-line);}
+/* Primary call to action uses the warm accent, like the marketing site */
+header nav a[href="/Account/Register"]{background:var(--oy-thaw) !important;border-color:var(--oy-thaw) !important;color:#fff !important;border-radius:10px;}
+header nav a[href="/Account/Register"]:hover{background:var(--oy-thaw-deep) !important;}
+.btn-primary{--bs-btn-bg:#0F6B6B;--bs-btn-border-color:#0F6B6B;--bs-btn-hover-bg:#0a4d4d;--bs-btn-hover-border-color:#0a4d4d;--bs-btn-active-bg:#0a4d4d;--bs-btn-active-border-color:#0a4d4d;--bs-btn-disabled-bg:#0F6B6B;--bs-btn-disabled-border-color:#0F6B6B;}
+.btn-outline-primary{--bs-btn-color:#0F6B6B;--bs-btn-border-color:#0F6B6B;--bs-btn-hover-bg:#0F6B6B;--bs-btn-hover-border-color:#0F6B6B;--bs-btn-active-bg:#0F6B6B;--bs-btn-active-border-color:#0F6B6B;}
+.text-primary{color:#0F6B6B !important;}
+.bg-primary{background-color:#0F6B6B !important;}
+.border-primary{border-color:#0F6B6B !important;}
+.form-control:focus,.form-select:focus{border-color:#35aaa6;box-shadow:0 0 0 .2rem rgba(15,107,107,.18);}
+.form-check-input:checked{background-color:#0F6B6B;border-color:#0F6B6B;}
+.page-link{color:#0F6B6B;}
+.page-item.active .page-link,.nav-pills .nav-link.active{background-color:#0F6B6B;border-color:#0F6B6B;}
+a{text-decoration-color:rgba(15,107,107,.35);}
+footer{background:var(--oy-ink) !important;color:#9fc6c3 !important;border-top:0 !important;}
+footer a,footer p,footer span,footer div{color:#9fc6c3 !important;}
+footer a:hover{color:#fff !important;}
+:focus-visible{outline:3px solid var(--oy-thaw);outline-offset:2px;}
