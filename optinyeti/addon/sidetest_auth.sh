@@ -62,6 +62,8 @@ pub() { curl -s "$T$1"; }
 echo "TITLES: features=[$(pub /Home/Features | grep -o '<title>[^<]*</title>')] demo=[$(pub /Home/Demo | grep -o '<title>[^<]*</title>')]"
 echo "CONTACT: old_email=$(pub /Home/Contact | grep -c -i 'popupmanagerpro') new_email=$(pub /Home/Contact | grep -o 'contact@optinyeti.com' | wc -l) dead_named=$(pub /Home/Contact | grep -c -E 'href=\"#\"[^>]*>(FAQ|Schedule a Demo|Video Tutorials)')"
 echo "PRICING_QQ=$(pub /Home/Pricing | grep -c '?? <strong>') BLOG_OLD_NAME=$(pub /Blog | grep -c 'Popup Manager') PRICING_OK=$(pub /Home/Pricing | grep -c 'Compare All Features') SCRIPT_OK=$(pub /Popup/GetTenantScript/5 | grep -c 'PopupManager')"
+echo "THEME: style=$(pub /Home/Pricing | grep -c 'id=\"oy-theme\"') tailwind_cfg=$(pub /Home/Pricing | grep -c 'tailwind.config') signed_in_style=$(curl -s -b $J $T/ | grep -c 'id=\"oy-theme\"') css_old_blue=$(pub /css/site.css | grep -c -i '#2563eb\|#3ca2ff') css_teal=$(pub /css/site.css | grep -c -i '#0F6B6B') css_status=$(curl -s -o /dev/null -w '%{http_code}' $T/css/site.css)"
+echo "OLD_NAMES: popupx=$(for u in / /Home/Features /Home/Pricing /Home/Demo /Home/Contact /Home/Privacy /Account/Login /Account/Register /Blog; do pub $u; done | grep -c -i 'popupx\|popupmanager\|Popup Manager') blog_redirect=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$T/Blog/Post?slug=getting-started-popup-manager")"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

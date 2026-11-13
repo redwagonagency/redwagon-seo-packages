@@ -37,6 +37,9 @@ docker run -d --name optinyeti --restart unless-stopped -p 127.0.0.1:3201:80 \
   -v "$KEYS:/root/.aspnet/DataProtection-Keys" \
   -e "ConnectionStrings__DefaultConnection=Data Source=/data/PopupManager.db" \
   -e OPTINYETI_DB=/data/PopupManager.db \
+  -e "PopupManagerSettings__SiteName=OptinYeti" \
+  -e "PopupManagerSettings__CompanyName=OptinYeti" \
+  -e "PopupManagerSettings__SupportEmail=contact@optinyeti.com" \
   "$IMG" >/dev/null
 
 OK=0

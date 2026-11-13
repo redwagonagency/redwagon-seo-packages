@@ -130,6 +130,21 @@ public sealed class LeadsMiddleware
             return;
         }
 
+        if (path.Equals("/css/site.css", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(ctx.Request.Method))
+        {
+            await RecolorStylesheet(ctx);
+            return;
+        }
+
+        // The first blog post was renamed along with the product; keep its old address working.
+        if (path.Equals("/Blog/Post", StringComparison.OrdinalIgnoreCase) &&
+            ctx.Request.Query["slug"].ToString().Contains("popup-manager", StringComparison.OrdinalIgnoreCase))
+        {
+            var slug = ctx.Request.Query["slug"].ToString().Replace("popup-manager", "optinyeti", StringComparison.OrdinalIgnoreCase);
+            ctx.Response.Redirect("/Blog/Post?slug=" + Uri.EscapeDataString(slug), permanent: true);
+            return;
+        }
+
         if (IsPageView(ctx, path))
         {
             await PolishPage(ctx);
@@ -194,6 +209,83 @@ public sealed class LeadsMiddleware
         await buffer.CopyToAsync(original);
     }
 
+    private static string Resource(string name)
+    {
+        using var stream = typeof(LeadsMiddleware).Assembly.GetManifestResourceStream(name);
+        if (stream == null) return "";
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static readonly string TailwindConfig = Resource("tailwind-config.js");
+    private static readonly string ThemeCss = Resource("theme.css");
+
+    private const string TailwindTag = "<script src=\"https://cdn.tailwindcss.com\"></script>";
+    private const string ThemeFonts =
+        "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">" +
+        "<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>" +
+        "<link href=\"https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap\" rel=\"stylesheet\">" +
+        "<link rel=\"icon\" href=\"/img/yeti-logo.png\">";
+
+    // Gives the app's pages the same look as the marketing site: brand palette, type and logo.
+    private static string ApplyTheme(string html)
+    {
+        if (ThemeCss.Length == 0 || html.Contains("id=\"oy-theme\"", StringComparison.Ordinal)) return html;
+        var head = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+        if (head < 0) return html;
+        html = html.Insert(head, ThemeFonts + "<style id=\"oy-theme\">" + ThemeCss + "</style>");
+        var tailwind = html.IndexOf(TailwindTag, StringComparison.OrdinalIgnoreCase);
+        if (tailwind >= 0 && TailwindConfig.Length > 0)
+            html = html.Insert(tailwind + TailwindTag.Length, "<script>" + TailwindConfig + "</script>");
+        return html;
+    }
+
+    private static readonly (string From, string To)[] StylesheetColors =
+    {
+        ("#3ca2ff", "#17807f"), ("#60a5fa", "#35aaa6"), ("#3692e6", "#0F6B6B"), ("#2159d4", "#0a4d4d"),
+        ("#2563eb", "#0F6B6B"), ("#c3e2ff", "#cfe8e6"), ("#eff6ff", "#EAF6F7"), ("#bfdbfe", "#aadedd"),
+        ("#1e3a8a", "#0B1F2B"), ("#264bae", "#0a4d4d"), ("rgba(37, 99, 235", "rgba(15, 107, 107")
+    };
+
+    private async Task RecolorStylesheet(HttpContext ctx)
+    {
+        foreach (var header in new[] { "Accept-Encoding", "If-None-Match", "If-Modified-Since", "Range" })
+            ctx.Request.Headers.Remove(header);
+        var original = ctx.Response.Body;
+        using var buffer = new MemoryStream();
+        ctx.Response.Body = buffer;
+        try
+        {
+            await _next(ctx);
+        }
+        finally
+        {
+            ctx.Response.Body = original;
+        }
+
+        if (ctx.Response.StatusCode == 200 &&
+            (ctx.Response.ContentType ?? "").StartsWith("text/css", StringComparison.OrdinalIgnoreCase) &&
+            !ctx.Response.Headers.ContainsKey("Content-Encoding") &&
+            buffer.Length > 0 && buffer.Length < 2 * 1024 * 1024)
+        {
+            var css = Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
+            foreach (var (from, to) in StylesheetColors)
+                css = css.Replace(from, to, StringComparison.OrdinalIgnoreCase);
+            var bytes = Encoding.UTF8.GetBytes(css);
+            ctx.Response.Headers.Remove("ETag");
+            ctx.Response.ContentLength = bytes.Length;
+            await original.WriteAsync(bytes);
+            return;
+        }
+
+        buffer.Position = 0;
+        await buffer.CopyToAsync(original);
+    }
+
+    private static readonly Regex OldBrandEmail = new(
+        "[A-Za-z0-9._+-]+@(popupmanagerpro|popupmanager|popupx)\\.com",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex TitleTag = new(
         "<title>(.*?)</title>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
@@ -201,15 +293,18 @@ public sealed class LeadsMiddleware
     // cannot be edited, so its HTML is corrected on the way out.
     private static string CleanUpPage(string html)
     {
-        html = html.Replace("support@popupmanagerpro.com", "contact@optinyeti.com", StringComparison.OrdinalIgnoreCase)
-                   .Replace("sales@popupmanagerpro.com", "contact@optinyeti.com", StringComparison.OrdinalIgnoreCase)
+        html = OldBrandEmail.Replace(html, "contact@optinyeti.com")
+                   .Replace("Popup Manager Inc.", "OptinYeti")
                    .Replace("Popup Manager Pro", "OptinYeti")
+                   .Replace("PopupX", "OptinYeti")
                    .Replace("Popup Manager", "OptinYeti")
                    .Replace(">?? <strong>Limited Time", "><strong>Limited Time");
 
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Schedule a Demo</a>", "<a href=\"/Home/Demo\"$1>Schedule a Demo</a>");
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>FAQ</a>", "<a href=\"/Home/Pricing\"$1>FAQ</a>");
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Video Tutorials</a>", "<a href=\"/Blog\"$1>Video Tutorials</a>");
+
+        html = ApplyTheme(html);
 
         return TitleTag.Replace(html, match =>
         {
@@ -1025,16 +1120,22 @@ public sealed class LeadsMiddleware
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>{{TITLE}} - OptinYeti</title>
+<link rel="icon" href="/img/yeti-logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{--ink:#0B1F2B;--ink-soft:#15323f;--glacier:#EAF6F7;--teal:#0F6B6B;--thaw:#FF8A3D;--thaw-deep:#e0701f;--line:#cfe8e6;--muted:#4d6b70;}
   *{box-sizing:border-box;}
-  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--glacier);color:var(--ink);line-height:1.5;}
+  body{margin:0;font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--glacier);color:var(--ink);line-height:1.5;}
   a{color:inherit;}
   header{background:#fff;border-bottom:1px solid var(--line);}
   header nav{max-width:1180px;margin:0 auto;padding:14px 28px;display:flex;gap:26px;align-items:center;font-size:15px;font-weight:500;}
   header nav a{text-decoration:none;color:var(--ink-soft);}
   header nav a:hover{color:var(--teal);}
-  header nav .brand{font-weight:700;font-size:19px;color:var(--ink);margin-right:10px;}
+  header nav .brand{font-family:"Baloo 2",system-ui,sans-serif;font-weight:700;font-size:21px;color:var(--ink);margin-right:10px;display:inline-flex;align-items:center;gap:10px;}
+  header nav .brand img{width:34px;height:34px;border-radius:50%;}
+  h1,h2{font-family:"Baloo 2",system-ui,sans-serif;}
   header nav .current{color:var(--teal);font-weight:600;}
   main{max-width:1180px;margin:0 auto;padding:34px 28px 60px;}
   .head{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:22px;}
@@ -1077,7 +1178,7 @@ public sealed class LeadsMiddleware
 </head>
 <body>
 <header><nav>
-  <a class="brand" href="/">OptinYeti</a>
+  <a class="brand" href="/"><img src="/img/yeti-logo.png" alt="">OptinYeti</a>
   <a href="/">Dashboard</a>
   <a href="/Popup">Popups</a>
   <a class="{{LEADS}}" href="/admin/Leads">Leads</a>

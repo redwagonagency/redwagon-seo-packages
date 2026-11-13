@@ -7,6 +7,7 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 COPY --from=base /app/Microsoft.Data.Sqlite.dll /app/SQLitePCLRaw.core.dll lib/
 COPY OptinYeti.Leads.csproj LeadsAddon.cs StartupHook.cs ./
+COPY theme ./theme
 RUN dotnet publish OptinYeti.Leads.csproj -c Release -o /out
 
 FROM python:3.12-alpine AS js

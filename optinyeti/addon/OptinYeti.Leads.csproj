@@ -9,6 +9,10 @@
     <DebugType>none</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="theme/theme.css" LogicalName="theme.css" />
+    <EmbeddedResource Include="theme/tailwind-config.js" LogicalName="tailwind-config.js" />
+  </ItemGroup>
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <Reference Include="Microsoft.Data.Sqlite">
       <HintPath>lib/Microsoft.Data.Sqlite.dll</HintPath>
