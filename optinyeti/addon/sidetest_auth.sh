@@ -16,6 +16,7 @@ sqlite3 "file:/srv/apps/optinyeti/PopupManager.db?mode=ro" ".backup $DB"
 sqlite3 $DB "insert or ignore into Sites (TenantId, Domain, Name, CreatedAt, UpdatedAt) values (5, 'jpw-job.example.com', 'JPW Job', datetime('now'), datetime('now'))"
 mkdir -p $D/jobs && printf '{"job":"launch-kit","tenantId":5,"sites":[{"domain":"jpw-job.example.com","offer":"a free JPW job audit","button":"Run it"},{"domain":"not-registered.example.com","offer":"x"}]}' > $D/jobs/jpw-kit.json
 printf '{"job":"no-such-job"}' > $D/jobs/zz-unknown.json
+printf '{"job":"popups","tenantId":5,"domain":"jpw-job.example.com","replace":["JPW Job - Welcome bar"],"popups":[{"name":"JPW Job - Blog banner","type":1,"options":{"Heading":"JPW banner","ButtonText":"Go","DownloadUrl":"https://example.com/jpw.pdf","DownloadText":"Get the PDF"},"layout":{"mode":"inline","selector":".entry-content","afterParagraphs":2,"required":true,"closable":false},"urlTargeting":"jpw-job.example.com/blog","trigger":0,"frequency":0,"status":1},{"name":"JPW Job - Blog banner","type":1,"options":{}}]}' > $D/jobs/jpw-strategy.json
 docker run -d --name optinyeti-test -p 127.0.0.1:3299:80 -v $D:/data \
   -e "ConnectionStrings__DefaultConnection=Data Source=/data/PopupManager.db" \
   -e OPTINYETI_DB=/data/PopupManager.db "$IMG" >/dev/null
@@ -166,6 +167,17 @@ curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":
 echo "SITE_ROUTE=$(sqlite3 $DB "select substr(LastStatus,1,12) from Sites where Id=$SID") tenant_hook_untouched=$(sqlite3 $DB "select count(*) from LeadWebhooks where TenantId=5 and LastAttemptAt > (select UpdatedAt from Sites where Id=$SID)") site_leads=$(curl -s -b $J $T/admin/Sites | grep -o '[0-9]* leads' | head -1)"
 # ---- seed jobs (ran at start-up)
 echo "JOBS: files=$(ls $D/jobs | tr '\n' ' ') kit_log=$(cat $D/jobs/jpw-kit.done.log 2>/dev/null | tr '\n' ';') unknown_log=$(cat $D/jobs/zz-unknown.failed.log 2>/dev/null) popups=$(sqlite3 $DB "select count(*) from Popups where TenantId=5 and Name like 'JPW Job - %' and Status=1 and json_extract(TargetingRules,'\$.urlTargeting')='jpw-job.example.com'") creator_ok=$(sqlite3 $DB "select count(distinct CreatedById) from Popups where Name like 'JPW Job - %' and CreatedById in (select Id from AspNetUsers where TenantId=5)")"
+echo "JOB_POPUPS: log=$(cat $D/jobs/jpw-strategy.done.log 2>/dev/null | tr '\n' ';') bar_removed=$(sqlite3 $DB "select count(*) from Popups where Name='JPW Job - Welcome bar'") banner=$(sqlite3 $DB "select json_extract(Content,'\$.layout.required')||'/'||json_extract(Content,'\$.layout.afterParagraphs')||'/'||json_extract(TargetingRules,'\$.urlTargeting')||'/'||Frequency from Popups where Name='JPW Job - Blog banner'") download=$(sqlite3 $DB "select count(*) from Popups where Name='JPW Job - Blog banner' and json_extract(Content,'\$.html') like '%href=\"https://example.com/jpw.pdf\"%Get the PDF%'")"
+FREQ_NAMES=$(curl -s $T/Popup/GetTenantPopups/5 | python3 -c "import json,sys;d=json.load(sys.stdin);print(sorted(set(p['frequency'] for p in d)))")
+echo "FREQ_NAMES=$FREQ_NAMES"
+node -e "
+const fs=require('fs');const src=fs.readFileSync('/tmp/oy_eng.js','utf8');
+global.window={location:{href:'https://x.test/blog/post'},addEventListener(){} };global.document={querySelector:(s)=>s==='.entry-content'?{}:null,getElementById:()=>null,body:{},head:{appendChild(){}},createElement:()=>({style:{},setAttribute(){},appendChild(){},querySelectorAll:()=>[]})};global.navigator={};
+const m=src.match(/layoutTargetExists: function\(popup\) \{[\s\S]*?\n    \},/);const fn=new Function('return {'+m[0].replace(/,\s*$/,'')+'}')();
+const yes=fn.layoutTargetExists({content:JSON.stringify({layout:{mode:'inline',selector:'.entry-content',required:true}})});
+const no=fn.layoutTargetExists({content:JSON.stringify({layout:{mode:'inline',selector:'.missing',required:true}})});
+const any=fn.layoutTargetExists({content:JSON.stringify({layout:{mode:'inline',selector:'.missing'}})});
+console.log('ENGINE_REQUIRED='+(yes&&!no&&any?'ok':'BAD '+yes+no+any));" 2>&1 | tail -1
 # ---- launch kit (three popups per site)
 kit() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" "$@" $T/admin/Sites/kit | sed 's/.*msg=//'; }
 BEFORE=$(sqlite3 $DB 'select count(*) from Popups where TenantId=5')

@@ -1008,8 +1008,11 @@ public sealed class LeadsMiddleware
                 var bg = ColorOpt(o, "BackgroundColor", "#ffffff");
                 var text = TextOn(bg); // always readable on the chosen background
                 var button = ColorOpt(o, "ButtonColor", "#0F6B6B");
+                var download = SafeUrl(Opt(o, "DownloadUrl"), "");
                 var success = "<div style=\"text-align:center;padding:30px 10px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;\"><h3 style=\"font-size:24px;margin:0 0 10px;color:#0B1F2B;\">Thank you!</h3><p style=\"font-size:16px;margin:0;color:#4d6b70;\">" +
-                              H(Opt(o, "SuccessMessage", "You're on the list.")) + "</p></div>";
+                              H(Opt(o, "SuccessMessage", "You're on the list.")) + "</p>" +
+                              (download.Length == 0 ? "" : "<p style=\"margin:18px 0 0;\"><a class=\"cta-button\" href=\"" + H(download) + "\" target=\"_blank\" rel=\"noopener\" style=\"" + ButtonStyle(button) + "display:inline-block;width:auto;text-decoration:none;\">" + H(Opt(o, "DownloadText", "Download it now")) + "</a></p>") +
+                              "</div>";
                 var form = "<form style=\"margin:0;\" data-success=\"" + H(success) + "\">" +
                            (Bool(o, "CollectName") ? "<input type=\"text\" name=\"name\" placeholder=\"Your name\" autocomplete=\"name\" style=\"" + FieldStyle + "\">" : "") +
                            "<input type=\"email\" name=\"email\" required placeholder=\"you@company.com\" autocomplete=\"email\" style=\"" + FieldStyle + "\">" +
@@ -1173,6 +1176,8 @@ public sealed class LeadsMiddleware
             new Field("Heading", "Headline", "text"), new Field("SubHeading", "Line under the headline", "text"),
             new Field("ButtonText", "Button text", "text"), new Field("SuccessMessage", "Thank-you message", "text"),
             new Field("PrivacyText", "Small print", "text"), new Field("ImageUrl", "Picture across the top", "url", "Paste an image address. Leave empty for no picture."),
+            new Field("DownloadUrl", "File to hand over after sign-up", "url", "Address of a PDF, guide or checklist. Shown as a button on the thank-you screen."),
+            new Field("DownloadText", "Download button text", "text"),
             new Field("CollectName", "Ask for a name", "bool"), new Field("CollectPhone", "Ask for a phone number", "bool"),
             new Field("BackgroundColor", "Background", "color"), new Field("ButtonColor", "Button", "color")
         },
@@ -1228,6 +1233,7 @@ public sealed class LeadsMiddleware
             int.TryParse(form["layout_after"].ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var after);
             layout["afterParagraphs"] = after is >= 1 and <= 50 ? after : 3;
             layout["closable"] = form["layout_closable"].ToString() == "1";
+            layout["required"] = form["layout_required"].ToString() == "1";
         }
         return layout;
     }
@@ -1262,12 +1268,13 @@ public sealed class LeadsMiddleware
           .Append("<div data-for=\"bar\"><label for=\"layout_edge\">Edge</label><select id=\"layout_edge\" name=\"layout_edge\"><option value=\"top\"").Append(Sel("top", position)).Append(">Top of the page</option><option value=\"bottom\"").Append(Sel("bottom", position)).Append(">Bottom of the page</option></select></div>")
           .Append("<div data-for=\"takeover\"><label>Backdrop <input type=\"color\" name=\"layout_background\" value=\"").Append(H(ColorOpt(layout, "background", "#0B1F2B"))).Append("\"></label></div>")
           .Append("<div data-for=\"inline\"><label for=\"layout_after\">After paragraph number</label><input id=\"layout_after\" name=\"layout_after\" type=\"number\" min=\"1\" max=\"50\" value=\"").Append(H(Opt(layout, "afterParagraphs", "3"))).Append("\">")
-          .Append("<span class=\"hint\">Counts paragraphs inside the page's article or main area. Used when no selector is given.</span>")
+          .Append("<span class=\"hint\">Counts paragraphs inside the page's article or main area, or inside the element below when a selector is given.</span>")
           .Append("<label for=\"layout_selector\">Or a CSS selector</label><input id=\"layout_selector\" name=\"layout_selector\" maxlength=\"200\" placeholder=\"#newsletter-slot or .post-body h2:nth-of-type(2)\" value=\"").Append(H(Opt(layout, "selector"))).Append("\">")
           .Append("<label for=\"layout_placement\">Place it</label><select id=\"layout_placement\" name=\"layout_placement\">");
         var placement = Opt(layout, "placement", "after");
         sb.Append("<option value=\"after\"").Append(Sel("after", placement)).Append(">After that element</option><option value=\"before\"").Append(Sel("before", placement)).Append(">Before it</option><option value=\"inside\"").Append(Sel("inside", placement)).Append(">Inside it, at the end</option></select>")
-          .Append("<label class=\"check\"><input type=\"checkbox\" name=\"layout_closable\" value=\"1\"").Append(layout.ValueKind != JsonValueKind.Object || !TryGet(layout, "closable", out var c) || c.ValueKind != JsonValueKind.False ? " checked" : "").Append("> Show a close button</label></div>")
+          .Append("<label class=\"check\"><input type=\"checkbox\" name=\"layout_closable\" value=\"1\"").Append(layout.ValueKind != JsonValueKind.Object || !TryGet(layout, "closable", out var c) || c.ValueKind != JsonValueKind.False ? " checked" : "").Append("> Show a close button</label>")
+          .Append("<label class=\"check\"><input type=\"checkbox\" name=\"layout_required\" value=\"1\"").Append(Bool(layout, "required") ? " checked" : "").Append("> Only show on pages that have that element (skip everywhere else)</label></div>")
           .Append("</div><script>(function(){var m=document.getElementById('layout_mode');function sync(){document.querySelectorAll('.layout [data-for]').forEach(function(d){d.style.display=d.getAttribute('data-for')===m.value?'':'none';});}m.addEventListener('change',sync);sync();})();</script>");
         return sb.ToString();
     }

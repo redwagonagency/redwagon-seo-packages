@@ -61,7 +61,7 @@ src = sub_once(
 )
 
 # 2d. No popups while a heat map is being viewed.
-src = sub_once(r"shouldDisplayPopup: function\(popup\) \{", lambda m: m.group(0) + "\n      if (this.heatMode) return false;", src, "heat-mode")
+src = sub_once(r"shouldDisplayPopup: function\(popup\) \{", lambda m: m.group(0) + "\n      if (this.heatMode) return false;\n      if (!this.layoutTargetExists(popup)) return false;", src, "heat-mode")
 
 # 3. New methods.
 METHODS = r"""wireLeadCapture: function(wrapper, popup) {
@@ -114,6 +114,16 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
           btn.addEventListener('click', function(e) { e.preventDefault(); handle(wrapper, false); });
         });
       }
+    },
+
+    // Inline popups marked "required" only show on pages that have their target element
+    // (so a blog banner never falls back to a centered popup on the homepage).
+    layoutTargetExists: function(popup) {
+      var content = {};
+      try { content = (typeof popup.content === 'string' ? JSON.parse(popup.content) : popup.content) || {}; } catch (e) { return true; }
+      var layout = content.layout || {};
+      if (layout.mode !== 'inline' || !layout.required || !layout.selector) return true;
+      try { return !!document.querySelector(layout.selector); } catch (e) { return false; }
     },
 
     // Places the popup according to content.layout. Returns true when it was inserted itself.
@@ -187,6 +197,12 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         if (layout.selector) {
           try { target = document.querySelector(layout.selector); } catch (e) { target = null; }
           where = layout.placement === 'before' ? 'beforebegin' : (layout.placement === 'inside' ? 'beforeend' : 'afterend');
+          var inside = parseInt(layout.afterParagraphs, 10);
+          if (target && inside > 0) {
+            // "after paragraph N inside the element": the way to drop a banner into an article body
+            var innerParas = target.querySelectorAll('p');
+            if (innerParas.length) { target = innerParas[Math.min(inside, innerParas.length) - 1]; where = 'afterend'; }
+          }
         } else {
           var n = Math.max(1, parseInt(layout.afterParagraphs, 10) || 3);
           var scope = document.querySelector('article') || document.querySelector('main') || document.body;

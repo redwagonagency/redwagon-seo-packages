@@ -8,6 +8,12 @@
 //
 // Known jobs:
 //   launch-kit   the three Sites launch-kit popups for each listed site (site must be registered)
+//   popups       a full set of template popups for one registered site:
+//                { "job": "popups", "tenantId": 5, "domain": "example.com", "replace": ["Old popup name", ...],
+//                  "popups": [ { "name": "...", "type": 1, "options": { ...template settings... },
+//                                "layout": { "mode": "inline", ... }, "urlTargeting": "example.com/blog",
+//                                "trigger": 1, "delay": 0, "frequency": 1, "status": 1 } ] }
+//                "replace" removes popups of that name first, but only ones that never had a view.
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -35,6 +41,7 @@ internal static class Jobs
                 switch (job)
                 {
                     case "launch-kit": await LaunchKit(db, root, log); ok = true; break;
+                    case "popups": await Popups(db, root, log); ok = true; break;
                     default: log.Append("unknown job: ").Append(job).Append('\n'); break;
                 }
             }
@@ -88,5 +95,71 @@ internal static class Jobs
             var ids = await Sites.CreateKit(db, tenantId, userId, domain, match.Name, LeadsMiddleware.Clip(offer, 140), LeadsMiddleware.Clip(button, 40));
             log.Append(domain).Append(": popups ").Append(string.Join(", ", ids)).Append('\n');
         }
+    }
+
+    private static async Task Popups(SqliteConnection db, JsonElement root, StringBuilder log)
+    {
+        var tenantId = root.GetProperty("tenantId").GetInt64();
+        var domain = Sites.NormalizeDomain(root.GetProperty("domain").GetString() ?? "") ?? throw new InvalidOperationException("bad domain");
+        var sites = await Sites.List(db, tenantId);
+        if (!sites.Any(s => s.Domain == domain)) throw new InvalidOperationException(domain + " is not registered for tenant " + tenantId);
+        var userId = root.TryGetProperty("userId", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() ?? "" : "";
+        if (userId.Length == 0)
+        {
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = "select Id from AspNetUsers where TenantId = @t and IsActive = 1 order by Id limit 1";
+            cmd.Parameters.AddWithValue("@t", tenantId);
+            userId = (await cmd.ExecuteScalarAsync() as string) ?? throw new InvalidOperationException("tenant " + tenantId + " has no active user");
+        }
+        if (root.TryGetProperty("replace", out var replace) && replace.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var name in replace.EnumerateArray())
+            {
+                await using var cmd = db.CreateCommand();
+                cmd.CommandText = "delete from Popups where TenantId = @t and Name = @n and Views = 0 and Clicks = 0 and Conversions = 0";
+                cmd.Parameters.AddWithValue("@t", tenantId);
+                cmd.Parameters.AddWithValue("@n", name.GetString() ?? "");
+                var n = await cmd.ExecuteNonQueryAsync();
+                log.Append("removed ").Append(n).Append(" x ").Append(name.GetString()).Append('\n');
+            }
+        }
+        foreach (var p in root.GetProperty("popups").EnumerateArray())
+        {
+            var name = LeadsMiddleware.Clip(p.GetProperty("name").GetString() ?? "", 180);
+            long exists;
+            await using (var cmd = db.CreateCommand())
+            {
+                cmd.CommandText = "select count(*) from Popups where TenantId = @t and Name = @n";
+                cmd.Parameters.AddWithValue("@t", tenantId);
+                cmd.Parameters.AddWithValue("@n", name);
+                exists = (long)(await cmd.ExecuteScalarAsync() ?? 0L);
+            }
+            if (exists > 0) { log.Append(name).Append(": already exists, skipped\n"); continue; }
+            var type = p.TryGetProperty("type", out var ty) ? ty.GetInt64() : 1;
+            var options = LeadsMiddleware.ParseOptions(p.TryGetProperty("options", out var o) ? o.GetRawText() : "{}");
+            Dictionary<string, object>? layout = null;
+            if (p.TryGetProperty("layout", out var l) && l.ValueKind == JsonValueKind.Object)
+            {
+                layout = new Dictionary<string, object>();
+                foreach (var prop in l.EnumerateObject())
+                    layout[prop.Name] = prop.Value.ValueKind switch
+                    {
+                        JsonValueKind.Number => prop.Value.GetInt64(),
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        _ => prop.Value.GetString() ?? ""
+                    };
+            }
+            var targeting = p.TryGetProperty("urlTargeting", out var ut) && ut.ValueKind == JsonValueKind.String && (ut.GetString() ?? "").Length > 0
+                ? ut.GetString()! : domain;
+            var id = await LeadsMiddleware.InsertPopup(db, tenantId, userId, name, type, options, layout,
+                JsonSerializer.Serialize(new { urlTargeting = targeting }),
+                trigger: p.TryGetProperty("trigger", out var tr) ? tr.GetInt64() : 0,
+                delay: p.TryGetProperty("delay", out var de) ? de.GetInt64() : 0,
+                frequency: p.TryGetProperty("frequency", out var fr) ? fr.GetInt64() : 1,
+                status: p.TryGetProperty("status", out var st) ? st.GetInt64() : 1);
+            log.Append(name).Append(": popup ").Append(id).Append('\n');
+        }
+        await LeadsMiddleware.RefreshPopupCount(db, tenantId);
     }
 }

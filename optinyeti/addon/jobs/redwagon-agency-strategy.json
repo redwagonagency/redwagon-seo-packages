@@ -1,0 +1,194 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "redwagon.agency",
+  "replace": [
+    "Red Wagon - Exit intent",
+    "Red Wagon - Scroll slide-in",
+    "Red Wagon - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "RW 01 Welcome bar - free audit",
+      "type": 2,
+      "options": {
+        "Heading": "Free SEO or Google Ads audit, 30 seconds",
+        "SubHeading": "See exactly what is costing you rankings and ad spend. No sales call needed.",
+        "ButtonText": "Run my free audit",
+        "ButtonUrl": "https://www.searchauditpro.com/",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "RW 02 Scroll slide-in - Growth Notes newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Growth Notes, every Tuesday",
+        "SubHeading": "One tactic a week from the campaigns we run for clients: SEO, paid media, AI workflows. Five-minute read.",
+        "ButtonText": "Send me Growth Notes",
+        "SuccessMessage": "You are in. The next issue lands Tuesday.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "RW 03 Exit intent - Growth Audit Checklist download",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: the 27-point Growth Audit Checklist",
+        "SubHeading": "The same checklist we run on every new client's SEO, paid media and CRM before we touch a dollar of budget. Free PDF.",
+        "ButtonText": "Email me the checklist",
+        "SuccessMessage": "The checklist is on its way. You can also grab it right here:",
+        "DownloadUrl": "https://optinyeti.com/downloads/red-wagon-growth-audit-checklist.pdf",
+        "DownloadText": "Download the checklist (PDF)",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "ImageUrl": "https://optinyeti.com/img/banners/rw-checklist.svg",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1,
+      "urlTargeting": "redwagon.agency,!redwagon.agency/contact,!redwagon.agency/about"
+    },
+    {
+      "name": "RW 04 Blog banner - free audit (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Is your site leaking rankings and ad spend?",
+        "SubHeading": "Run the free 30-second audit we use on every Red Wagon client. SEO and Google Ads, scored and explained.",
+        "ButtonText": "Run my free audit",
+        "ButtonUrl": "https://www.searchauditpro.com/",
+        "ImageUrl": "https://optinyeti.com/img/banners/rw-audit.svg",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": ".entry-content",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "RW 05 Blog banner - checklist download (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Get the 27-point Growth Audit Checklist",
+        "SubHeading": "SEO, paid media, CRM and analytics: the exact checks we run before spending a dollar of a client's budget. Free PDF, straight to your inbox.",
+        "ButtonText": "Send me the checklist",
+        "SuccessMessage": "Sent! Or grab it right now:",
+        "DownloadUrl": "https://optinyeti.com/downloads/red-wagon-growth-audit-checklist.pdf",
+        "DownloadText": "Download the checklist (PDF)",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "ImageUrl": "https://optinyeti.com/img/banners/rw-checklist.svg",
+        "BackgroundColor": "#FFF4EC",
+        "ButtonColor": "#111111"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": ".entry-content",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "RW 06 Solutions pages - case study promo (US Gold Bureau)",
+      "type": 2,
+      "options": {
+        "Heading": "Back in the black in about 90 days",
+        "SubHeading": "How we rebuilt a $250k/month program for the United States Gold Bureau and turned it profitable again. Read the case study, then let's talk about yours.",
+        "ButtonText": "Read the case study",
+        "ButtonUrl": "https://www.redwagon.agency/our-work/how_we_helped_50mm_year_gold_bullion_back_in_black/",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "redwagon.agency/solutions",
+      "trigger": 3,
+      "delay": 15000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "RW 07 Our Work pages - become a client",
+      "type": 2,
+      "options": {
+        "Heading": "Your results could be the next page here",
+        "SubHeading": "From a $6K monthly loss to $150K in managed ad spend for Rainmaker. A 300% lead increase for a pharma compliance SaaS. Book a 30-minute strategy call and we'll map your version.",
+        "ButtonText": "Book my strategy call",
+        "ButtonUrl": "https://redwagon.agency/contact/",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "urlTargeting": "redwagon.agency/our-work,redwagon.agency/our-portfolio,redwagon.agency/testimonial",
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "RW 08 Blog exit intent - strategy call (Parmale $125k/mo)",
+      "type": 2,
+      "options": {
+        "Heading": "\"$125k a month from a $5k investment.\"",
+        "SubHeading": "Dan Parmale, Parmale Law Firm, three months after signing with Red Wagon. Want to see what that looks like for your business? Thirty minutes, no pitch deck.",
+        "ButtonText": "Book a free strategy call",
+        "ButtonUrl": "https://redwagon.agency/contact/",
+        "ImageUrl": "https://redwagon.agency/wp-content/uploads/2025/12/dan-parmale.webp",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#111111"
+      },
+      "layout": {
+        "mode": "takeover",
+        "background": "rgba(17,17,17,0.94)"
+      },
+      "urlTargeting": "redwagon.agency/contact,redwagon.agency/about",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}
