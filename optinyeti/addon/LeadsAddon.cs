@@ -239,7 +239,7 @@ public sealed class LeadsMiddleware
             var updated = CleanUpPage(html);
             updated = InjectTemplatesLink(updated);
             if (signedIn) updated = InjectLeadsLink(updated);
-            if (signedIn && WheelEditLinks.Contains(ctx.Request.Path.Value ?? ""))
+            if (signedIn && await IsWheelEditPage(ctx.Request.Path.Value ?? ""))
             {
                 var wheelId = (ctx.Request.Path.Value ?? "").TrimEnd('/').Split('/').Last();
                 var at = updated.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
@@ -1055,9 +1055,25 @@ public sealed class LeadsMiddleware
 
     private const string PickCookie = "oy_tpl";
 
-    // Edit pages of spin-to-win popups, so the stock editor can link to the prize editor.
-    private static readonly ConcurrentDictionary<string, byte> WheelEditLinksMap = new(StringComparer.OrdinalIgnoreCase);
-    private static ICollection<string> WheelEditLinks => WheelEditLinksMap.Keys;
+    // True for the stock edit page of a spin-to-win popup, so it can link to the prize editor.
+    private static async Task<bool> IsWheelEditPage(string path)
+    {
+        const string prefix = "/Popup/Edit/";
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!long.TryParse(path[prefix.Length..].TrimEnd('/'), NumberStyles.None, CultureInfo.InvariantCulture, out var id)) return false;
+        try
+        {
+            await using var db = await Open();
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = "select 1 from Popups where Id = @id and Type = 5";
+            cmd.Parameters.AddWithValue("@id", id);
+            return await cmd.ExecuteScalarAsync() != null;
+        }
+        catch (SqliteException)
+        {
+            return false;
+        }
+    }
 
     private static Dictionary<string, object> WheelSettings(JsonElement o) => new()
     {
@@ -1120,7 +1136,6 @@ public sealed class LeadsMiddleware
             return;
         }
         var id = popupId.ToString(CultureInfo.InvariantCulture);
-        WheelEditLinksMap["/Popup/Edit/" + id] = 1;
 
         if (isPost)
         {
