@@ -147,6 +147,18 @@ HEAT_LOC=$(curl -s -b $J -o /dev/null -w '%{redirect_url}' "$T/admin/Reports/hea
 TOK=$(echo "$HEAT_LOC" | sed 's/.*oyheat=5://')
 echo "HEAT_OPEN=$(echo "$HEAT_LOC" | cut -c1-40) data=$(curl -s "$T/api/cro/heat?tenantId=5&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=$TOK" | cut -c1-120) bad_token=$(curl -s -o /dev/null -w '%{http_code}' "$T/api/cro/heat?tenantId=5&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=1.x") other_tenant=$(curl -s -o /dev/null -w '%{http_code}' "$T/api/cro/heat?tenantId=1&url=https%3A%2F%2Fjpw.example%2Fblog%2Fpost&token=$TOK") engine_cro=$(curl -s $T/js/popup-engine.js | grep -c 'startCro\|drawHeatmap')"
 rm -f /tmp/oy_rep.html
+# ---- sites
+ssave() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" "$@" $T/admin/Sites/save | sed 's/.*msg=//'; }
+echo "SITES_PAGE=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/admin/Sites) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/admin/Sites) ADD=$(ssave --data-urlencode 'domain=https://www.JPW-Example.com/' --data-urlencode 'name=JPW Example') dup=$(ssave -d domain=jpw-example.com) bad=$(ssave -d domain=not_a_domain) stored=$(sqlite3 $DB "select Domain||'|'||Name from Sites where TenantId=5")"
+SID=$(sqlite3 $DB "select Id from Sites where TenantId=5 and Domain='jpw-example.com'")
+echo "SITE_HOOK=$(ssave -d id=$SID --data-urlencode 'name=JPW Example' --data-urlencode 'webhook=https://example.com/jpw-site-hook') bad_hook=$(ssave -d id=$SID -d webhook=http://x.y/z) snippet=$(curl -s -b $J $T/admin/Sites | grep -c 'GetTenantScript/5')"
+curl -s -b $J -o /dev/null -H "Origin: $T" -d id=1 -d site=jpw-example.com $T/Popup/UseTemplate
+SP=$(sqlite3 $DB 'select max(Id) from Popups')
+echo "SITE_POPUP: targeting=$(sqlite3 $DB "select TargetingRules from Popups where Id=$SP") editor_select=$(curl -s -b $J $T/Popup/Content/$SP | grep -c 'option value=\"jpw-example.com\" selected') gallery_note=$(curl -s -b $J "$T/Popup/SelectTemplate?site=jpw-example.com" | grep -c 'show only on <strong>jpw-example.com')"
+csave $SP --data-urlencode 'Heading=JPW site' -d site= > /dev/null
+echo "SITE_UNSCOPE=$(sqlite3 $DB "select TargetingRules from Popups where Id=$SP") rescope=$(csave $SP --data-urlencode 'Heading=JPW site' -d site=jpw-example.com >/dev/null; sqlite3 $DB "select json_extract(TargetingRules,'\$.urlTargeting') from Popups where Id=$SP")"
+curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":4,"email":"jpw-site-lead@example.com","source":"https://www.jpw-example.com/pricing"}' $T/api/leads/capture; sleep 4
+echo "SITE_ROUTE=$(sqlite3 $DB "select substr(LastStatus,1,12) from Sites where Id=$SID") tenant_hook_untouched=$(sqlite3 $DB "select count(*) from LeadWebhooks where TenantId=5 and LastAttemptAt > (select UpdatedAt from Sites where Id=$SID)") site_leads=$(curl -s -b $J $T/admin/Sites | grep -o '[0-9]* leads' | head -1)"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

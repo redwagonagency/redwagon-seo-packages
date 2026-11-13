@@ -14,6 +14,7 @@
 //   GET/POST /Popup/Test/{id}    A/B test: second version of a popup, results, pick a winner
 //   GET  /api/ab/variants, POST /api/ab/track   used by the popup script on customer sites
 //   POST /api/cro/collect, GET /api/cro/heat, GET /admin/Reports...   reporting and heat maps (Reports.cs)
+//   GET/POST /admin/Sites...      the customer's websites, install snippet, per-site lead routing (Sites.cs)
 //   GET/POST /Popup/Wheel/{id}   prize editor for spin-to-win popups
 //   POST /Popup/UseTemplate      creates a ready-to-edit draft popup from a template
 // plus a "Leads" link in the app's own menu and a few baseline security headers.
@@ -112,6 +113,10 @@ public sealed class LeadsMiddleware
             {
                 await HandleDelete(ctx);
                 return;
+            }
+            if (path.StartsWith("/admin/Sites", StringComparison.OrdinalIgnoreCase))
+            {
+                if (await Sites.Handle(ctx, path)) return;
             }
             if (path.StartsWith("/api/cro/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("/admin/Reports", StringComparison.OrdinalIgnoreCase))
             {
@@ -442,7 +447,7 @@ public sealed class LeadsMiddleware
         var match = AnalyticsLink.Match(html);
         if (!match.Success) return html;
         var added = new StringBuilder();
-        foreach (var (href, label) in new[] { ("/Popup/SelectTemplate", "Templates"), ("/admin/Leads", "Leads"), ("/admin/Integrations", "Integrations"), ("/admin/Reports", "Reports") })
+        foreach (var (href, label) in new[] { ("/Popup/SelectTemplate", "Templates"), ("/admin/Leads", "Leads"), ("/admin/Integrations", "Integrations"), ("/admin/Reports", "Reports"), ("/admin/Sites", "Sites") })
         {
             if (html.Contains("href=\"" + href + "\"", StringComparison.OrdinalIgnoreCase)) continue;
             var link = match.Value.Replace("/admin/Analytics", href, StringComparison.OrdinalIgnoreCase);
@@ -617,12 +622,14 @@ public sealed class LeadsMiddleware
             await cmd.ExecuteNonQueryAsync();
         }
 
-        var webhookUrl = await EnabledWebhook(db, tenantId.Value);
+        var site = await Sites.SiteForUrl(db, tenantId.Value, source);
+        var webhookUrl = site?.Webhook is { Length: > 0 } siteHook && IsAcceptableWebhookUrl(siteHook) ? siteHook : await EnabledWebhook(db, tenantId.Value);
         if (webhookUrl != null)
         {
-            var payload = LeadPayload("lead.captured", email, firstName, lastName, phone, popupId.Value, tenantId.Value, source, now);
+            var payload = LeadPayload("lead.captured", email, firstName, lastName, phone, popupId.Value, tenantId.Value, source, now, site?.Domain);
             var tenant = tenantId.Value;
-            _ = Task.Run(() => DeliverWebhook(tenant, webhookUrl, payload));
+            var siteDomain = site?.Domain;
+            _ = Task.Run(() => DeliverWebhook(tenant, webhookUrl, payload, siteDomain));
         }
 
         await Json(ctx, 200, true, "Lead captured");
@@ -1135,15 +1142,18 @@ public sealed class LeadsMiddleware
             _ => ""
         };
 
-        var (sections, total) = await BuildTemplateSections(signedIn: true);
+        var forSite = Sites.NormalizeDomain(ctx.Request.Query["site"].ToString()) ?? "";
+        var (sections, total) = await BuildTemplateSections(signedIn: true, forSite);
         var body = new StringBuilder();
         body.Append("<div class=\"head\"><div><h1>Choose a template</h1><p class=\"sub\">")
             .Append(total.ToString(CultureInfo.InvariantCulture))
-            .Append(" ready-made popups. Preview one, then change the words, colors and targeting.</p></div>")
+            .Append(" ready-made popups. Preview one, then change the words, colors and targeting.")
+            .Append(forSite.Length == 0 ? "" : " The new popup will show only on <strong>" + H(forSite) + "</strong>.")
+            .Append("</p></div>")
             .Append("<div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Create\">Start from scratch</a></div></div>")
             .Append(notice).Append(sections)
             .Append(PreviewDialog.Replace("{{ACTION}}",
-                "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"));
+                "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"\"><input type=\"hidden\" name=\"site\" value=\"" + H(Sites.NormalizeDomain(ctx.Request.Query["site"].ToString()) ?? "") + "\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"));
 
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers["Cache-Control"] = "no-store";
@@ -1220,6 +1230,15 @@ public sealed class LeadsMiddleware
             layout["closable"] = form["layout_closable"].ToString() == "1";
         }
         return layout;
+    }
+
+    private static string SiteForm(List<(long Id, string Domain, string Name)> sites, string current)
+    {
+        if (sites.Count == 0) return "";
+        var sb = new StringBuilder("<h2 style=\"margin:22px 0 6px\">Which site</h2><div class=\"stack\"><label for=\"site\">Show on</label><select id=\"site\" name=\"site\"><option value=\"\">All my sites</option>");
+        foreach (var (_, domain, name) in sites)
+            sb.Append("<option value=\"").Append(H(domain)).Append('"').Append(domain == current ? " selected" : "").Append('>').Append(H(name.Length == 0 ? domain : name + " (" + domain + ")")).Append("</option>");
+        return sb.Append("</select></div>").ToString();
     }
 
     private static string LayoutForm(JsonElement layout)
@@ -1307,6 +1326,14 @@ public sealed class LeadsMiddleware
             hasSettings = true;
         }
         var fields = hasSettings ? FieldsFor(type) : Array.Empty<Field>();
+        var siteList = await Sites.List(db, viewer.TenantId);
+        string currentSite = "";
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select json_extract(TargetingRules, '$.urlTargeting') from Popups where Id = @id and json_valid(TargetingRules)";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            currentSite = (await cmd.ExecuteScalarAsync() as string) ?? "";
+        }
         var layoutStored = root.ValueKind == JsonValueKind.Object && TryGet(root, "layout", out var lay) && lay.ValueKind == JsonValueKind.Object ? lay : ParseOptions("{}");
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers["Cache-Control"] = "no-store";
@@ -1340,6 +1367,17 @@ public sealed class LeadsMiddleware
                 }
             }
             var layoutNext = ReadLayout(form);
+            var chosenSite = Sites.NormalizeDomain(form["site"].ToString()) ?? "";
+            if (chosenSite.Length > 0 && !siteList.Any(x => x.Domain == chosenSite)) chosenSite = "";
+            await using (var cmd = db.CreateCommand())
+            {
+                cmd.CommandText = chosenSite.Length == 0
+                    ? "update Popups set TargetingRules = json_remove(case when json_valid(TargetingRules) then TargetingRules else '{}' end, '$.urlTargeting') where Id = @id"
+                    : "update Popups set TargetingRules = json_set(case when json_valid(TargetingRules) then TargetingRules else '{}' end, '$.urlTargeting', @site) where Id = @id";
+                cmd.Parameters.AddWithValue("@site", chosenSite);
+                cmd.Parameters.AddWithValue("@id", popupId);
+                await cmd.ExecuteNonQueryAsync();
+            }
             await using (var cmd = db.CreateCommand())
             {
                 cmd.Parameters.AddWithValue("@now", Timestamp(DateTime.UtcNow));
@@ -1403,7 +1441,7 @@ public sealed class LeadsMiddleware
             .Append(hasSettings ? "" : "<div class=\"notice ok\">This popup has custom content, so its words live in the <a href=\"/Popup/Designer/" + id + "\">designer</a>. You can still choose where it appears below.</div>")
             .Append("<div class=\"wheel-grid\"><form method=\"post\" action=\"/Popup/Content/").Append(id).Append("\" class=\"card pad\" style=\"max-width:none\"><div class=\"stack\">")
             .Append(inputs).Append(colors.Length == 0 ? "" : "<div class=\"row\">" + colors + "</div>")
-            .Append("</div>").Append(LayoutForm(layoutStored))
+            .Append("</div>").Append(LayoutForm(layoutStored)).Append(SiteForm(siteList, currentSite))
             .Append("<div class=\"row\" style=\"margin-top:18px\"><button type=\"submit\" class=\"btn\">Save</button></div></form>")
             .Append("<div><p class=\"sub\" style=\"margin:0 0 10px\">Saved version</p><div class=\"pv-stage\" inert>")
             .Append(TryGet(root, "html", out var saved) && saved.ValueKind == JsonValueKind.String ? saved.GetString() : "")
@@ -1982,7 +2020,7 @@ public sealed class LeadsMiddleware
 
     // Category sections of template cards. Each card carries its rendered popup in a <template>
     // element so the preview dialog can show the real thing.
-    private static async Task<(string Html, int Total)> BuildTemplateSections(bool signedIn)
+    private static async Task<(string Html, int Total)> BuildTemplateSections(bool signedIn, string forSite = "")
     {
         var sections = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
         var order = new List<string>();
@@ -2018,7 +2056,7 @@ public sealed class LeadsMiddleware
                     .Append("</h3><p>").Append(H(Text(reader, 2))).Append("</p><div class=\"tpl-actions\">")
                     .Append("<button type=\"button\" class=\"btn ghost pv-open\">Preview</button>")
                     .Append(signedIn
-                        ? "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"" + id + "\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"
+                        ? "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"" + id + "\"><input type=\"hidden\" name=\"site\" value=\"" + H(forSite) + "\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"
                         : "<a class=\"btn\" href=\"/Templates/Start?id=" + id + "\">Use it free</a>")
                     .Append("</div></div><template>")
                     .Append(RenderTemplateHtml(reader.GetInt64(6), ParseOptions(Text(reader, 7))))
@@ -2143,6 +2181,8 @@ public sealed class LeadsMiddleware
 
         var form = await ctx.Request.ReadFormAsync();
         long.TryParse(form["id"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var templateId);
+        var siteDomain = Sites.NormalizeDomain(form["site"].ToString()) ?? "";
+        var targeting = siteDomain.Length == 0 ? "{}" : JsonSerializer.Serialize(new { urlTargeting = siteDomain });
 
         await using var db = await Open();
 
@@ -2205,9 +2245,10 @@ public sealed class LeadsMiddleware
             cmd.CommandText =
                 "insert into Popups (Name, Type, Status, Content, Title, Subtitle, CallToAction, TargetingRules, Trigger, DelayMs, Frequency, " +
                 "ShowOnMobile, ShowOnDesktop, TenantId, CreatedById, Views, Clicks, Conversions, CreatedAt, UpdatedAt) " +
-                "values (@name, @type, 0, @content, @title, @subtitle, @cta, '{}', @trigger, @delay, @frequency, 1, 1, @tenant, @user, 0, 0, 0, @now, @now); " +
+                "values (@name, @type, 0, @content, @title, @subtitle, @cta, @targeting, @trigger, @delay, @frequency, 1, 1, @tenant, @user, 0, 0, 0, @now, @now); " +
                 "select last_insert_rowid();";
             cmd.Parameters.AddWithValue("@name", Clip(name, 180));
+            cmd.Parameters.AddWithValue("@targeting", targeting);
             cmd.Parameters.AddWithValue("@type", type);
             cmd.Parameters.AddWithValue("@content", content);
             cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
@@ -2284,7 +2325,7 @@ public sealed class LeadsMiddleware
         return true;
     }
 
-    private static bool IsAcceptableWebhookUrl(string url) =>
+    internal static bool IsAcceptableWebhookUrl(string url) =>
         url.Length <= 500 &&
         Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
         uri.Scheme == Uri.UriSchemeHttps &&
@@ -2292,7 +2333,7 @@ public sealed class LeadsMiddleware
         !(IPAddress.TryParse(uri.Host, out var literal) && IsPrivateAddress(literal));
 
     private static string LeadPayload(string eventName, string email, string firstName, string lastName, string phone,
-        long popupId, long tenantId, string source, string capturedAt) =>
+        long popupId, long tenantId, string source, string capturedAt, string? site = null) =>
         JsonSerializer.Serialize(new
         {
             @event = eventName,
@@ -2303,6 +2344,7 @@ public sealed class LeadsMiddleware
             popupId,
             tenantId,
             source,
+            site,
             capturedAt
         });
 
@@ -2315,7 +2357,7 @@ public sealed class LeadsMiddleware
         return !string.IsNullOrEmpty(url) && IsAcceptableWebhookUrl(url) ? url : null;
     }
 
-    private static async Task<string> DeliverWebhook(long tenantId, string url, string payload)
+    private static async Task<string> DeliverWebhook(long tenantId, string url, string payload, string? siteDomain = null)
     {
         string status;
         try
@@ -2338,10 +2380,13 @@ public sealed class LeadsMiddleware
         {
             await using var db = await Open();
             await using var cmd = db.CreateCommand();
-            cmd.CommandText = "update LeadWebhooks set LastStatus = @s, LastAttemptAt = @at where TenantId = @t";
+            cmd.CommandText = siteDomain == null
+                ? "update LeadWebhooks set LastStatus = @s, LastAttemptAt = @at where TenantId = @t"
+                : "update Sites set LastStatus = @s || ' at ' || @at where TenantId = @t and Domain = @d";
             cmd.Parameters.AddWithValue("@s", status);
             cmd.Parameters.AddWithValue("@at", Timestamp(DateTime.UtcNow));
             cmd.Parameters.AddWithValue("@t", tenantId);
+            cmd.Parameters.AddWithValue("@d", (object?)siteDomain ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync();
         }
         catch (Exception ex)
@@ -2530,7 +2575,9 @@ public sealed class LeadsMiddleware
             "create table if not exists CroClicks (Id integer primary key autoincrement, TenantId integer not null, Url text not null, X real not null, Y integer not null, " +
             "DocH integer not null, Selector text null, At text not null); " +
             "create index if not exists IX_CroClicks_Tenant_Url on CroClicks (TenantId, Url); " +
-            "create table if not exists AddonSettings (Key text primary key, Value text not null)";
+            "create table if not exists AddonSettings (Key text primary key, Value text not null); " +
+            "create table if not exists Sites (Id integer primary key autoincrement, TenantId integer not null, Domain text not null, Name text null, WebhookUrl text null, " +
+            "LastStatus text null, CreatedAt text not null, UpdatedAt text not null, unique (TenantId, Domain))";
         await cmd.ExecuteNonQueryAsync();
         Volatile.Write(ref _schemaReady, 1);
     }
@@ -2764,6 +2811,7 @@ public sealed class LeadsMiddleware
   <a class="{{LEADS}}" href="/admin/Leads">Leads</a>
   <a class="{{INTEGRATIONS}}" href="/admin/Integrations">Integrations</a>
   <a class="{{REPORTS}}" href="/admin/Reports">Reports</a>
+  <a class="{{SITES}}" href="/admin/Sites">Sites</a>
   <a href="/admin/Analytics">Analytics</a>
   <a href="/admin/Settings">Settings</a>
 </nav></header>
@@ -2775,7 +2823,8 @@ public sealed class LeadsMiddleware
             .Replace("{{TEMPLATES}}", current == "Templates" ? "current" : "")
             .Replace("{{LEADS}}", current == "Leads" ? "current" : "")
             .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "")
-            .Replace("{{REPORTS}}", current == "Reports" ? "current" : "");
+            .Replace("{{REPORTS}}", current == "Reports" ? "current" : "")
+            .Replace("{{SITES}}", current == "Sites" ? "current" : "");
 
     // The public gallery wears the marketing site's own design: its stylesheet, fonts and menu.
     private const string PublicNav = """
