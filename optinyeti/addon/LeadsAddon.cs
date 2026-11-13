@@ -2651,7 +2651,8 @@ public sealed class LeadsMiddleware
   .stack{display:grid;gap:10px;margin:18px 0 16px;}
   .stack label{font-size:13.5px;font-weight:600;color:var(--ink-soft);}
   .stack input[type=url]{padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;}
-  .stack .check{font-weight:500;display:flex;gap:8px;align-items:center;}
+  .stack .check{font-weight:500;display:flex;gap:8px;align-items:center;justify-content:flex-start;}
+  .stack .check input{width:auto;margin:0;}
   .row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
   .notice{padding:12px 16px;border-radius:10px;margin-bottom:18px;font-size:14.5px;max-width:720px;}
   .notice.ok{background:#e3f6ee;color:#0b5b3b;border:1px solid #b5e3cf;}
