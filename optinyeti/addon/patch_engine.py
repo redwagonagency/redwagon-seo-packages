@@ -38,6 +38,16 @@ src = sub_once(
     "build",
 )
 
+# 2b. A/B tests: load version B data up front, swap it in at render time, count the view.
+src = sub_once(r"this\.tenantId = tenantId \|\| 1;", lambda m: m.group(0) + "\n      try { this.loadVariants(); } catch (e) {}", src, "variants-load")
+src = sub_once(
+    r"const content = typeof popup\.content === 'string' \? JSON\.parse\(popup\.content\) : popup\.content;",
+    lambda m: "let content = typeof popup.content === 'string' ? JSON.parse(popup.content) : popup.content;\n"
+              "      try { var abHtml = this.pickVariant(popup); if (abHtml) content = { html: abHtml }; this.abTrack(popup, 'view'); } catch (e) {}",
+    src,
+    "variants-render",
+)
+
 # 3. New methods.
 METHODS = r"""wireLeadCapture: function(wrapper, popup) {
       var self = this;
@@ -72,17 +82,59 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         data.email = email;
         if (!alreadyTracked) self.track('conversion', popup.id, { formName: 'popup' }, data);
         self.submitLead(popup, data);
+        self.abTrack(popup, 'conversion');
         if (root.hasAttribute && root.hasAttribute('data-oy-spin')) { self.spinWheel(wrapper, root); return; }
         done(root);
       }
       wrapper.querySelectorAll('form').forEach(function(form) {
         form.addEventListener('submit', function(e) { e.preventDefault(); handle(form, true); });
       });
+      if (!wrapper.querySelector('form') && !wrapper.querySelector('input[type="email"]')) {
+        wrapper.querySelectorAll('a.cta-button').forEach(function(link) {
+          link.addEventListener('click', function() { self.abTrack(popup, 'conversion'); });
+        });
+      }
       if (!wrapper.querySelector('form') && wrapper.querySelector('input[type="email"]')) {
         wrapper.querySelectorAll('button, a.btn, .cta-button').forEach(function(btn) {
           btn.addEventListener('click', function(e) { e.preventDefault(); handle(wrapper, false); });
         });
       }
+    },
+
+    loadVariants: function() {
+      var self = this;
+      if (!this.tenantId || !window.fetch) return;
+      fetch(this.baseUrl + '/api/ab/variants?tenantId=' + encodeURIComponent(this.tenantId))
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) { self.abData = (d && d.variants) || {}; })
+        .catch(function() { self.abData = {}; });
+    },
+
+    // Returns version B's HTML when this visitor is in group B; remembers the group per popup.
+    pickVariant: function(popup) {
+      popup._ab = null;
+      var entry = this.abData && this.abData[popup.id];
+      if (!entry || !entry.html) return null;
+      var key = 'oy_ab_' + popup.id, group = null;
+      try { group = window.localStorage.getItem(key); } catch (e) {}
+      if (group !== 'A' && group !== 'B') {
+        group = Math.random() < 0.5 ? 'A' : 'B';
+        try { window.localStorage.setItem(key, group); } catch (e) {}
+      }
+      popup._ab = group;
+      return group === 'B' ? entry.html : null;
+    },
+
+    abTrack: function(popup, eventName) {
+      if (!popup || !popup._ab || !window.fetch) return;
+      try {
+        fetch(this.baseUrl + '/api/ab/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ popupId: popup.id, variant: popup._ab, event: eventName }),
+          keepalive: true
+        }).catch(function() {});
+      } catch (e) {}
     },
 
     spinWheel: function(wrapper, form) {

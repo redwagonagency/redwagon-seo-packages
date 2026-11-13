@@ -10,6 +10,8 @@
 //   POST /admin/Integrations/save, /admin/Integrations/test
 //   GET  /Popup/SelectTemplate   template gallery driven by the PopupTemplates table
 //   GET  /Templates              public template gallery with live previews
+//   GET/POST /Popup/Test/{id}    A/B test: second version of a popup, results, pick a winner
+//   GET  /api/ab/variants, POST /api/ab/track   used by the popup script on customer sites
 //   GET/POST /Popup/Wheel/{id}   prize editor for spin-to-win popups
 //   POST /Popup/UseTemplate      creates a ready-to-edit draft popup from a template
 // plus a "Leads" link in the app's own menu and a few baseline security headers.
@@ -107,6 +109,21 @@ public sealed class LeadsMiddleware
             if (path.Equals("/admin/leads/delete", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleDelete(ctx);
+                return;
+            }
+            if (path.Equals("/api/ab/variants", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleTestVariants(ctx);
+                return;
+            }
+            if (path.Equals("/api/ab/track", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleTestTrack(ctx);
+                return;
+            }
+            if (path.StartsWith("/Popup/Test/", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleTestPage(ctx, path);
                 return;
             }
             if (path.StartsWith("/Popup/Wheel/", StringComparison.OrdinalIgnoreCase))
@@ -239,13 +256,20 @@ public sealed class LeadsMiddleware
             var updated = CleanUpPage(html);
             updated = InjectTemplatesLink(updated);
             if (signedIn) updated = InjectLeadsLink(updated);
-            if (signedIn && await IsWheelEditPage(ctx.Request.Path.Value ?? ""))
+            var pagePath = ctx.Request.Path.Value ?? "";
+            if (signedIn && pagePath.StartsWith("/Popup/Edit/", StringComparison.OrdinalIgnoreCase) &&
+                long.TryParse(pagePath["/Popup/Edit/".Length..].TrimEnd('/'), NumberStyles.None, CultureInfo.InvariantCulture, out var editId))
             {
-                var wheelId = (ctx.Request.Path.Value ?? "").TrimEnd('/').Split('/').Last();
                 var at = updated.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
-                if (at >= 0 && long.TryParse(wheelId, NumberStyles.None, CultureInfo.InvariantCulture, out _))
-                    updated = updated.Insert(at, "<a href=\"/Popup/Wheel/" + wheelId +
-                        "\" style=\"position:fixed;right:22px;bottom:22px;z-index:50;background:#FF8A3D;color:#fff;font-weight:600;padding:12px 20px;border-radius:999px;text-decoration:none;box-shadow:0 8px 24px rgba(11,31,43,.25);\">Edit wheel prizes</a>");
+                if (at >= 0)
+                {
+                    const string pill = "color:#fff;font-weight:600;padding:12px 20px;border-radius:999px;text-decoration:none;box-shadow:0 8px 24px rgba(11,31,43,.25);";
+                    var links = "<div style=\"position:fixed;right:22px;bottom:22px;z-index:50;display:flex;gap:10px;\">" +
+                                "<a href=\"/Popup/Test/" + editId + "\" style=\"background:#0F6B6B;" + pill + "\">A/B test</a>" +
+                                (await IsWheelEditPage(pagePath) ? "<a href=\"/Popup/Wheel/" + editId + "\" style=\"background:#FF8A3D;" + pill + "\">Edit wheel prizes</a>" : "") +
+                                "</div>";
+                    updated = updated.Insert(at, links);
+                }
             }
             if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
@@ -1055,6 +1079,349 @@ public sealed class LeadsMiddleware
 
     private const string PickCookie = "oy_tpl";
 
+    // ---------------------------------------------------------------- A/B tests
+
+    private static readonly ConcurrentDictionary<string, (long Window, int Count)> TrackWindows = new();
+
+    private static bool AllowTrack(string ip)
+    {
+        var window = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60;
+        if (TrackWindows.Count > 5000)
+        {
+            foreach (var entry in TrackWindows)
+                if (entry.Value.Window != window) TrackWindows.TryRemove(entry.Key, out _);
+        }
+        var state = TrackWindows.AddOrUpdate(ip, _ => (window, 1), (_, old) => old.Window == window ? (window, old.Count + 1) : (window, 1));
+        return state.Count <= 60;
+    }
+
+    private static void OpenCors(HttpResponse res)
+    {
+        res.Headers["Access-Control-Allow-Origin"] = "*";
+        res.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+        res.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+        res.Headers["Access-Control-Max-Age"] = "86400";
+    }
+
+    // Version B of every popup a tenant is testing right now. Read by the popup script.
+    private static async Task HandleTestVariants(HttpContext ctx)
+    {
+        OpenCors(ctx.Response);
+        if (HttpMethods.IsOptions(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 204;
+            return;
+        }
+        if (!HttpMethods.IsGet(ctx.Request.Method))
+        {
+            await Json(ctx, 405, false, "Use GET");
+            return;
+        }
+        long.TryParse(ctx.Request.Query["tenantId"], NumberStyles.None, CultureInfo.InvariantCulture, out var tenantId);
+        var variants = new Dictionary<string, object>();
+        await using (var db = await Open())
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select t.PopupId, t.Html from PopupTests t join Popups p on p.Id = t.PopupId " +
+                              "where t.TenantId = @t and p.TenantId = @t and t.IsRunning = 1";
+            cmd.Parameters.AddWithValue("@t", tenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                variants[reader.GetInt64(0).ToString(CultureInfo.InvariantCulture)] = new { html = Text(reader, 1) };
+        }
+        ctx.Response.ContentType = "application/json; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "public, max-age=60";
+        await ctx.Response.WriteAsync(JsonSerializer.Serialize(new { variants }));
+    }
+
+    private static async Task HandleTestTrack(HttpContext ctx)
+    {
+        OpenCors(ctx.Response);
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        if (HttpMethods.IsOptions(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 204;
+            return;
+        }
+        if (!HttpMethods.IsPost(ctx.Request.Method))
+        {
+            await Json(ctx, 405, false, "Use POST");
+            return;
+        }
+        if (!AllowTrack(ClientIp(ctx)))
+        {
+            await Json(ctx, 429, false, "Too many requests");
+            return;
+        }
+        var body = await ReadBody(ctx, 1024);
+        if (body == null)
+        {
+            await Json(ctx, 413, false, "Request too large");
+            return;
+        }
+        long popupId;
+        string variant, kind;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            popupId = Int(doc.RootElement, "popupId") ?? 0;
+            variant = Str(doc.RootElement, "variant");
+            kind = Str(doc.RootElement, "event");
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            await Json(ctx, 400, false, "Invalid JSON");
+            return;
+        }
+        if (popupId <= 0 || variant is not ("A" or "B") || kind is not ("view" or "conversion"))
+        {
+            await Json(ctx, 400, false, "Invalid event");
+            return;
+        }
+        var column = (kind == "view" ? "Views" : "Conversions") + variant;
+        await using (var db = await Open())
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "update PopupTests set " + column + " = " + column + " + 1 where PopupId = @id and IsRunning = 1";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        await Json(ctx, 200, true, "ok");
+    }
+
+    private static readonly Regex FirstHeading = new("(<h2\\b[^>]*>)(.*?)(</h2>)", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
+    private static readonly Regex FirstButton = new("(<(?:button|a class=\"cta-button\")\\b[^>]*>)([^<]*)(</(?:button|a)>)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static string InnerText(Regex pattern, string html)
+    {
+        var m = pattern.Match(html);
+        return m.Success ? WebUtility.HtmlDecode(Regex.Replace(m.Groups[2].Value, "<[^>]+>", "")).Trim() : "";
+    }
+
+    private static string Percent(long part, long whole) =>
+        whole <= 0 ? "-" : (100.0 * part / whole).ToString("0.0", CultureInfo.InvariantCulture) + "%";
+
+    // Plain-language read of the numbers: a two-proportion z-test once both versions have enough views.
+    private static string Verdict(long viewsA, long convA, long viewsB, long convB)
+    {
+        if (viewsA < 100 || viewsB < 100)
+            return "Too early to call. Wait until each version has at least 100 views.";
+        double pa = (double)convA / viewsA, pb = (double)convB / viewsB;
+        var pooled = (double)(convA + convB) / (viewsA + viewsB);
+        var se = Math.Sqrt(pooled * (1 - pooled) * (1.0 / viewsA + 1.0 / viewsB));
+        if (se <= 0) return "No difference yet. Neither version has conversions.";
+        var z = (pb - pa) / se;
+        if (Math.Abs(z) < 1.96) return "No clear winner yet. The gap is within what chance alone would produce.";
+        return (z > 0 ? "Version B" : "Version A") + " is ahead, and the gap is unlikely to be chance (95% confidence).";
+    }
+
+    private static async Task HandleTestPage(HttpContext ctx, string path)
+    {
+        var isPost = HttpMethods.IsPost(ctx.Request.Method);
+        if (!isPost && !HttpMethods.IsGet(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        if (isPost && !SameOrigin(ctx))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+        if (!long.TryParse(path["/Popup/Test/".Length..].TrimEnd('/'), NumberStyles.None, CultureInfo.InvariantCulture, out var popupId))
+        {
+            ctx.Response.StatusCode = 404;
+            return;
+        }
+
+        await using var db = await Open();
+        string name = "", content = "";
+        long tenantId = -1;
+        var found = false;
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Name, Content, TenantId from Popups where Id = @id and (@all = 1 or TenantId = @t)";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            cmd.Parameters.AddWithValue("@all", viewer.SeesAllTenants ? 1 : 0);
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                found = true;
+                name = Text(reader, 0);
+                content = Text(reader, 1);
+                tenantId = reader.GetInt64(2);
+            }
+        }
+        var root = ParseOptions(content);
+        var htmlA = found && root.ValueKind == JsonValueKind.Object ? Str(root, "html") : "";
+        if (root.ValueKind == JsonValueKind.Object && TryGet(root, "html", out var rawA) && rawA.ValueKind == JsonValueKind.String)
+            htmlA = rawA.GetString() ?? "";
+        if (!found)
+        {
+            ctx.Response.StatusCode = 404;
+            ctx.Response.ContentType = "text/html; charset=utf-8";
+            await ctx.Response.WriteAsync(Chrome("Templates") + "<div class=\"empty\"><h2>Popup not found</h2><p><a href=\"/Popup\">Back to your popups</a></p></div>" + PageBottom);
+            return;
+        }
+        var id = popupId.ToString(CultureInfo.InvariantCulture);
+        var self = "/Popup/Test/" + id;
+
+        string? htmlB = null;
+        long running = 0, viewsA = 0, convA = 0, viewsB = 0, convB = 0;
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Html, IsRunning, ViewsA, ConversionsA, ViewsB, ConversionsB from PopupTests where PopupId = @id";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                htmlB = Text(reader, 0);
+                running = reader.GetInt64(1);
+                viewsA = reader.GetInt64(2);
+                convA = reader.GetInt64(3);
+                viewsB = reader.GetInt64(4);
+                convB = reader.GetInt64(5);
+            }
+        }
+
+        if (isPost)
+        {
+            var form = await ctx.Request.ReadFormAsync();
+            var action = form["do"].ToString();
+            var now = Timestamp(DateTime.UtcNow);
+            var msg = "saved";
+            await using var cmd = db.CreateCommand();
+            cmd.Parameters.AddWithValue("@id", popupId);
+            cmd.Parameters.AddWithValue("@now", now);
+            switch (action)
+            {
+                case "save":
+                {
+                    if (htmlA.Length == 0) { msg = "empty"; break; }
+                    var custom = form["html"].ToString();
+                    string next;
+                    if (custom.Trim().Length > 0 && custom.Length <= 60000)
+                        next = custom;
+                    else
+                    {
+                        next = htmlB ?? htmlA;
+                        var heading = Clip(form["heading"].ToString().Trim(), 160);
+                        var button = Clip(form["button"].ToString().Trim(), 60);
+                        if (heading.Length > 0) next = FirstHeading.Replace(next, m => m.Groups[1].Value + H(heading) + m.Groups[3].Value, 1);
+                        if (button.Length > 0) next = FirstButton.Replace(next, m => m.Groups[1].Value + H(button) + m.Groups[3].Value, 1);
+                    }
+                    if (string.Equals(next, htmlA, StringComparison.Ordinal)) { msg = "same"; break; }
+                    cmd.CommandText = "insert into PopupTests (PopupId, TenantId, Html, IsRunning, CreatedAt, UpdatedAt) values (@id, @t, @h, 0, @now, @now) " +
+                                      "on conflict(PopupId) do update set Html = excluded.Html, UpdatedAt = excluded.UpdatedAt";
+                    cmd.Parameters.AddWithValue("@t", tenantId);
+                    cmd.Parameters.AddWithValue("@h", next);
+                    break;
+                }
+                case "start":
+                    cmd.CommandText = "update PopupTests set IsRunning = 1, UpdatedAt = @now where PopupId = @id";
+                    msg = "started";
+                    break;
+                case "pause":
+                    cmd.CommandText = "update PopupTests set IsRunning = 0, UpdatedAt = @now where PopupId = @id";
+                    msg = "paused";
+                    break;
+                case "reset":
+                    cmd.CommandText = "update PopupTests set ViewsA = 0, ConversionsA = 0, ViewsB = 0, ConversionsB = 0, UpdatedAt = @now where PopupId = @id";
+                    msg = "reset";
+                    break;
+                case "keepA":
+                    cmd.CommandText = "delete from PopupTests where PopupId = @id";
+                    msg = "keptA";
+                    break;
+                case "useB":
+                    cmd.CommandText = "update Popups set Content = json_set(case when json_valid(Content) then Content else '{}' end, '$.html', " +
+                                      "(select Html from PopupTests where PopupId = @id)), UpdatedAt = @now " +
+                                      "where Id = @id and exists (select 1 from PopupTests where PopupId = @id); " +
+                                      "delete from PopupTests where PopupId = @id";
+                    msg = "usedB";
+                    break;
+                default:
+                    msg = "";
+                    break;
+            }
+            if (cmd.CommandText.Length > 0) await cmd.ExecuteNonQueryAsync();
+            ctx.Response.Redirect(self + (msg.Length > 0 ? "?msg=" + msg : ""));
+            return;
+        }
+
+        var notice = ctx.Request.Query["msg"].ToString() switch
+        {
+            "saved" => "<div class=\"notice ok\">Version B saved.</div>",
+            "started" => "<div class=\"notice ok\">Test running. Visitors are now split evenly between the two versions.</div>",
+            "paused" => "<div class=\"notice ok\">Test paused. Everyone sees version A.</div>",
+            "reset" => "<div class=\"notice ok\">Counts cleared.</div>",
+            "keptA" => "<div class=\"notice ok\">Test ended. Version A stays.</div>",
+            "usedB" => "<div class=\"notice ok\">Version B is now the popup. The test has ended.</div>",
+            "same" => "<div class=\"notice bad\">Version B is identical to version A. Change the headline, the button or the HTML first.</div>",
+            "empty" => "<div class=\"notice bad\">This popup has no content to test yet.</div>",
+            _ => ""
+        };
+
+        string Button(string action, string label, string style = "btn ghost") =>
+            "<form method=\"post\" action=\"" + self + "\"><input type=\"hidden\" name=\"do\" value=\"" + action + "\"><button type=\"submit\" class=\"" + style + "\">" + label + "</button></form>";
+
+        var body = new StringBuilder();
+        body.Append("<div class=\"head\"><div><h1>A/B test</h1><p class=\"sub\">").Append(H(name))
+            .Append("</p></div><div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Edit/").Append(id).Append("\">Back to popup settings</a></div></div>").Append(notice);
+
+        if (htmlA.Length == 0)
+        {
+            body.Append("<div class=\"empty\"><h2>Nothing to test yet</h2><p>This popup has no content. <a href=\"/Popup/SelectTemplate\">Start from a template</a>, then come back.</p></div>");
+        }
+        else
+        {
+            if (htmlB != null)
+            {
+                body.Append("<div class=\"card\" style=\"margin-bottom:22px\"><table><thead><tr><th>Version</th><th>Views</th><th>Conversions</th><th>Conversion rate</th></tr></thead><tbody>")
+                    .Append("<tr><td class=\"email\">A (original)</td><td>").Append(viewsA).Append("</td><td>").Append(convA).Append("</td><td>").Append(Percent(convA, viewsA)).Append("</td></tr>")
+                    .Append("<tr><td class=\"email\">B</td><td>").Append(viewsB).Append("</td><td>").Append(convB).Append("</td><td>").Append(Percent(convB, viewsB)).Append("</td></tr>")
+                    .Append("</tbody></table></div>")
+                    .Append("<p class=\"sub\" style=\"margin:0 0 6px\"><strong>").Append(running == 1 ? "Running." : "Not running.").Append("</strong> ")
+                    .Append(H(Verdict(viewsA, convA, viewsB, convB))).Append("</p>")
+                    .Append("<p class=\"sub\" style=\"margin:0 0 18px\">A conversion is an email signup, or a click on the button for popups without a form. Counting covers the popup while it is published and the test is running.</p>")
+                    .Append("<div class=\"actions\" style=\"margin-bottom:30px\">")
+                    .Append(running == 1 ? Button("pause", "Pause test") : Button("start", "Start test", "btn"))
+                    .Append(Button("useB", "End test and use B")).Append(Button("keepA", "End test and keep A")).Append(Button("reset", "Clear counts"))
+                    .Append("</div>");
+            }
+            else
+            {
+                body.Append("<p class=\"sub\" style=\"margin:0 0 22px;max-width:640px\">Make a second version of this popup. Half of your visitors will see each one, and this page will show which gets more signups. Change one thing at a time so you know what made the difference.</p>");
+            }
+
+            var source = htmlB ?? htmlA;
+            var hasHeading = FirstHeading.IsMatch(source);
+            var hasButton = FirstButton.IsMatch(source);
+            body.Append("<div class=\"wheel-grid\"><form method=\"post\" action=\"").Append(self).Append("\" class=\"card pad\" style=\"max-width:none\">")
+                .Append("<input type=\"hidden\" name=\"do\" value=\"save\"><h2>Version B</h2><div class=\"stack\">");
+            if (hasHeading)
+                body.Append("<label for=\"heading\">Headline</label><input id=\"heading\" name=\"heading\" maxlength=\"160\" value=\"").Append(H(InnerText(FirstHeading, source))).Append("\">");
+            if (hasButton)
+                body.Append("<label for=\"button\">Button text</label><input id=\"button\" name=\"button\" maxlength=\"60\" value=\"").Append(H(InnerText(FirstButton, source))).Append("\">");
+            body.Append("<details").Append(hasHeading || hasButton ? "" : " open").Append("><summary>Edit version B's HTML instead</summary>")
+                .Append("<p class=\"sub\" style=\"margin:8px 0\">Leave this empty to use the fields above. Anything pasted here replaces version B entirely.</p>")
+                .Append("<textarea name=\"html\" rows=\"10\" spellcheck=\"false\" aria-label=\"Version B HTML\">").Append(hasHeading || hasButton ? "" : H(source)).Append("</textarea></details>")
+                .Append("</div><div class=\"row\"><button type=\"submit\" class=\"btn\">Save version B</button></div></form>")
+                .Append("<div><p class=\"sub\" style=\"margin:0 0 10px\">Version A (original)</p><div class=\"pv-stage\" inert style=\"margin-bottom:22px\">").Append(htmlA).Append("</div>");
+            if (htmlB != null)
+                body.Append("<p class=\"sub\" style=\"margin:0 0 10px\">Version B</p><div class=\"pv-stage\" inert>").Append(htmlB).Append("</div>");
+            body.Append("</div></div>");
+        }
+
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
+    }
+
     // True for the stock edit page of a spin-to-win popup, so it can link to the prize editor.
     private static async Task<bool> IsWheelEditPage(string path)
     {
@@ -1818,7 +2185,12 @@ public sealed class LeadsMiddleware
         cmd.CommandText =
             "create table if not exists LeadWebhooks (" +
             "TenantId integer not null primary key, Url text not null, IsEnabled integer not null default 1, " +
-            "UpdatedAt text not null, LastStatus text null, LastAttemptAt text null)";
+            "UpdatedAt text not null, LastStatus text null, LastAttemptAt text null); " +
+            "create table if not exists PopupTests (" +
+            "PopupId integer not null primary key, TenantId integer not null, Html text not null, IsRunning integer not null default 0, " +
+            "ViewsA integer not null default 0, ConversionsA integer not null default 0, " +
+            "ViewsB integer not null default 0, ConversionsB integer not null default 0, " +
+            "CreatedAt text not null, UpdatedAt text not null)";
         await cmd.ExecuteNonQueryAsync();
         Volatile.Write(ref _schemaReady, 1);
     }
@@ -2006,6 +2378,8 @@ public sealed class LeadsMiddleware
   dialog#pv{border:0;background:transparent;padding:16px;max-width:none;max-height:100vh;overflow:auto;box-sizing:border-box;width:min(548px,100vw);color:var(--ink);}
   .wheel-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:28px;align-items:start;}
   .wheel-grid .stack input:not([type=color]){padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;}
+  .wheel-grid textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;}
+  .wheel-grid details summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--teal);margin-top:6px;}
   .prizes td{padding:6px 8px;border-bottom:0;}
   .prizes th{padding:8px;}
   .prizes input{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font:inherit;}
