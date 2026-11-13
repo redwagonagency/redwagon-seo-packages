@@ -125,6 +125,19 @@ echo "DESIGNER: old_brand=$(grep -c '>PopupManager<' /tmp/oy_des.html) new_brand
 rm -f /tmp/oy_des.html
 echo "SEO_PAGES=$(for u in /about/joe-whyte /exit-intent-popups /spin-to-win-popups /popup-ab-testing /coupon-popups /optinmonster-alternative /video-popups; do curl -s -o /tmp/oy_seo.html -w '%{http_code}' $T$u; printf ':%s:%s ' $(grep -c 'application/ld+json' /tmp/oy_seo.html) $(grep -c 'rel="canonical"' /tmp/oy_seo.html); done) joe=$(curl -s $T/about/joe-whyte | grep -c 'Joe Whyte') noindex=$(curl -s $T/exit-intent-popups | grep -c noindex) nav_active=$(curl -s $T/exit-intent-popups | grep -c 'class=\"active\"') post=$(curl -s -o /dev/null -w '%{http_code}' -d x=1 $T/coupon-popups)"
 rm -f /tmp/oy_seo.html
+# The popup script must parse and must not reference variables outside their scope.
+curl -s $T/js/popup-engine.js > /tmp/oy_eng.js
+echo "ENGINE_SYNTAX=$(node -e "new Function(require('fs').readFileSync('/tmp/oy_eng.js','utf8')); console.log('ok')" 2>&1 | tail -1) render_smoke=$(node -e "
+const fs=require('fs');const src=fs.readFileSync('/tmp/oy_eng.js','utf8');
+const els=[];function mk(){return {style:{},children:[],classList:{add(){}},appendChild(c){this.children.push(c);return c;},insertAdjacentElement(){},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(){},setAttribute(){},getAttribute(){return null;},remove(){},get lastElementChild(){return this.children[this.children.length-1]||null;}};}
+global.window={location:{origin:'http://x',href:'http://x/'},localStorage:{getItem(){return null;},setItem(){}},sessionStorage:{getItem(){return null;},setItem(){}},addEventListener(){},matchMedia(){return {matches:false};}};
+global.document={createElement(){return mk();},getElementById(){return null;},body:mk(),head:mk(),querySelector(){return null;},querySelectorAll(){return [];},addEventListener(){},getElementsByTagName(){return [];},readyState:'complete'};
+global.sessionStorage=window.sessionStorage;global.localStorage=window.localStorage;global.navigator={userAgent:'x'};global.fetch=()=>Promise.resolve({ok:true,json:()=>({})});global.console={log(){},error(){},warn(){}};
+try{eval(src);}catch(e){process.stdout.write('load:'+e.message);process.exit();}
+const P=window.PopupManager;const pop={id:1,name:'t',type:'EmailCollector',content:JSON.stringify({html:'<h2>x</h2>',layout:{mode:'slide'}}),trigger:'OnPageLoad',frequency:'EveryVisit'};
+try{P.renderPopup(pop);process.stdout.write('ok');}catch(e){process.stdout.write('render:'+e.message);}
+" 2>&1 | tail -1)"
+rm -f /tmp/oy_eng.js
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

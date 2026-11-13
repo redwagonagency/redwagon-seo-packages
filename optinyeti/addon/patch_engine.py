@@ -53,7 +53,9 @@ src = sub_once(
     r"container\.appendChild\(contentWrapper\);\s*overlay\.appendChild\(container\);\s*document\.body\.appendChild\(overlay\);",
     lambda m: "container.appendChild(contentWrapper);\n"
               "      overlay.appendChild(container);\n"
-              "      if (!this.applyLayout(overlay, container, closeBtn, content)) document.body.appendChild(overlay);",
+              "      var oyContent = {};\n"
+              "      try { oyContent = (typeof popup.content === 'string' ? JSON.parse(popup.content) : popup.content) || {}; } catch (e) {}\n"
+              "      if (!this.applyLayout(overlay, container, closeBtn, oyContent)) document.body.appendChild(overlay);",
     src,
     "layout",
 )
