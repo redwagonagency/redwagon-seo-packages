@@ -1189,6 +1189,65 @@ public sealed class LeadsMiddleware
         _ => Array.Empty<Field>()
     };
 
+    private static readonly string[] LayoutModes = { "center", "slide", "bar", "takeover", "inline" };
+
+    private static Dictionary<string, object> ReadLayout(IFormCollection form)
+    {
+        var mode = form["layout_mode"].ToString();
+        if (!LayoutModes.Contains(mode)) mode = "center";
+        var layout = new Dictionary<string, object> { ["mode"] = mode };
+        var position = form["layout_position"].ToString();
+        if (mode == "slide") layout["position"] = position is "bottom-left" or "top-right" or "top-left" ? position : "bottom-right";
+        if (mode == "bar") layout["position"] = form["layout_edge"].ToString() == "bottom" ? "bottom" : "top";
+        if (mode == "takeover")
+        {
+            var bg = form["layout_background"].ToString();
+            layout["background"] = HexColor.IsMatch(bg) ? bg : "#0B1F2B";
+        }
+        if (mode == "inline")
+        {
+            var selector = Clip(form["layout_selector"].ToString().Trim(), 200);
+            if (selector.Length > 0) layout["selector"] = selector;
+            var placement = form["layout_placement"].ToString();
+            layout["placement"] = placement is "before" or "inside" ? placement : "after";
+            int.TryParse(form["layout_after"].ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var after);
+            layout["afterParagraphs"] = after is >= 1 and <= 50 ? after : 3;
+            layout["closable"] = form["layout_closable"].ToString() == "1";
+        }
+        return layout;
+    }
+
+    private static string LayoutForm(JsonElement layout)
+    {
+        var mode = Opt(layout, "mode", "center");
+        if (!LayoutModes.Contains(mode)) mode = "center";
+        string Sel(string value, string current) => value == current ? " selected" : "";
+        var position = Opt(layout, "position", "bottom-right");
+        var sb = new StringBuilder();
+        sb.Append("<h2 style=\"margin:22px 0 6px\">Where it appears</h2><div class=\"stack layout\">")
+          .Append("<label for=\"layout_mode\">Format</label><select id=\"layout_mode\" name=\"layout_mode\">")
+          .Append("<option value=\"center\"").Append(Sel("center", mode)).Append(">Centered popup (lightbox)</option>")
+          .Append("<option value=\"slide\"").Append(Sel("slide", mode)).Append(">Slide-in corner box</option>")
+          .Append("<option value=\"bar\"").Append(Sel("bar", mode)).Append(">Bar across the top or bottom</option>")
+          .Append("<option value=\"takeover\"").Append(Sel("takeover", mode)).Append(">Full-screen takeover</option>")
+          .Append("<option value=\"inline\"").Append(Sel("inline", mode)).Append(">Inside the page content (blog posts, articles)</option>")
+          .Append("</select>")
+          .Append("<div data-for=\"slide\"><label for=\"layout_position\">Corner</label><select id=\"layout_position\" name=\"layout_position\">")
+          .Append("<option value=\"bottom-right\"").Append(Sel("bottom-right", position)).Append(">Bottom right</option><option value=\"bottom-left\"").Append(Sel("bottom-left", position)).Append(">Bottom left</option>")
+          .Append("<option value=\"top-right\"").Append(Sel("top-right", position)).Append(">Top right</option><option value=\"top-left\"").Append(Sel("top-left", position)).Append(">Top left</option></select></div>")
+          .Append("<div data-for=\"bar\"><label for=\"layout_edge\">Edge</label><select id=\"layout_edge\" name=\"layout_edge\"><option value=\"top\"").Append(Sel("top", position)).Append(">Top of the page</option><option value=\"bottom\"").Append(Sel("bottom", position)).Append(">Bottom of the page</option></select></div>")
+          .Append("<div data-for=\"takeover\"><label>Backdrop <input type=\"color\" name=\"layout_background\" value=\"").Append(H(ColorOpt(layout, "background", "#0B1F2B"))).Append("\"></label></div>")
+          .Append("<div data-for=\"inline\"><label for=\"layout_after\">After paragraph number</label><input id=\"layout_after\" name=\"layout_after\" type=\"number\" min=\"1\" max=\"50\" value=\"").Append(H(Opt(layout, "afterParagraphs", "3"))).Append("\">")
+          .Append("<span class=\"hint\">Counts paragraphs inside the page's article or main area. Used when no selector is given.</span>")
+          .Append("<label for=\"layout_selector\">Or a CSS selector</label><input id=\"layout_selector\" name=\"layout_selector\" maxlength=\"200\" placeholder=\"#newsletter-slot or .post-body h2:nth-of-type(2)\" value=\"").Append(H(Opt(layout, "selector"))).Append("\">")
+          .Append("<label for=\"layout_placement\">Place it</label><select id=\"layout_placement\" name=\"layout_placement\">");
+        var placement = Opt(layout, "placement", "after");
+        sb.Append("<option value=\"after\"").Append(Sel("after", placement)).Append(">After that element</option><option value=\"before\"").Append(Sel("before", placement)).Append(">Before it</option><option value=\"inside\"").Append(Sel("inside", placement)).Append(">Inside it, at the end</option></select>")
+          .Append("<label class=\"check\"><input type=\"checkbox\" name=\"layout_closable\" value=\"1\"").Append(layout.ValueKind != JsonValueKind.Object || !TryGet(layout, "closable", out var c) || c.ValueKind != JsonValueKind.False ? " checked" : "").Append("> Show a close button</label></div>")
+          .Append("</div><script>(function(){var m=document.getElementById('layout_mode');function sync(){document.querySelectorAll('.layout [data-for]').forEach(function(d){d.style.display=d.getAttribute('data-for')===m.value?'':'none';});}m.addEventListener('change',sync);sync();})();</script>");
+        return sb.ToString();
+    }
+
     private static async Task HandleContentEditor(HttpContext ctx, string path)
     {
         var isPost = HttpMethods.IsPost(ctx.Request.Method);
@@ -1242,16 +1301,14 @@ public sealed class LeadsMiddleware
             settings = stored;
             hasSettings = true;
         }
-        var fields = FieldsFor(type);
+        var fields = hasSettings ? FieldsFor(type) : Array.Empty<Field>();
+        var layoutStored = root.ValueKind == JsonValueKind.Object && TryGet(root, "layout", out var lay) && lay.ValueKind == JsonValueKind.Object ? lay : ParseOptions("{}");
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers["Cache-Control"] = "no-store";
-        if (type < 0 || !hasSettings || fields.Length == 0)
+        if (type < 0)
         {
-            ctx.Response.StatusCode = type < 0 ? 404 : 200;
-            await ctx.Response.WriteAsync(Chrome("Templates") + (type < 0
-                ? "<div class=\"empty\"><h2>Popup not found</h2><p><a href=\"/Popup\">Back to your popups</a></p></div>"
-                : "<div class=\"empty\"><h2>This popup was not made from a template</h2><p>Its content is custom, so there are no simple fields for it. Use the <a href=\"/Popup/Designer/" + id +
-                  "\">designer</a>, or <a href=\"/Popup/SelectTemplate\">start a new popup from a template</a>.</p></div>") + PageBottom);
+            ctx.Response.StatusCode = 404;
+            await ctx.Response.WriteAsync(Chrome("Templates") + "<div class=\"empty\"><h2>Popup not found</h2><p><a href=\"/Popup\">Back to your popups</a></p></div>" + PageBottom);
             return;
         }
 
@@ -1277,16 +1334,26 @@ public sealed class LeadsMiddleware
                     default: next[field.Key] = Clip(raw.Trim(), 300); break;
                 }
             }
-            var o = ParseOptions(JsonSerializer.Serialize(next));
+            var layoutNext = ReadLayout(form);
             await using (var cmd = db.CreateCommand())
             {
-                cmd.CommandText = "update Popups set Content = @c, Title = @title, Subtitle = @sub, CallToAction = @cta, UpdatedAt = @now where Id = @id";
-                cmd.Parameters.AddWithValue("@c", JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o }));
-                cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
-                cmd.Parameters.AddWithValue("@sub", Nullable(Clip(Opt(o, "SubHeading", Opt(o, "Description")), 500)));
-                cmd.Parameters.AddWithValue("@cta", Nullable(Clip(Opt(o, "ButtonText", Opt(o, "CTAText")), 100)));
                 cmd.Parameters.AddWithValue("@now", Timestamp(DateTime.UtcNow));
                 cmd.Parameters.AddWithValue("@id", popupId);
+                if (hasSettings)
+                {
+                    var o = ParseOptions(JsonSerializer.Serialize(next));
+                    cmd.CommandText = "update Popups set Content = @c, Title = @title, Subtitle = @sub, CallToAction = @cta, UpdatedAt = @now where Id = @id";
+                    cmd.Parameters.AddWithValue("@c", JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o, layout = layoutNext }));
+                    cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
+                    cmd.Parameters.AddWithValue("@sub", Nullable(Clip(Opt(o, "SubHeading", Opt(o, "Description")), 500)));
+                    cmd.Parameters.AddWithValue("@cta", Nullable(Clip(Opt(o, "ButtonText", Opt(o, "CTAText")), 100)));
+                }
+                else
+                {
+                    // Custom content: keep it as it is and only record where the popup appears.
+                    cmd.CommandText = "update Popups set Content = json_set(case when json_valid(Content) then Content else json_object('html', Content) end, '$.layout', json(@l)), UpdatedAt = @now where Id = @id";
+                    cmd.Parameters.AddWithValue("@l", JsonSerializer.Serialize(layoutNext));
+                }
                 await cmd.ExecuteNonQueryAsync();
             }
             ctx.Response.Redirect("/Popup/Content/" + id + "?msg=saved");
@@ -1328,9 +1395,11 @@ public sealed class LeadsMiddleware
             .Append("</p></div><div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Test/").Append(id).Append("\">A/B test</a><a class=\"btn ghost\" href=\"/Popup/Edit/").Append(id)
             .Append("\">Targeting, trigger and publishing</a></div></div>")
             .Append(ctx.Request.Query["msg"] == "saved" ? "<div class=\"notice ok\">Saved. The popup now shows this version.</div>" : "")
+            .Append(hasSettings ? "" : "<div class=\"notice ok\">This popup has custom content, so its words live in the <a href=\"/Popup/Designer/" + id + "\">designer</a>. You can still choose where it appears below.</div>")
             .Append("<div class=\"wheel-grid\"><form method=\"post\" action=\"/Popup/Content/").Append(id).Append("\" class=\"card pad\" style=\"max-width:none\"><div class=\"stack\">")
             .Append(inputs).Append(colors.Length == 0 ? "" : "<div class=\"row\">" + colors + "</div>")
-            .Append("</div><div class=\"row\"><button type=\"submit\" class=\"btn\">Save</button></div></form>")
+            .Append("</div>").Append(LayoutForm(layoutStored))
+            .Append("<div class=\"row\" style=\"margin-top:18px\"><button type=\"submit\" class=\"btn\">Save</button></div></form>")
             .Append("<div><p class=\"sub\" style=\"margin:0 0 10px\">Saved version</p><div class=\"pv-stage\" inert>")
             .Append(TryGet(root, "html", out var saved) && saved.ValueKind == JsonValueKind.String ? saved.GetString() : "")
             .Append("</div></div></div>");
