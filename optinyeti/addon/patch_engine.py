@@ -60,6 +60,9 @@ src = sub_once(
     "layout",
 )
 
+# 2d. No popups while a heat map is being viewed.
+src = sub_once(r"shouldDisplayPopup: function\(popup\) \{", lambda m: m.group(0) + "\n      if (this.heatMode) return false;", src, "heat-mode")
+
 # 3. New methods.
 METHODS = r"""wireLeadCapture: function(wrapper, popup) {
       var self = this;
@@ -223,7 +226,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
       var self = this;
       if (!this.tenantId || !window.fetch) return;
       var hash = (window.location.hash || '').match(/oyheat=(\d+):([^&]+)/);
-      if (hash) { this.drawHeatmap(hash[1], hash[2]); return; }
+      if (hash) { this.heatMode = true; this.drawHeatmap(hash[1], hash[2]); return; }
       if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return;
       var start = Date.now(), clicks = [], depth = 0, sent = false;
       var docH = function() { return Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0, 1); };
