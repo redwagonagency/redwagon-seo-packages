@@ -378,6 +378,8 @@ public sealed class LeadsMiddleware
                    .Replace("PopupX", "OptinYeti")
                    .Replace("Popup Manager", "OptinYeti")
                    .Replace(">?? <strong>Limited Time", "><strong>Limited Time");
+        html = OldBrandText.Replace(html, ">OptinYeti<");
+        html = RecolorInlineStyles(html);
 
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Schedule a Demo</a>", "<a href=\"/Home/Demo\"$1>Schedule a Demo</a>");
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>FAQ</a>", "<a href=\"/Home/Pricing\"$1>FAQ</a>");
@@ -409,15 +411,39 @@ public sealed class LeadsMiddleware
             Regex.Replace(m.Value.Replace("/Home/Pricing", "/Templates", StringComparison.OrdinalIgnoreCase), "Pricing", "Templates") + "\n" + m.Value);
     }
 
+    // Adds Templates, Leads and Integrations beside the app's own Analytics menu link.
     private static string InjectLeadsLink(string html)
     {
-        if (html.Contains("href=\"/admin/Leads\"", StringComparison.OrdinalIgnoreCase)) return html;
         var match = AnalyticsLink.Match(html);
         if (!match.Success) return html;
-        var link = match.Value.Replace("/admin/Analytics", "/admin/Leads", StringComparison.OrdinalIgnoreCase);
-        link = Regex.Replace(link, "\\bAnalytics\\b", "Leads");
-        return html.Insert(match.Index, link + "\n");
+        var added = new StringBuilder();
+        foreach (var (href, label) in new[] { ("/Popup/SelectTemplate", "Templates"), ("/admin/Leads", "Leads"), ("/admin/Integrations", "Integrations") })
+        {
+            if (html.Contains("href=\"" + href + "\"", StringComparison.OrdinalIgnoreCase)) continue;
+            var link = match.Value.Replace("/admin/Analytics", href, StringComparison.OrdinalIgnoreCase);
+            added.Append(Regex.Replace(link, "\\bAnalytics\\b", label)).Append('\n');
+        }
+        return added.Length == 0 ? html : html.Insert(match.Index, added.ToString());
     }
+
+    private static readonly Regex InlineStyle = new("<style(?![^>]*id=\"oy-theme\")[^>]*>.*?</style>", RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
+    private static readonly Regex OldBrandText = new(">\\s*PopupManager\\s*<", RegexOptions.Compiled);
+
+    private static readonly (string From, string To)[] InlineColors =
+    {
+        ("#667eea", "#0F6B6B"), ("#764ba2", "#0B1F2B"), ("#3b82f6", "#0F6B6B"), ("#1d4ed8", "#0a4d4d"),
+        ("#0d6efd", "#0F6B6B"), ("#dbeafe", "#cfe8e6"), ("rgba(59, 130, 246", "rgba(15, 107, 107"), ("rgba(102, 126, 234", "rgba(15, 107, 107")
+    };
+
+    // The app's screens carry their own blue and purple colors in page-level style blocks.
+    private static string RecolorInlineStyles(string html) =>
+        InlineStyle.Replace(html, m =>
+        {
+            var css = m.Value;
+            foreach (var (from, to) in StylesheetColors) css = css.Replace(from, to, StringComparison.OrdinalIgnoreCase);
+            foreach (var (from, to) in InlineColors) css = css.Replace(from, to, StringComparison.OrdinalIgnoreCase);
+            return css;
+        });
 
     // ---------------------------------------------------------------- capture
 

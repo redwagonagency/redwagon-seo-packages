@@ -42,3 +42,4 @@ body > nav.navbar.fixed-top .navbar-brand{font-family:"Baloo 2",system-ui,sans-s
 body > nav.navbar.fixed-top .navbar-brand i{display:none;}
 body > nav.navbar.fixed-top .navbar-brand::before{content:"";width:30px;height:30px;border-radius:50%;background:url(/img/yeti-logo.png) center/cover no-repeat;}
 body:has(> nav.navbar.fixed-top) .form-control:focus,body:has(> nav.navbar.fixed-top) .form-select:focus{border-color:#0F6B6B;box-shadow:0 0 0 .2rem rgba(15,107,107,.2);}
+.brand-logo{font-family:"Baloo 2",system-ui,sans-serif !important;color:#0B1F2B !important;}
