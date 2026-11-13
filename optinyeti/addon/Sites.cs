@@ -227,6 +227,17 @@ internal static class Sites
         var remaining = await LeadsMiddleware.PopupsRemaining(db, viewer.TenantId);
         if (remaining >= 0 && remaining < 3) { ctx.Response.Redirect("/admin/Sites?msg=kitlimit"); return; }
 
+        await CreateKit(db, viewer.TenantId, viewer.UserId, domain, siteName, offer, button);
+        await LeadsMiddleware.RefreshPopupCount(db, viewer.TenantId);
+        ctx.Response.Redirect("/admin/Sites?msg=kit");
+    }
+
+    // The three kit popups for one site. Used by the Sites page and by seed jobs (Jobs.cs).
+    public static async Task<long[]> CreateKit(SqliteConnection db, long tenantId, string userId, string domain, string siteName, string offer, string button)
+    {
+        if (siteName.Length == 0) siteName = domain;
+        if (button.Length == 0) button = "Send it to me";
+        if (offer.Length == 0) offer = "our best tips, straight to your inbox";
         var targeting = System.Text.Json.JsonSerializer.Serialize(new { urlTargeting = domain });
         var success = "Thanks! Check your inbox in the next few minutes.";
         var privacy = "No spam. One click to unsubscribe.";
@@ -235,24 +246,25 @@ internal static class Sites
             Heading = heading, SubHeading = sub, ButtonText = button, SuccessMessage = success, PrivacyText = privacy,
             ImageUrl = "", CollectName = false, CollectPhone = false, BackgroundColor = bg, ButtonColor = btn
         });
+        var ids = new long[3];
 
         // 1. Exit intent: the visitor is leaving, make one clear offer.
-        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Exit intent", 1,
+        ids[0] = await LeadsMiddleware.InsertPopup(db, tenantId, userId, siteName + " - Exit intent", 1,
             LeadsMiddleware.ParseOptions(Options("Before you go: " + Lower(offer), "Leave your email and we will send it over. Takes ten seconds.", "#ffffff", "#FF8A3D")),
             new Dictionary<string, object> { ["mode"] = "center" }, targeting, trigger: 1, delay: 0, frequency: 1, status: 1);
 
         // 2. Scroll slide-in: the visitor is reading, offer more of the same without blocking the page.
-        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Scroll slide-in", 1,
+        ids[1] = await LeadsMiddleware.InsertPopup(db, tenantId, userId, siteName + " - Scroll slide-in", 1,
             LeadsMiddleware.ParseOptions(Options("Want " + Lower(offer) + "?", "Pop your email in and it is yours.", "#EAF6F7", "#0F6B6B")),
             new Dictionary<string, object> { ["mode"] = "slide", ["position"] = "bottom-right" }, targeting, trigger: 2, delay: 0, frequency: 1, status: 1);
 
         // 3. Welcome bar: a quiet reminder across the top after the visitor has settled in.
-        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Welcome bar", 1,
+        ids[2] = await LeadsMiddleware.InsertPopup(db, tenantId, userId, siteName + " - Welcome bar", 1,
             LeadsMiddleware.ParseOptions(Options("Get " + Lower(offer), "", "#0B1F2B", "#FF8A3D")),
             new Dictionary<string, object> { ["mode"] = "bar", ["position"] = "top" }, targeting, trigger: 3, delay: 8000, frequency: 1, status: 1);
 
-        await LeadsMiddleware.RefreshPopupCount(db, viewer.TenantId);
-        ctx.Response.Redirect("/admin/Sites?msg=kit");
+        await LeadsMiddleware.RefreshPopupCount(db, tenantId);
+        return ids;
     }
 
     // "A free audit" -> "a free audit"; leaves acronyms such as "SEO tips" alone.

@@ -1,0 +1,15 @@
+{
+  "job": "launch-kit",
+  "tenantId": 5,
+  "sites": [
+    { "domain": "redwagon.agency", "offer": "a free 30-minute growth strategy call", "button": "Book my call" },
+    { "domain": "josephwhyte.com", "offer": "one conversion lesson a week from Joe", "button": "Send me the notes" },
+    { "domain": "competitorinbox.com", "offer": "a free report of the emails your competitors sent this month", "button": "Show me their emails" },
+    { "domain": "e-mailgrader.com", "offer": "a free grade of your last email campaign", "button": "Grade my email" },
+    { "domain": "markitech.app", "offer": "early access to Markitech and the setup guide", "button": "Get early access" },
+    { "domain": "ppcgrader.com", "offer": "a free PPC account audit with the wasted-spend report", "button": "Audit my ads" },
+    { "domain": "searchauditpro.com", "offer": "a free 20-point SEO audit of your site", "button": "Audit my site" },
+    { "domain": "threadlyhq.com", "offer": "a free month of Threadly and the posting playbook", "button": "Claim my free month" },
+    { "domain": "unboundkeyword.com", "offer": "a free keyword gap report for your site", "button": "Find my gaps" }
+  ]
+}

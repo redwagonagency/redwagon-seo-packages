@@ -12,6 +12,10 @@ PW="Jpw-$(head -c 12 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')-9a!"
 docker rm -f optinyeti-test >/dev/null 2>&1
 rm -rf $D $J && mkdir -p $D
 sqlite3 "file:/srv/apps/optinyeti/PopupManager.db?mode=ro" ".backup $DB"
+# a seed job waiting next to the database: the launch kit for a site registered in advance
+sqlite3 $DB "insert or ignore into Sites (TenantId, Domain, Name, CreatedAt, UpdatedAt) values (5, 'jpw-job.example.com', 'JPW Job', datetime('now'), datetime('now'))"
+mkdir -p $D/jobs && printf '{"job":"launch-kit","tenantId":5,"sites":[{"domain":"jpw-job.example.com","offer":"a free JPW job audit","button":"Run it"},{"domain":"not-registered.example.com","offer":"x"}]}' > $D/jobs/jpw-kit.json
+printf '{"job":"no-such-job"}' > $D/jobs/zz-unknown.json
 docker run -d --name optinyeti-test -p 127.0.0.1:3299:80 -v $D:/data \
   -e "ConnectionStrings__DefaultConnection=Data Source=/data/PopupManager.db" \
   -e OPTINYETI_DB=/data/PopupManager.db "$IMG" >/dev/null
@@ -160,6 +164,8 @@ csave $SP --data-urlencode 'Heading=JPW site' -d site= > /dev/null
 echo "SITE_UNSCOPE=$(sqlite3 $DB "select TargetingRules from Popups where Id=$SP") rescope=$(csave $SP --data-urlencode 'Heading=JPW site' -d site=jpw-example.com >/dev/null; sqlite3 $DB "select json_extract(TargetingRules,'\$.urlTargeting') from Popups where Id=$SP")"
 curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":4,"email":"jpw-site-lead@example.com","source":"https://www.jpw-example.com/pricing"}' $T/api/leads/capture; sleep 4
 echo "SITE_ROUTE=$(sqlite3 $DB "select substr(LastStatus,1,12) from Sites where Id=$SID") tenant_hook_untouched=$(sqlite3 $DB "select count(*) from LeadWebhooks where TenantId=5 and LastAttemptAt > (select UpdatedAt from Sites where Id=$SID)") site_leads=$(curl -s -b $J $T/admin/Sites | grep -o '[0-9]* leads' | head -1)"
+# ---- seed jobs (ran at start-up)
+echo "JOBS: files=$(ls $D/jobs | tr '\n' ' ') kit_log=$(cat $D/jobs/jpw-kit.done.log 2>/dev/null | tr '\n' ';') unknown_log=$(cat $D/jobs/zz-unknown.failed.log 2>/dev/null) popups=$(sqlite3 $DB "select count(*) from Popups where TenantId=5 and Name like 'JPW Job - %' and Status=1 and json_extract(TargetingRules,'\$.urlTargeting')='jpw-job.example.com'") creator_ok=$(sqlite3 $DB "select count(distinct CreatedById) from Popups where Name like 'JPW Job - %' and CreatedById in (select Id from AspNetUsers where TenantId=5)")"
 # ---- launch kit (three popups per site)
 kit() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" "$@" $T/admin/Sites/kit | sed 's/.*msg=//'; }
 BEFORE=$(sqlite3 $DB 'select count(*) from Popups where TenantId=5')

@@ -2618,6 +2618,7 @@ public sealed class LeadsMiddleware
         var db = new SqliteConnection(builder.ConnectionString);
         await db.OpenAsync();
         await EnsureSchema(db);
+        await Jobs.RunPending(db, DbPath);
         return db;
     }
 
