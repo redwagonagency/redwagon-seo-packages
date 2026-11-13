@@ -2458,24 +2458,46 @@ public sealed class LeadsMiddleware
             .Replace("{{LEADS}}", current == "Leads" ? "current" : "")
             .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "");
 
+    // The public gallery wears the marketing site's own design: its stylesheet, fonts and menu.
     private const string PublicNav = """
-<header><nav>
-  <a class="brand" href="/"><img src="/img/yeti-logo.png" alt="">OptinYeti</a>
-  <a href="/Home/Features">Features</a>
-  <a class="current" href="/Templates">Templates</a>
-  <a href="/Home/Pricing">Pricing</a>
-  <a href="/Blog">Blog</a>
-  <span class="spacer"></span>
-  <a href="/Account/Login">Log in</a>
-  <a class="btn" href="/Account/Register" style="color:#fff">Start free</a>
-</nav></header>
+<div class="nav"><div class="nav-row">
+  <a class="brand" href="/"><div class="mark" style="overflow:hidden;border-radius:50%"><img src="/img/yeti-logo.png" alt="OptinYeti" style="width:100%;height:100%;object-fit:cover"></div>OptinYeti</a>
+  <nav class="navlinks"><a href="/">Campaigns</a><a href="/Templates" class="active">Templates</a><a href="/pricing">Pricing</a><a href="/builder">Builder</a><a href="/analytics">Analytics</a></nav>
+  <a href="/Account/Register" class="btn btn-dark">Start free</a>
+</div></div>
+""";
+
+    private const string PublicHead = """
+<meta name="description" content="Browse OptinYeti popup templates for email signups, sales, coupons, spin-to-win, video and announcements. Preview each one live, then start free.">
+<link rel="canonical" href="https://optinyeti.com/Templates">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+""";
+
+    private const string PublicOverrides = """
+<style>
+  :root{--ink:#0B1C1A;--ink-soft:#0B1C1A;--glacier:#FAFAF6;--teal:#0F766E;--thaw:#0B1C1A;--thaw-deep:#0F766E;--line:#E7E4DA;--muted:#5B655C;}
+  body{font-family:Inter,system-ui,sans-serif;background:#FAFAF6;color:#0B1C1A;}
+  h1,h2,h3{font-family:"Space Grotesk",Inter,sans-serif;}
+  main h1{font-size:40px;letter-spacing:-.01em;}
+  main .btn{background:#0B1C1A;color:#fff;border-radius:10px;}
+  main .btn:hover{background:#0F766E;}
+  main .btn.ghost{background:#fff;color:#0B1C1A;border:1.5px solid #E7E4DA;}
+  main .btn.ghost:hover{background:#F1EFE7;}
+  .tpl .thumb{background:#EFEDE4;}
+  .tpl-body h3{font-family:Inter,system-ui,sans-serif;}
+  .pv-actions .btn{background:#2DD4BF;color:#0B1C1A;}
+  .pv-actions .btn:hover{background:#5EEAD4;}
+  .pv-actions .btn.ghost{background:#fff;color:#0B1C1A;}
+  :focus-visible{outline:3px solid #0F766E;outline-offset:2px;}
+</style>
 """;
 
     private static string PublicChrome()
     {
         var top = PageTop.Replace("{{TITLE}}", "Popup Templates")
-            .Replace("<meta name=\"robots\" content=\"noindex\">",
-                "<meta name=\"description\" content=\"Browse OptinYeti popup templates for email signups, sales, coupons, video and announcements. Preview each one live, then start free.\">\n<link rel=\"canonical\" href=\"https://optinyeti.com/Templates\">");
+            .Replace("<meta name=\"robots\" content=\"noindex\">", PublicHead.Trim())
+            .Replace("</head>", PublicOverrides.Trim() + "\n</head>");
         var start = top.IndexOf("<header>", StringComparison.Ordinal);
         var end = top.IndexOf("</header>", StringComparison.Ordinal) + "</header>".Length;
         return top[..start] + PublicNav.Trim() + top[end..];
