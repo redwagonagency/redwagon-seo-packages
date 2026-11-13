@@ -1,30 +1,30 @@
 #!/bin/sh
-# Read-only exploration of how popups are created from templates and how they are stored.
+# Read-only exploration of how popups are stored and created (runs against a DB copy).
 . "$(dirname "$0")/sidelib.sh"
-S=/tmp/oy_app_strings.txt
-echo "--- controller actions"
-for c in PopupController PopupApiController TrackingController AnalyticsController PopupAnalyticsApiController; do
-  echo "$c: $(grep -o -E "$c\+<[A-Za-z]+>" $S | sed 's/.*<//;s/>//' | sort -u | tr '\n' ' ')"
-done
-echo "--- Popups columns"
-sqlite3 "file:/srv/apps/optinyeti/PopupManager.db?mode=ro" "select group_concat(name || ':' || type, ' ') from pragma_table_info('Popups');"
-side_start "${1:-optinyeti:leads-7}"
-echo "--- SelectTemplate page"
-curl -s -b $J -o /tmp/oy_sel.html -w 'status=%{http_code}\n' "$T/Popup/SelectTemplate"
-grep -o -E 'href="[^"]*"' /tmp/oy_sel.html | grep -i -E 'popup|template' | sort | uniq -c | sort -rn | head -12
-grep -o -E '<form[^>]*>' /tmp/oy_sel.html | head -5
-grep -o -E 'onclick="[^"]{0,120}' /tmp/oy_sel.html | sort | uniq -c | sort -rn | head -5
-grep -o -E '(fetch|\$\.(post|ajax|get))\([^)]{0,140}' /tmp/oy_sel.html | head -8
-echo "--- SelectTemplate?type=EmailCollector"
-curl -s -b $J -o /tmp/oy_sel2.html -w 'status=%{http_code}\n' "$T/Popup/SelectTemplate?type=EmailCollector"
-grep -c 'Exit-Intent Lead Magnet' /tmp/oy_sel2.html
-grep -o -E 'href="[^"]*"' /tmp/oy_sel2.html | grep -i -E 'template|Create' | sort | uniq -c | sort -rn | head -8
-grep -o -E '<form[^>]*>' /tmp/oy_sel2.html | head -5
-grep -o -E 'name="[A-Za-z_.]+"' /tmp/oy_sel2.html | sort -u | tr '\n' ' '
+P="file:/srv/apps/optinyeti/PopupManager.db?mode=ro"
+echo "--- Popups schema"
+sqlite3 "$P" ".schema Popups" | tr '\n' ' ' | fold -w 250
 echo
-echo "--- Create page forms"
-curl -s -b $J -o /tmp/oy_cr.html "$T/Popup/Create"
-grep -o -E '<form[^>]*>' /tmp/oy_cr.html | head -3
-grep -o -E 'href="/Popup/[^"]*"' /tmp/oy_cr.html | sort -u | head -12
+echo "--- popup rows (no content)"
+sqlite3 -header "$P" "select Id, Name, Type, Status, Trigger, DelayMs, Frequency, ShowOnMobile, ShowOnDesktop, TenantId, length(Content) clen, substr(Content,1,60) chead, TargetingRules from Popups;"
+echo "--- tenant 5 counters"
+sqlite3 -header "$P" "select Id, PopupCount, MonthlyPopupViews, SubscriptionPlanId from Tenants where Id=5;"
+sqlite3 -header "$P" "select * from SubscriptionPlans;" | cut -c1-200
+side_start "${1:-optinyeti:leads-7}"
+echo "--- GetTenantPopups/5 (first 400 chars)"
+curl -s "$T/Popup/GetTenantPopups/5" | cut -c1-400
+echo
+echo "--- POST CreateFromTemplate variants"
+TK=$(side_token /Popup/Create)
+for body in "templateId=12" "id=12" "TemplateId=12&Name=JPW+Test+From+Template"; do
+  echo "$body -> $(curl -s -b $J -o /dev/null -w '%{http_code} %{redirect_url}' -d "$body" --data-urlencode "__RequestVerificationToken=$TK" $T/Popup/CreateFromTemplate)"
+done
+echo "popups after: $(sqlite3 $DB 'select count(*) from Popups')"
+sqlite3 $DB "select Id, Name, Type, Status, length(Content), substr(Content,1,200) from Popups where Id > 4;"
+echo "--- Designer with name/type (what the stock chooser links to)"
+curl -s -b $J -o /tmp/oy_des.html -w 'status=%{http_code}\n' "$T/Popup/Designer?name=Newsletter&type=0"
+grep -o -E '<title>[^<]*' /tmp/oy_des.html
+grep -o -E "(fetch|\\\$\\.(post|ajax))\\([^)]{0,120}" /tmp/oy_des.html | head -6
+grep -o -E "url: *['\"][^'\"]*" /tmp/oy_des.html | head -6
 side_stop
-rm -f /tmp/oy_sel.html /tmp/oy_sel2.html /tmp/oy_cr.html
+rm -f /tmp/oy_des.html
