@@ -86,7 +86,10 @@ echo "SERVED=$(curl -s $T/Popup/GetTenantPopups/5 | grep -o "\"id\":$EID" | head
 echo "TENANT_COUNT=$(sqlite3 $DB 'select PopupCount from Tenants where Id=5') actual=$(sqlite3 $DB 'select count(*) from Popups where TenantId=5')"
 sqlite3 $DB "update SubscriptionPlans set MaxPopups=3"
 echo "USE_AT_LIMIT=$(use "$(sqlite3 $DB 'select Id from PopupTemplates where IsActive=1 and Type=1 limit 1')") limit_notice=$(curl -s -b $J "$T/Popup/SelectTemplate?msg=limit" | grep -c 'popup limit is reached')"
-rm -f /tmp/oy_gal.html
+curl -s -o /tmp/oy_pub.html $T/Templates
+echo "PUBLIC_TEMPLATES=$(curl -s -o /dev/null -w '%{http_code}' $T/Templates) cards=$(grep -o 'class="tpl"' /tmp/oy_pub.html | wc -l) previews=$(grep -o '<template>' /tmp/oy_pub.html | wc -l) dialog=$(grep -c 'dialog id="pv"' /tmp/oy_pub.html) noindex=$(grep -c 'noindex' /tmp/oy_pub.html) use_forms=$(grep -c 'UseTemplate' /tmp/oy_pub.html) signed_in_previews=$(grep -o '<template>' /tmp/oy_gal.html | wc -l) html_closed=$(grep -c '</html>' /tmp/oy_pub.html)"
+echo "MENU_TEMPLATES: pricing_page=$(curl -s $T/Home/Pricing | grep -o 'href="/Templates"' | wc -l) login_page=$(curl -s $T/Account/Login | grep -o 'href="/Templates"' | wc -l) link=$(curl -s $T/Home/Pricing | grep -o '<a[^>]*href="/Templates"[^>]*>[^<]*' | head -1 | tr -s ' \n' ' ' | cut -c1-120)"
+rm -f /tmp/oy_gal.html /tmp/oy_pub.html
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

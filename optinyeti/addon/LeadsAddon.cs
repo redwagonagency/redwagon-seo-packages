@@ -9,6 +9,7 @@
 //   GET  /admin/Integrations     webhook settings (send each new lead to Zapier, Make, n8n, a CRM...)
 //   POST /admin/Integrations/save, /admin/Integrations/test
 //   GET  /Popup/SelectTemplate   template gallery driven by the PopupTemplates table
+//   GET  /Templates              public template gallery with live previews
 //   POST /Popup/UseTemplate      creates a ready-to-edit draft popup from a template
 // plus a "Leads" link in the app's own menu and a few baseline security headers.
 
@@ -105,6 +106,11 @@ public sealed class LeadsMiddleware
             if (path.Equals("/admin/leads/delete", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleDelete(ctx);
+                return;
+            }
+            if (path.Equals("/Templates", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandlePublicTemplates(ctx);
                 return;
             }
             if (path.Equals("/Popup/SelectTemplate", StringComparison.OrdinalIgnoreCase))
@@ -207,6 +213,7 @@ public sealed class LeadsMiddleware
         {
             var html = Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
             var updated = CleanUpPage(html);
+            updated = InjectTemplatesLink(updated);
             if (signedIn) updated = InjectLeadsLink(updated);
             if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
@@ -333,6 +340,17 @@ public sealed class LeadsMiddleware
                 title = title.Replace("OptinYeti - OptinYeti", "OptinYeti");
             return "<title>" + title + "</title>";
         }, 1);
+    }
+
+    private static readonly Regex PricingLink = new(
+        "<a\\b[^>]*href=\"/Home/Pricing\"[^>]*>[^<]*Pricing[^<]*</a>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Adds a Templates link beside every Pricing link in the app's own menus.
+    private static string InjectTemplatesLink(string html)
+    {
+        if (html.Contains("href=\"/Templates\"", StringComparison.OrdinalIgnoreCase)) return html;
+        return PricingLink.Replace(html, m =>
+            Regex.Replace(m.Value.Replace("/Home/Pricing", "/Templates", StringComparison.OrdinalIgnoreCase), "Pricing", "Templates") + "\n" + m.Value);
     }
 
     private static string InjectLeadsLink(string html)
@@ -903,6 +921,54 @@ public sealed class LeadsMiddleware
         var viewer = await RequireViewer(ctx);
         if (viewer == null) return;
 
+        var notice = ctx.Request.Query["msg"].ToString() switch
+        {
+            "limit" => "<div class=\"notice bad\">Your plan's popup limit is reached. Delete a popup or <a href=\"/admin/Subscription\">upgrade your plan</a> to add another.</div>",
+            "missing" => "<div class=\"notice bad\">That template is no longer available.</div>",
+            _ => ""
+        };
+
+        var (sections, total) = await BuildTemplateSections(signedIn: true);
+        var body = new StringBuilder();
+        body.Append("<div class=\"head\"><div><h1>Choose a template</h1><p class=\"sub\">")
+            .Append(total.ToString(CultureInfo.InvariantCulture))
+            .Append(" ready-made popups. Preview one, then change the words, colors and targeting.</p></div>")
+            .Append("<div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Create\">Start from scratch</a></div></div>")
+            .Append(notice).Append(sections)
+            .Append(PreviewDialog.Replace("{{ACTION}}",
+                "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"));
+
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
+    }
+
+    private static async Task HandlePublicTemplates(HttpContext ctx)
+    {
+        if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        var (sections, total) = await BuildTemplateSections(signedIn: false);
+        var body = new StringBuilder();
+        body.Append("<div class=\"head\"><div><h1>Popup templates</h1><p class=\"sub\">")
+            .Append(total.ToString(CultureInfo.InvariantCulture))
+            .Append(" ready-made popups for email signups, sales, coupons and announcements. Click any one to try it.</p></div>")
+            .Append("<div class=\"actions\"><a class=\"btn\" href=\"/Account/Register\">Start free</a></div></div>")
+            .Append(sections)
+            .Append(PreviewDialog.Replace("{{ACTION}}",
+                "<a class=\"btn\" href=\"/Account/Register\">Start free with this template</a><a class=\"btn ghost\" href=\"/Popup/SelectTemplate\">I have an account</a>"));
+
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "public, max-age=300";
+        await ctx.Response.WriteAsync(PublicChrome() + body + PageBottom);
+    }
+
+    // Category sections of template cards. Each card carries its rendered popup in a <template>
+    // element so the preview dialog can show the real thing.
+    private static async Task<(string Html, int Total)> BuildTemplateSections(bool signedIn)
+    {
         var sections = new Dictionary<string, StringBuilder>(StringComparer.OrdinalIgnoreCase);
         var order = new List<string>();
         var total = 0;
@@ -910,7 +976,7 @@ public sealed class LeadsMiddleware
         await using (var cmd = db.CreateCommand())
         {
             cmd.CommandText =
-                "select Id, Name, Description, Category, PreviewImageUrl, IsPremium from PopupTemplates " +
+                "select Id, Name, Description, Category, PreviewImageUrl, IsPremium, Type, TypeSpecificOptions from PopupTemplates " +
                 "where IsActive = 1 and Type <> @spin order by SortOrder, Id";
             cmd.Parameters.AddWithValue("@spin", SpinWheelType);
             await using var reader = await cmd.ExecuteReaderAsync();
@@ -925,43 +991,78 @@ public sealed class LeadsMiddleware
                     order.Add(category);
                 }
                 total++;
+                var id = reader.GetInt64(0).ToString(CultureInfo.InvariantCulture);
+                var name = Text(reader, 1);
                 var preview = SafeUrl(Text(reader, 4), "");
-                cards.Append("<article class=\"tpl\">")
-                    .Append(preview.Length == 0 ? "<div class=\"thumb\"></div>" : "<div class=\"thumb\"><img loading=\"lazy\" src=\"" + H(preview) + "\" alt=\"\"></div>")
-                    .Append("<div class=\"tpl-body\"><h3>").Append(H(Text(reader, 1)))
+                cards.Append("<article class=\"tpl\" data-id=\"").Append(id).Append("\" data-name=\"").Append(H(name)).Append("\">")
+                    .Append("<button type=\"button\" class=\"thumb pv-open\" aria-label=\"Preview ").Append(H(name)).Append("\">")
+                    .Append(preview.Length == 0 ? "" : "<img loading=\"lazy\" src=\"" + H(preview) + "\" alt=\"\">")
+                    .Append("<span class=\"peek\">Preview</span></button>")
+                    .Append("<div class=\"tpl-body\"><h3>").Append(H(name))
                     .Append(!reader.IsDBNull(5) && reader.GetInt64(5) != 0 ? " <span class=\"tag\">Premium</span>" : "")
-                    .Append("</h3><p>").Append(H(Text(reader, 2))).Append("</p>")
-                    .Append("<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"")
-                    .Append(reader.GetInt64(0).ToString(CultureInfo.InvariantCulture))
-                    .Append("\"><button type=\"submit\" class=\"btn\">Use this template</button></form></div></article>");
+                    .Append("</h3><p>").Append(H(Text(reader, 2))).Append("</p><div class=\"tpl-actions\">")
+                    .Append("<button type=\"button\" class=\"btn ghost pv-open\">Preview</button>")
+                    .Append(signedIn
+                        ? "<form method=\"post\" action=\"/Popup/UseTemplate\"><input type=\"hidden\" name=\"id\" value=\"" + id + "\"><button type=\"submit\" class=\"btn\">Use this template</button></form>"
+                        : "<a class=\"btn\" href=\"/Account/Register\">Use it free</a>")
+                    .Append("</div></div><template>")
+                    .Append(RenderTemplateHtml(reader.GetInt64(6), ParseOptions(Text(reader, 7))))
+                    .Append("</template></article>");
             }
         }
 
-        var notice = ctx.Request.Query["msg"].ToString() switch
-        {
-            "limit" => "<div class=\"notice bad\">Your plan's popup limit is reached. Delete a popup or <a href=\"/admin/Subscription\">upgrade your plan</a> to add another.</div>",
-            "missing" => "<div class=\"notice bad\">That template is no longer available.</div>",
-            _ => ""
-        };
-
-        var body = new StringBuilder();
-        body.Append("<div class=\"head\"><div><h1>Choose a template</h1><p class=\"sub\">")
-            .Append(total.ToString(CultureInfo.InvariantCulture))
-            .Append(" ready-made popups. Pick one, then change the words, colors and targeting.</p></div>")
-            .Append("<div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Create\">Start from scratch</a></div></div>")
-            .Append(notice)
-            .Append("<nav class=\"cats\">");
+        var html = new StringBuilder("<nav class=\"cats\" aria-label=\"Template categories\">");
         foreach (var category in order)
-            body.Append("<a href=\"#").Append(H(Slug(category))).Append("\">").Append(H(category)).Append("</a>");
-        body.Append("</nav>");
+            html.Append("<a href=\"#").Append(H(Slug(category))).Append("\">").Append(H(category)).Append("</a>");
+        html.Append("</nav>");
         foreach (var category in order)
-            body.Append("<section id=\"").Append(H(Slug(category))).Append("\"><h2>").Append(H(category))
+            html.Append("<section id=\"").Append(H(Slug(category))).Append("\"><h2>").Append(H(category))
                 .Append("</h2><div class=\"tpl-grid\">").Append(sections[category]).Append("</div></section>");
-
-        ctx.Response.ContentType = "text/html; charset=utf-8";
-        ctx.Response.Headers["Cache-Control"] = "no-store";
-        await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
+        return (html.ToString(), total);
     }
+
+    private const string PreviewDialog = """
+<dialog id="pv" aria-labelledby="pv-title">
+  <div class="pv-bar"><strong id="pv-title" class="pv-title"></strong><button type="button" class="pv-close" aria-label="Close preview">Close</button></div>
+  <div class="pv-stage"></div>
+  <p class="pv-note">This is a live preview. Nothing you type here is saved.</p>
+  <div class="pv-actions">{{ACTION}}</div>
+</dialog>
+<script>
+(function(){
+  var dlg = document.getElementById('pv');
+  if (!dlg || !dlg.showModal) return;
+  var stage = dlg.querySelector('.pv-stage');
+  var title = dlg.querySelector('.pv-title');
+  function open(card){
+    var t = card.querySelector('template');
+    stage.innerHTML = t ? t.innerHTML : '';
+    title.textContent = card.getAttribute('data-name');
+    var idField = dlg.querySelector('input[name=id]');
+    if (idField) idField.value = card.getAttribute('data-id');
+    stage.querySelectorAll('form').forEach(function(f){
+      f.addEventListener('submit', function(e){
+        e.preventDefault();
+        var s = f.getAttribute('data-success');
+        if (s) stage.innerHTML = s;
+      });
+    });
+    stage.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(e){ e.preventDefault(); });
+    });
+    dlg.showModal();
+  }
+  document.querySelectorAll('.tpl').forEach(function(card){
+    card.querySelectorAll('.pv-open').forEach(function(b){
+      b.addEventListener('click', function(){ open(card); });
+    });
+  });
+  dlg.querySelector('.pv-close').addEventListener('click', function(){ dlg.close(); });
+  dlg.addEventListener('click', function(e){ if (e.target === dlg) dlg.close(); });
+  dlg.addEventListener('close', function(){ stage.innerHTML = ''; });
+})();
+</script>
+""";
 
     private static string Slug(string value) =>
         Regex.Replace(value.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
@@ -1541,12 +1642,26 @@ public sealed class LeadsMiddleware
   section > h2{font-size:21px;margin:0 0 14px;}
   .tpl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:20px;}
   .tpl{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
-  .tpl .thumb{aspect-ratio:8/5;background:#DCEEEE;}
+  .tpl .thumb{display:block;width:100%;padding:0;border:0;aspect-ratio:8/5;background:#DCEEEE;cursor:pointer;position:relative;font:inherit;}
   .tpl .thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+  .tpl .thumb .peek{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--ink);color:#fff;border-radius:999px;padding:8px 18px;font-size:14px;font-weight:600;opacity:0;transition:opacity .15s;}
+  .tpl .thumb:hover .peek,.tpl .thumb:focus-visible .peek{opacity:1;}
+  .tpl-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:6px;}
+  .tpl-actions .btn{text-align:center;padding:10px 8px;}
+  dialog#pv{border:0;background:transparent;padding:16px;max-width:none;max-height:none;width:min(548px,100vw);color:var(--ink);}
+  dialog#pv::backdrop{background:rgba(11,31,43,.78);}
+  .pv-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#fff;margin-bottom:12px;font-size:17px;}
+  .pv-close{background:none;border:1.5px solid rgba(255,255,255,.5);color:#fff;border-radius:999px;padding:5px 14px;font:inherit;font-size:14px;cursor:pointer;}
+  .pv-stage{background:#fff;border-radius:12px;padding:40px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+  .pv-note{color:#cfe8e6;font-size:13px;text-align:center;margin:12px 0;}
+  .pv-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .pv-actions form{margin:0;}
+  header nav .spacer{flex:1;}
+  @media (max-width:640px){header nav{flex-wrap:wrap;gap:14px;}.pv-stage{padding:40px 28px;}}
   .tpl-body{padding:16px 18px 18px;display:flex;flex-direction:column;gap:8px;flex:1;}
   .tpl-body h3{font-size:16.5px;margin:0;font-family:inherit;font-weight:600;}
   .tpl-body p{margin:0;color:var(--muted);font-size:14px;flex:1;}
-  .tpl-body form{margin:6px 0 0;}
+  .tpl-body form{margin:0;}
   .tpl-body .btn{width:100%;}
   .tag{display:inline-block;background:#FFF1E6;color:#9a3b12;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;vertical-align:middle;}
   .card.pad{padding:26px 28px;max-width:720px;}
@@ -1581,6 +1696,29 @@ public sealed class LeadsMiddleware
             .Replace("{{TEMPLATES}}", current == "Templates" ? "current" : "")
             .Replace("{{LEADS}}", current == "Leads" ? "current" : "")
             .Replace("{{INTEGRATIONS}}", current == "Integrations" ? "current" : "");
+
+    private const string PublicNav = """
+<header><nav>
+  <a class="brand" href="/"><img src="/img/yeti-logo.png" alt="">OptinYeti</a>
+  <a href="/Home/Features">Features</a>
+  <a class="current" href="/Templates">Templates</a>
+  <a href="/Home/Pricing">Pricing</a>
+  <a href="/Blog">Blog</a>
+  <span class="spacer"></span>
+  <a href="/Account/Login">Log in</a>
+  <a class="btn" href="/Account/Register" style="color:#fff">Start free</a>
+</nav></header>
+""";
+
+    private static string PublicChrome()
+    {
+        var top = PageTop.Replace("{{TITLE}}", "Popup Templates")
+            .Replace("<meta name=\"robots\" content=\"noindex\">",
+                "<meta name=\"description\" content=\"Browse OptinYeti popup templates for email signups, sales, coupons, video and announcements. Preview each one live, then start free.\">\n<link rel=\"canonical\" href=\"https://optinyeti.com/Templates\">");
+        var start = top.IndexOf("<header>", StringComparison.Ordinal);
+        var end = top.IndexOf("</header>", StringComparison.Ordinal) + "</header>".Length;
+        return top[..start] + PublicNav.Trim() + top[end..];
+    }
 
     private const string PageBottom = """
 </main>

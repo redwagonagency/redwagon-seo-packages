@@ -120,6 +120,14 @@
     from{transform:translate(0,0) rotate(0deg);}
     to{transform:translate(2%, -3%) rotate(4deg);}
   }
+  .tpl-strip{padding:72px 0;}
+  .tpl-strip-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:32px;}
+  .tpl-strip-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;}
+  .tpl-strip-grid a{display:block;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;text-decoration:none;color:var(--ink);font-weight:600;font-size:15px;transition:transform .15s,box-shadow .15s;}
+  .tpl-strip-grid a:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(11,31,43,.12);}
+  .tpl-strip-grid img{display:block;width:100%;height:auto;}
+  .tpl-strip-grid span{display:block;padding:12px 16px;}
+  @media (max-width:900px){.tpl-strip-grid{grid-template-columns:1fr 1fr;}}
   .analytics-grid{display:grid;grid-template-columns:1fr 0.9fr;gap:40px;align-items:center;padding:64px 0;position:relative;z-index:2;}
   .analytics-copy h2{color:#fff;font-size:30px;margin:0 0 16px;}
   .analytics-copy p{color:#b9dede;font-size:16px;max-width:420px;}
@@ -195,6 +203,7 @@
     <div class="brand"><img src="img/yeti-logo.png" alt="OptinYeti"> OptinYeti</div>
     <div class="navlinks">
       <a href="#features">Features</a>
+      <a href="/Templates">Templates</a>
       <a href="#analytics">Analytics</a>
       <a href="#pricing">Pricing</a>
       <a href="https://optinyeti.com/Blog">Blog</a>
@@ -282,6 +291,24 @@
   </div>
 </section>
 
+<section class="tpl-strip" id="templates">
+  <div class="wrap">
+    <div class="tpl-strip-head">
+      <div class="section-head" style="margin-bottom:0">
+        <h2>Start from a template</h2>
+        <p>Email signups, sales, coupons, video and announcements. Open any one to try it before you sign up.</p>
+      </div>
+      <a class="btn btn-thaw" href="/Templates">Browse all templates</a>
+    </div>
+    <div class="tpl-strip-grid">
+      <a href="/Templates#email-collection"><img loading="lazy" src="img/templates/newsletter-signup-modern.svg" alt="Newsletter signup popup template"><span>Email collection</span></a>
+      <a href="/Templates#advertising"><img loading="lazy" src="img/templates/sale-announcement.svg" alt="Sale announcement popup template"><span>Sales and promotions</span></a>
+      <a href="/Templates#coupon"><img loading="lazy" src="img/templates/welcome-discount.svg" alt="Welcome discount popup template"><span>Coupons</span></a>
+      <a href="/Templates#video"><img loading="lazy" src="img/templates/youtube-video-popup.svg" alt="Video popup template"><span>Video</span></a>
+    </div>
+  </div>
+</section>
+
 <section id="analytics">
   <div class="wrap analytics-wrap">
     <div class="aurora"></div>
@@ -359,6 +386,7 @@
       <h4>Product</h4>
       <ul>
         <li><a href="#features">Features</a></li>
+        <li><a href="/Templates">Templates</a></li>
         <li><a href="#analytics">Analytics</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="https://optinyeti.com/Account/Register">Start free</a></li>
