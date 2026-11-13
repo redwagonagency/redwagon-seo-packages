@@ -120,6 +120,8 @@ rm -f /tmp/oy_gal.html /tmp/oy_pub.html /tmp/oy_sh.txt
 curl -s -b $J -o /tmp/oy_des.html $T/Popup/Designer/4
 echo "DESIGNER: old_brand=$(grep -c '>PopupManager<' /tmp/oy_des.html) new_brand=$(grep -c 'brand-logo[^>]*>OptinYeti<' /tmp/oy_des.html) old_blue=$(grep -c -i '#2563eb\|#667eea' /tmp/oy_des.html) script_ok=$(grep -c 'PopupManager\|popup' /tmp/oy_des.html) MENU_EXTRA: templates=$(grep -o 'href="/Popup/SelectTemplate"' /tmp/oy_dash.html 2>/dev/null | wc -l) dash_now=$(curl -s -b $J $T/Popup | grep -o 'href="/Popup/SelectTemplate"\|href="/admin/Integrations"\|href="/admin/Leads"' | sort -u | wc -l)"
 rm -f /tmp/oy_des.html
+echo "SEO_PAGES=$(for u in /about/joe-whyte /exit-intent-popups /spin-to-win-popups /popup-ab-testing /coupon-popups /optinmonster-alternative /video-popups; do curl -s -o /tmp/oy_seo.html -w '%{http_code}' $T$u; printf ':%s:%s ' $(grep -c 'application/ld+json' /tmp/oy_seo.html) $(grep -c 'rel="canonical"' /tmp/oy_seo.html); done) joe=$(curl -s $T/about/joe-whyte | grep -c 'Joe Whyte') noindex=$(curl -s $T/exit-intent-popups | grep -c noindex) nav_active=$(curl -s $T/exit-intent-popups | grep -c 'class=\"active\"') post=$(curl -s -o /dev/null -w '%{http_code}' -d x=1 $T/coupon-popups)"
+rm -f /tmp/oy_seo.html
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

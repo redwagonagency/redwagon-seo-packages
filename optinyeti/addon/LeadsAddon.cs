@@ -10,6 +10,7 @@
 //   POST /admin/Integrations/save, /admin/Integrations/test
 //   GET  /Popup/SelectTemplate   template gallery driven by the PopupTemplates table
 //   GET  /Templates              public template gallery with live previews
+//   GET  /about/joe-whyte, /exit-intent-popups, ...   public marketing pages (SeoPages.cs)
 //   GET/POST /Popup/Test/{id}    A/B test: second version of a popup, results, pick a winner
 //   GET  /api/ab/variants, POST /api/ab/track   used by the popup script on customer sites
 //   GET/POST /Popup/Wheel/{id}   prize editor for spin-to-win popups
@@ -139,6 +140,18 @@ public sealed class LeadsMiddleware
             if (path.Equals("/Templates/Start", StringComparison.OrdinalIgnoreCase))
             {
                 HandleTemplateStart(ctx);
+                return;
+            }
+            if (SeoPages.ByPath.TryGetValue(path.TrimEnd('/'), out var seoPage))
+            {
+                if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method))
+                {
+                    ctx.Response.StatusCode = 405;
+                    return;
+                }
+                ctx.Response.ContentType = "text/html; charset=utf-8";
+                ctx.Response.Headers["Cache-Control"] = "public, max-age=600";
+                await ctx.Response.WriteAsync(SeoPages.Render(seoPage) + PageBottom);
                 return;
             }
             if (path.Equals("/Templates", StringComparison.OrdinalIgnoreCase))
@@ -2692,6 +2705,9 @@ public sealed class LeadsMiddleware
     private const string PublicHead = """
 <meta name="description" content="Browse OptinYeti popup templates for email signups, sales, coupons, spin-to-win, video and announcements. Preview each one live, then start free.">
 <link rel="canonical" href="https://optinyeti.com/Templates">
+""";
+
+    private const string PublicFonts = """
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/site.css">
 """;
@@ -2715,14 +2731,20 @@ public sealed class LeadsMiddleware
 </style>
 """;
 
-    private static string PublicChrome()
+    private static string PublicChrome() => PublicPage("Popup Templates", PublicHead.Trim(), "", "/Templates");
+
+    // A public page in the marketing site's design. Returns everything up to and including the
+    // opening of <main>, plus the body; callers append PageBottom.
+    internal static string PublicPage(string title, string headExtra, string body, string active = "")
     {
-        var top = PageTop.Replace("{{TITLE}}", "Popup Templates")
-            .Replace("<meta name=\"robots\" content=\"noindex\">", PublicHead.Trim())
+        var top = PageTop.Replace("{{TITLE}}", title)
+            .Replace("<meta name=\"robots\" content=\"noindex\">", PublicFonts.Trim() + "\n" + headExtra)
             .Replace("</head>", PublicOverrides.Trim() + "\n</head>");
         var start = top.IndexOf("<header>", StringComparison.Ordinal);
         var end = top.IndexOf("</header>", StringComparison.Ordinal) + "</header>".Length;
-        return top[..start] + PublicNav.Trim() + top[end..];
+        var nav = PublicNav.Trim().Replace(" class=\"active\"", "");
+        if (active.Length > 0) nav = nav.Replace("href=\"" + active + "\"", "href=\"" + active + "\" class=\"active\"");
+        return top[..start] + nav + top[end..] + body;
     }
 
     private const string PageBottom = """
