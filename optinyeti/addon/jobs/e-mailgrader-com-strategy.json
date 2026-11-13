@@ -1,0 +1,144 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "e-mailgrader.com",
+  "replace": [
+    "E-Mail Grader - Exit intent",
+    "E-Mail Grader - Scroll slide-in",
+    "E-Mail Grader - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "E-Mail Grader 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Free email marketing grade in 3 minutes",
+        "SubHeading": "34 questions, one score, and the fixes ranked by revenue impact. Free.",
+        "ButtonText": "Grade my email program",
+        "ButtonUrl": "https://e-mailgrader.com/audit",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "e-mailgrader.com,!e-mailgrader.com/audit,!e-mailgrader.com/pricing",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "E-Mail Grader 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Inbox Notes",
+        "SubHeading": "One deliverability or email-revenue fix a week.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "E-Mail Grader 03 Exit intent offer",
+      "type": 2,
+      "options": {
+        "Heading": "Before you go: grade your email program",
+        "SubHeading": "Three minutes, 34 questions, and a graded report you can hand to your team.",
+        "ButtonText": "Grade my email program",
+        "ButtonUrl": "https://e-mailgrader.com/audit",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "e-mailgrader.com,!e-mailgrader.com/audit,!e-mailgrader.com/pricing",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "E-Mail Grader 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "How healthy is your email program?",
+        "SubHeading": "Answer 34 quick questions and get a graded report on sends, list health, automation and KPIs. Free.",
+        "ButtonText": "Grade my email program",
+        "ButtonUrl": "https://e-mailgrader.com/audit",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "E-Mail Grader 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Inbox Notes",
+        "SubHeading": "One deliverability or email-revenue fix a week.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#FFF4EC",
+        "ButtonColor": "#111111"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "E-Mail Grader 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Grade first, then decide",
+        "SubHeading": "The free grade shows where the revenue is leaking before you spend a dollar.",
+        "ButtonText": "Grade my email program",
+        "ButtonUrl": "https://e-mailgrader.com/audit",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "e-mailgrader.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

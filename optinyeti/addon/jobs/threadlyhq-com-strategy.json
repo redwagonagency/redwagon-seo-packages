@@ -1,0 +1,145 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "threadlyhq.com",
+  "replace": [
+    "Threadly - Exit intent",
+    "Threadly - Scroll slide-in",
+    "Threadly - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "Threadly 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Schedule a month of posts in an afternoon",
+        "SubHeading": "Every brand, every network, one calendar. Free month to start.",
+        "ButtonText": "Start my free month",
+        "ButtonUrl": "https://threadlyhq.com/sign-up",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#8B5CF6"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "threadlyhq.com,!threadlyhq.com/sign-up,!threadlyhq.com/sign-in,!threadlyhq.com/dashboard,!threadlyhq.com/pricing",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Threadly 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Threadly Notes",
+        "SubHeading": "One social post idea a week that actually gets reach.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#8B5CF6"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Threadly 03 Exit intent offer",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: the posting playbook",
+        "SubHeading": "The cadence, formats and hooks we use to post 3x a day across 7 brands, plus a free month of Threadly.",
+        "ButtonText": "Send it to me",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#8B5CF6"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "threadlyhq.com,!threadlyhq.com/sign-up,!threadlyhq.com/sign-in,!threadlyhq.com/dashboard,!threadlyhq.com/pricing",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Threadly 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Post 3x a day without living in the apps",
+        "SubHeading": "Threadly schedules and publishes for every brand you run. Start your free month.",
+        "ButtonText": "Start my free month",
+        "ButtonUrl": "https://threadlyhq.com/sign-up",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#8B5CF6"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "Threadly 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Threadly Notes",
+        "SubHeading": "One social post idea a week that actually gets reach.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#F3EEFF",
+        "ButtonColor": "#111111"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "Threadly 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Free month first, pick a plan later",
+        "SubHeading": "Try every feature for a month. Pick a plan when you know how many brands you'll run.",
+        "ButtonText": "Start my free month",
+        "ButtonUrl": "https://threadlyhq.com/sign-up",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#8B5CF6"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "threadlyhq.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

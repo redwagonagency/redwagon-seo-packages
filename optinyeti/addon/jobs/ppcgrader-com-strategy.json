@@ -1,0 +1,144 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "ppcgrader.com",
+  "replace": [
+    "PPC Grader - Exit intent",
+    "PPC Grader - Scroll slide-in",
+    "PPC Grader - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "PPC Grader 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Free Google Ads grade in 60 seconds",
+        "SubHeading": "Wasted spend, Quality Score, impression share: scored and explained. No card needed.",
+        "ButtonText": "Grade my Google Ads free",
+        "ButtonUrl": "https://ppcgrader.com/",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "ppcgrader.com,!ppcgrader.com/pricing,!ppcgrader.com/checkout,!ppcgrader.com/register,!ppcgrader.com/login",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "PPC Grader 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "PPC Notes",
+        "SubHeading": "One paid-media fix a week, from accounts we audit every day.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "PPC Grader 03 Exit intent offer",
+      "type": 2,
+      "options": {
+        "Heading": "Before you go: grade your ads free",
+        "SubHeading": "Sixty seconds, no card, and you get the wasted-spend report that most agencies charge for.",
+        "ButtonText": "Grade my Google Ads free",
+        "ButtonUrl": "https://ppcgrader.com/",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "ppcgrader.com,!ppcgrader.com/pricing,!ppcgrader.com/checkout,!ppcgrader.com/register,!ppcgrader.com/login",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "PPC Grader 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "How much of your ad budget is wasted?",
+        "SubHeading": "Grade your Google, Meta or LinkedIn account free and see the wasted-spend number in sixty seconds.",
+        "ButtonText": "Grade my Google Ads free",
+        "ButtonUrl": "https://ppcgrader.com/",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "PPC Grader 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "PPC Notes",
+        "SubHeading": "One paid-media fix a week, from accounts we audit every day.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#FFF4EC",
+        "ButtonColor": "#0B1F2B"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "PPC Grader 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Not sure which plan? Start with the free grade",
+        "SubHeading": "Run the free grade first; the report tells you exactly which plan pays for itself.",
+        "ButtonText": "Grade my Google Ads free",
+        "ButtonUrl": "https://ppcgrader.com/",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "ppcgrader.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "unboundkeyword.com",
+  "replace": [
+    "UnboundKeyword - Exit intent",
+    "UnboundKeyword - Scroll slide-in",
+    "UnboundKeyword - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "UnboundKeyword 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Keywords your competitors rank for and you don't",
+        "SubHeading": "Run a gap report on any domain. Free account, no card.",
+        "ButtonText": "Find my keyword gaps",
+        "ButtonUrl": "https://www.unboundkeyword.com/register",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#10B981"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "unboundkeyword.com,!unboundkeyword.com/register,!unboundkeyword.com/login,!unboundkeyword.com/pricing,!unboundkeyword.com/api",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "UnboundKeyword 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Keyword Notes",
+        "SubHeading": "One keyword opportunity a week, with volume and intent.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#10B981"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "UnboundKeyword 03 Exit intent offer",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: your keyword gap report",
+        "SubHeading": "Leave your email and we will send a gap report for your domain against your top competitor.",
+        "ButtonText": "Send it to me",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#10B981"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "unboundkeyword.com,!unboundkeyword.com/register,!unboundkeyword.com/login,!unboundkeyword.com/pricing,!unboundkeyword.com/api",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "UnboundKeyword 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Which keywords are you missing?",
+        "SubHeading": "UnboundKeyword shows the terms competitors rank for that your site does not, with volume and intent. Free to start.",
+        "ButtonText": "Find my keyword gaps",
+        "ButtonUrl": "https://www.unboundkeyword.com/register",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#10B981"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "UnboundKeyword 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Keyword Notes",
+        "SubHeading": "One keyword opportunity a week, with volume and intent.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ECFDF5",
+        "ButtonColor": "#0B1F2B"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "UnboundKeyword 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Start free, upgrade for more domains",
+        "SubHeading": "The free account covers one site. Upgrade when you track more.",
+        "ButtonText": "Find my keyword gaps",
+        "ButtonUrl": "https://www.unboundkeyword.com/register",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#10B981"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "unboundkeyword.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

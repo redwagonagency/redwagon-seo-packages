@@ -1,0 +1,144 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "searchauditpro.com",
+  "replace": [
+    "SearchAuditPro - Exit intent",
+    "SearchAuditPro - Scroll slide-in",
+    "SearchAuditPro - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "SearchAuditPro 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Free SEO audit, 30 seconds",
+        "SubHeading": "Technical, content and link checks scored and explained. No sign-up to see the score.",
+        "ButtonText": "Run my free SEO audit",
+        "ButtonUrl": "https://www.searchauditpro.com/",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#2DD4BF"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "searchauditpro.com,!searchauditpro.com/register,!searchauditpro.com/login,!searchauditpro.com/pricing",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "SearchAuditPro 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Search Notes",
+        "SubHeading": "One ranking fix a week from audits we run on real sites.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#2DD4BF"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "SearchAuditPro 03 Exit intent offer",
+      "type": 2,
+      "options": {
+        "Heading": "Before you go: audit your site free",
+        "SubHeading": "Thirty seconds. You get the score, the issues and what to fix first.",
+        "ButtonText": "Run my free SEO audit",
+        "ButtonUrl": "https://www.searchauditpro.com/",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#2DD4BF"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "searchauditpro.com,!searchauditpro.com/register,!searchauditpro.com/login,!searchauditpro.com/pricing",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "SearchAuditPro 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Is your site leaking rankings?",
+        "SubHeading": "Run the free 30-second audit and see the 20 checks that decide whether you rank, scored for your site.",
+        "ButtonText": "Run my free SEO audit",
+        "ButtonUrl": "https://www.searchauditpro.com/",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#2DD4BF"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "SearchAuditPro 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Search Notes",
+        "SubHeading": "One ranking fix a week from audits we run on real sites.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#EAF6F7",
+        "ButtonColor": "#0B1F2B"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "SearchAuditPro 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Start a free trial, keep the audit history",
+        "SubHeading": "Every plan includes unlimited audits, rank tracking and the link outreach tools. Try it free first.",
+        "ButtonText": "Run my free SEO audit",
+        "ButtonUrl": "https://www.searchauditpro.com/register",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#2DD4BF"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "searchauditpro.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

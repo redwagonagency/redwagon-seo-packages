@@ -1,0 +1,124 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "josephwhyte.com",
+  "replace": [
+    "Joe Whyte - Exit intent",
+    "Joe Whyte - Scroll slide-in",
+    "Joe Whyte - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "Joe Whyte 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Work with Joe: 30-minute growth strategy call",
+        "SubHeading": "SEO, paid media, CRM and CRO, from the person who ran the campaigns. Book through Red Wagon.",
+        "ButtonText": "Book a strategy call",
+        "ButtonUrl": "https://redwagon.agency/contact/",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "josephwhyte.com",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Joe Whyte 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Joe's CRO Notes",
+        "SubHeading": "One conversion lesson a week from real client accounts.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Joe Whyte 03 Exit intent offer",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: one CRO lesson a week",
+        "SubHeading": "Short, practical, from real accounts. No spam.",
+        "ButtonText": "Send it to me",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "josephwhyte.com",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Joe Whyte 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Want this done for your business?",
+        "SubHeading": "Joe runs growth marketing for clients through Red Wagon. Book a 30-minute strategy call.",
+        "ButtonText": "Book a strategy call",
+        "ButtonUrl": "https://redwagon.agency/contact/",
+        "BackgroundColor": "#111111",
+        "ButtonColor": "#F26A21"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "Joe Whyte 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Joe's CRO Notes",
+        "SubHeading": "One conversion lesson a week from real client accounts.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#FFF4EC",
+        "ButtonColor": "#111111"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    }
+  ]
+}

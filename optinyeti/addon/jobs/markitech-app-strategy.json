@@ -1,0 +1,145 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "markitech.app",
+  "replace": [
+    "Markitech - Exit intent",
+    "Markitech - Scroll slide-in",
+    "Markitech - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "Markitech 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "Your marketing-ops engineer, as an agent",
+        "SubHeading": "Server-side GTM, GA4 setup, pixels, campaigns and creatives, done by Markitech. Start today.",
+        "ButtonText": "Start with Markitech",
+        "ButtonUrl": "https://app.markitech.app/signup",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#3B82F6"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "markitech.app,!markitech.app/pricing,!app.markitech.app",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Markitech 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Markitech Notes",
+        "SubHeading": "One marketing-ops automation a week, with the exact prompts.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#3B82F6"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Markitech 03 Exit intent offer",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: the server-side tracking guide",
+        "SubHeading": "The setup guide we use for sGTM to GA4 and ad platforms, plus early access to Markitech.",
+        "ButtonText": "Send it to me",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#3B82F6"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "markitech.app,!markitech.app/pricing,!app.markitech.app",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "Markitech 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "Do this with an agent instead of a $200k hire",
+        "SubHeading": "Markitech sets up server-side tracking, GA4 events, pixels and campaigns across 22 platforms. Start today.",
+        "ButtonText": "Start with Markitech",
+        "ButtonUrl": "https://app.markitech.app/signup",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#3B82F6"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "Markitech 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Markitech Notes",
+        "SubHeading": "One marketing-ops automation a week, with the exact prompts.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#EEF4FF",
+        "ButtonColor": "#0B1F2B"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "Markitech 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Questions about plans or credits?",
+        "SubHeading": "Tell us what you run and we'll point you at the right plan. No pressure, one email.",
+        "ButtonText": "Ask us",
+        "ButtonUrl": "https://markitech.app/contact",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#3B82F6"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "markitech.app/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "job": "popups",
+  "tenantId": 5,
+  "domain": "competitorinbox.com",
+  "replace": [
+    "CompetitorInbox - Exit intent",
+    "CompetitorInbox - Scroll slide-in",
+    "CompetitorInbox - Welcome bar"
+  ],
+  "popups": [
+    {
+      "name": "CompetitorInbox 01 Welcome bar",
+      "type": 2,
+      "options": {
+        "Heading": "See every email your competitors send",
+        "SubHeading": "Subject lines, offers, send times and cadence, collected automatically. Free to start.",
+        "ButtonText": "Start watching my competitors",
+        "ButtonUrl": "https://competitorinbox.com/register",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#FF8A3D"
+      },
+      "layout": {
+        "mode": "bar",
+        "position": "top"
+      },
+      "urlTargeting": "competitorinbox.com,!competitorinbox.com/register,!competitorinbox.com/login,!competitorinbox.com/pricing",
+      "trigger": 3,
+      "delay": 6000,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "CompetitorInbox 02 Scroll slide-in newsletter",
+      "type": 1,
+      "options": {
+        "Heading": "Competitor Watch",
+        "SubHeading": "The best competitor email of the week, dissected.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#FF8A3D"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-right"
+      },
+      "trigger": 2,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "CompetitorInbox 03 Exit intent offer",
+      "type": 1,
+      "options": {
+        "Heading": "Before you go: their emails, in your inbox",
+        "SubHeading": "Leave your email and we will send you this month's report on the brands you compete with.",
+        "ButtonText": "Send it to me",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#FF8A3D"
+      },
+      "layout": {
+        "mode": "center"
+      },
+      "urlTargeting": "competitorinbox.com,!competitorinbox.com/register,!competitorinbox.com/login,!competitorinbox.com/pricing",
+      "trigger": 1,
+      "delay": 0,
+      "frequency": 1,
+      "status": 1
+    },
+    {
+      "name": "CompetitorInbox 04 Blog banner - tool (after paragraph 4)",
+      "type": 2,
+      "options": {
+        "Heading": "What are your competitors emailing right now?",
+        "SubHeading": "CompetitorInbox collects every campaign they send and shows you the subject lines, offers and timing. Start free.",
+        "ButtonText": "Start watching my competitors",
+        "ButtonUrl": "https://competitorinbox.com/register",
+        "BackgroundColor": "#0B1F2B",
+        "ButtonColor": "#FF8A3D"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 4,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "CompetitorInbox 05 Blog banner - newsletter (after paragraph 12)",
+      "type": 1,
+      "options": {
+        "Heading": "Competitor Watch",
+        "SubHeading": "The best competitor email of the week, dissected.",
+        "ButtonText": "Send me the notes",
+        "SuccessMessage": "You are in. The next issue lands this week.",
+        "PrivacyText": "No spam. One click to unsubscribe.",
+        "BackgroundColor": "#EAF6F7",
+        "ButtonColor": "#0B1F2B"
+      },
+      "layout": {
+        "mode": "inline",
+        "selector": "article",
+        "afterParagraphs": 12,
+        "placement": "after",
+        "closable": false,
+        "required": true
+      },
+      "trigger": 0,
+      "delay": 0,
+      "frequency": 0,
+      "status": 1
+    },
+    {
+      "name": "CompetitorInbox 06 Pricing page nudge",
+      "type": 2,
+      "options": {
+        "Heading": "Start free, upgrade when it pays for itself",
+        "SubHeading": "Track a handful of competitors free. Add deliverability testing and more brands when you need them.",
+        "ButtonText": "Start watching my competitors",
+        "ButtonUrl": "https://competitorinbox.com/register",
+        "BackgroundColor": "#ffffff",
+        "ButtonColor": "#FF8A3D"
+      },
+      "layout": {
+        "mode": "slide",
+        "position": "bottom-left"
+      },
+      "urlTargeting": "competitorinbox.com/pricing",
+      "trigger": 3,
+      "delay": 20000,
+      "frequency": 1,
+      "status": 1
+    }
+  ]
+}
