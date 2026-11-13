@@ -286,6 +286,10 @@ public sealed class LeadsMiddleware
         "[A-Za-z0-9._+-]+@(popupmanagerpro|popupmanager|popupx)\\.com",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex BuiltInTagManager = new(
+        "<!-- Google Tag Manager -->.*?<!-- End Google Tag Manager -->",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
     private static readonly Regex TitleTag = new(
         "<title>(.*?)</title>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
@@ -303,6 +307,10 @@ public sealed class LeadsMiddleware
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Schedule a Demo</a>", "<a href=\"/Home/Demo\"$1>Schedule a Demo</a>");
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>FAQ</a>", "<a href=\"/Home/Pricing\"$1>FAQ</a>");
         html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Video Tutorials</a>", "<a href=\"/Blog\"$1>Video Tutorials</a>");
+
+        // The web server already adds the Tag Manager snippet to every page, so the copy built
+        // into the app would load the container twice and double-count page views.
+        html = BuiltInTagManager.Replace(html, "", 1);
 
         html = ApplyTheme(html);
 

@@ -64,6 +64,7 @@ echo "CONTACT: old_email=$(pub /Home/Contact | grep -c -i 'popupmanagerpro') new
 echo "PRICING_QQ=$(pub /Home/Pricing | grep -c '?? <strong>') BLOG_OLD_NAME=$(pub /Blog | grep -c 'Popup Manager') PRICING_OK=$(pub /Home/Pricing | grep -c 'Compare All Features') SCRIPT_OK=$(pub /Popup/GetTenantScript/5 | grep -c 'PopupManager')"
 echo "THEME: style=$(pub /Home/Pricing | grep -c 'id=\"oy-theme\"') tailwind_cfg=$(pub /Home/Pricing | grep -c 'tailwind.config') signed_in_style=$(curl -s -b $J $T/ | grep -c 'id=\"oy-theme\"') css_old_blue=$(pub /css/site.css | grep -c -i '#2563eb\|#3ca2ff') css_teal=$(pub /css/site.css | grep -c -i '#0F6B6B') css_status=$(curl -s -o /dev/null -w '%{http_code}' $T/css/site.css)"
 echo "OLD_NAMES: popupx=$(for u in / /Home/Features /Home/Pricing /Home/Demo /Home/Contact /Home/Privacy /Account/Login /Account/Register /Blog; do pub $u; done | grep -c -i 'popupx\|popupmanager\|Popup Manager') blog_redirect=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$T/Blog/Post?slug=getting-started-popup-manager")"
+echo "APP_GTM_COPIES=$(pub /Home/Pricing | grep -o 'googletagmanager.com/gtm.js' | wc -l) (expected 0 here; the web server adds one in production)"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1
