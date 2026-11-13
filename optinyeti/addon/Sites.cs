@@ -37,6 +37,7 @@ internal static class Sites
             case "/admin/sites": await Page(ctx); return true;
             case "/admin/sites/save": await Save(ctx); return true;
             case "/admin/sites/delete": await Delete(ctx); return true;
+            case "/admin/sites/kit": await Kit(ctx); return true;
             default: return false;
         }
     }
@@ -106,6 +107,11 @@ internal static class Sites
                     .Append("<label class=\"grow\">Send this site's leads to (webhook URL, optional) <input type=\"url\" name=\"webhook\" maxlength=\"500\" placeholder=\"https://… leave empty to use the account webhook\" value=\"").Append(H(hook)).Append("\"></label>")
                     .Append("<button type=\"submit\" class=\"btn\">Save</button></form>")
                     .Append(status.Length == 0 ? "" : "<p class=\"sub\">Last delivery: " + H(status) + "</p>")
+                    .Append("<details><summary>Launch kit: three ready-made popups for this site</summary><p class=\"sub\" style=\"margin:8px 0\">Creates an exit-intent popup, a scroll slide-in and a welcome bar, all limited to this site and live right away. Tell it what the visitor gets and you can fine-tune the words afterwards.</p>")
+                    .Append("<form method=\"post\" action=\"/admin/Sites/kit\" class=\"row site-form\"><input type=\"hidden\" name=\"id\" value=\"").Append(id).Append("\">")
+                    .Append("<label class=\"grow\">What the visitor gets <input name=\"offer\" required maxlength=\"140\" placeholder=\"e.g. a free 20-point audit of your site\"></label>")
+                    .Append("<label>Button text <input name=\"button\" maxlength=\"40\" placeholder=\"Send it to me\"></label>")
+                    .Append("<button type=\"submit\" class=\"btn\">Create the three popups</button></form></details>")
                     .Append("<form method=\"post\" action=\"/admin/Sites/delete\" onsubmit=\"return confirm('Remove this site from the list? Its popups and leads stay.')\"><input type=\"hidden\" name=\"id\" value=\"").Append(id).Append("\"><button type=\"submit\" class=\"del\">Remove site</button></form></div>");
             }
         }
@@ -116,6 +122,9 @@ internal static class Sites
             "badhook" => "<div class=\"notice bad\">The webhook must be an https address on a public host.</div>",
             "dup" => "<div class=\"notice bad\">That site is already on the list.</div>",
             "removed" => "<div class=\"notice ok\">Site removed.</div>",
+            "kit" => "<div class=\"notice ok\">Three popups created and live for that site. Open <a href=\"/Popup\">Popups</a> to adjust the words or turn any of them off.</div>",
+            "kitlimit" => "<div class=\"notice bad\">Your plan does not have room for three more popups. Upgrade on the <a href=\"/Subscription\">Subscription</a> page or remove old popups first.</div>",
+            "kitmissing" => "<div class=\"notice bad\">That site is not on your list.</div>",
             _ => ""
         };
         var body = new StringBuilder();
@@ -186,6 +195,69 @@ internal static class Sites
         await cmd.ExecuteNonQueryAsync();
         ctx.Response.Redirect("/admin/Sites?msg=removed");
     }
+
+    // Launch kit: three popups that cover the moments that convert on most sites, scoped to one site.
+    //   1. exit-intent centered popup   2. scroll slide-in (bottom right)   3. welcome bar after 8 seconds
+    private static async Task Kit(HttpContext ctx)
+    {
+        if (!HttpMethods.IsPost(ctx.Request.Method)) { ctx.Response.StatusCode = 405; return; }
+        if (!LeadsMiddleware.SameOrigin(ctx)) { ctx.Response.StatusCode = 403; await ctx.Response.WriteAsync("Forbidden"); return; }
+        var viewer = await LeadsMiddleware.RequireViewer(ctx);
+        if (viewer == null) return;
+        if (viewer.TenantId < 0) { ctx.Response.StatusCode = 403; await ctx.Response.WriteAsync("Forbidden"); return; }
+        var form = await ctx.Request.ReadFormAsync();
+        long.TryParse(form["id"], NumberStyles.None, CultureInfo.InvariantCulture, out var id);
+        var offer = LeadsMiddleware.Clip(form["offer"].ToString().Trim(), 140);
+        var button = LeadsMiddleware.Clip(form["button"].ToString().Trim(), 40);
+        if (button.Length == 0) button = "Send it to me";
+        if (offer.Length == 0) offer = "our best tips, straight to your inbox";
+
+        await using var db = await LeadsMiddleware.Open();
+        string domain = "", siteName = "";
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Domain, Name from Sites where Id = @id and TenantId = @t";
+            cmd.Parameters.AddWithValue("@id", id);
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync()) { domain = reader.GetString(0); siteName = reader.IsDBNull(1) ? "" : reader.GetString(1); }
+        }
+        if (domain.Length == 0) { ctx.Response.Redirect("/admin/Sites?msg=kitmissing"); return; }
+        if (siteName.Length == 0) siteName = domain;
+        var remaining = await LeadsMiddleware.PopupsRemaining(db, viewer.TenantId);
+        if (remaining >= 0 && remaining < 3) { ctx.Response.Redirect("/admin/Sites?msg=kitlimit"); return; }
+
+        var targeting = System.Text.Json.JsonSerializer.Serialize(new { urlTargeting = domain });
+        var success = "Thanks! Check your inbox in the next few minutes.";
+        var privacy = "No spam. One click to unsubscribe.";
+        string Options(string heading, string sub, string bg, string btn) => System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Heading = heading, SubHeading = sub, ButtonText = button, SuccessMessage = success, PrivacyText = privacy,
+            ImageUrl = "", CollectName = false, CollectPhone = false, BackgroundColor = bg, ButtonColor = btn
+        });
+
+        // 1. Exit intent: the visitor is leaving, make one clear offer.
+        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Exit intent", 1,
+            LeadsMiddleware.ParseOptions(Options("Before you go: " + Lower(offer), "Leave your email and we will send it over. Takes ten seconds.", "#ffffff", "#FF8A3D")),
+            new Dictionary<string, object> { ["mode"] = "center" }, targeting, trigger: 1, delay: 0, frequency: 1, status: 1);
+
+        // 2. Scroll slide-in: the visitor is reading, offer more of the same without blocking the page.
+        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Scroll slide-in", 1,
+            LeadsMiddleware.ParseOptions(Options("Want " + Lower(offer) + "?", "Pop your email in and it is yours.", "#EAF6F7", "#0F6B6B")),
+            new Dictionary<string, object> { ["mode"] = "slide", ["position"] = "bottom-right" }, targeting, trigger: 2, delay: 0, frequency: 1, status: 1);
+
+        // 3. Welcome bar: a quiet reminder across the top after the visitor has settled in.
+        await LeadsMiddleware.InsertPopup(db, viewer.TenantId, viewer.UserId, siteName + " - Welcome bar", 1,
+            LeadsMiddleware.ParseOptions(Options("Get " + Lower(offer), "", "#0B1F2B", "#FF8A3D")),
+            new Dictionary<string, object> { ["mode"] = "bar", ["position"] = "top" }, targeting, trigger: 3, delay: 8000, frequency: 1, status: 1);
+
+        await LeadsMiddleware.RefreshPopupCount(db, viewer.TenantId);
+        ctx.Response.Redirect("/admin/Sites?msg=kit");
+    }
+
+    // "A free audit" -> "a free audit"; leaves acronyms such as "SEO tips" alone.
+    private static string Lower(string s) =>
+        s.Length > 1 && char.IsUpper(s[0]) && !char.IsUpper(s[1]) ? char.ToLowerInvariant(s[0]) + s[1..] : s;
 
     private static string H(string s) => LeadsMiddleware.H(s);
 

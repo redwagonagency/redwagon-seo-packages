@@ -152,6 +152,7 @@ ssave() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" "$@" $
 echo "SITES_PAGE=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/admin/Sites) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/admin/Sites) ADD=$(ssave --data-urlencode 'domain=https://www.JPW-Example.com/' --data-urlencode 'name=JPW Example') dup=$(ssave -d domain=jpw-example.com) bad=$(ssave -d domain=not_a_domain) stored=$(sqlite3 $DB "select Domain||'|'||Name from Sites where TenantId=5")"
 SID=$(sqlite3 $DB "select Id from Sites where TenantId=5 and Domain='jpw-example.com'")
 echo "SITE_HOOK=$(ssave -d id=$SID --data-urlencode 'name=JPW Example' --data-urlencode 'webhook=https://example.com/jpw-site-hook') bad_hook=$(ssave -d id=$SID -d webhook=http://x.y/z) snippet=$(curl -s -b $J $T/admin/Sites | grep -c 'GetTenantScript/5')"
+sqlite3 $DB "update SubscriptionPlans set MaxPopups=100"
 curl -s -b $J -o /dev/null -H "Origin: $T" -d id=1 -d site=jpw-example.com $T/Popup/UseTemplate
 SP=$(sqlite3 $DB 'select max(Id) from Popups')
 echo "SITE_POPUP: targeting=$(sqlite3 $DB "select TargetingRules from Popups where Id=$SP") editor_select=$(curl -s -b $J $T/Popup/Content/$SP | grep -c 'option value=\"jpw-example.com\" selected') gallery_note=$(curl -s -b $J "$T/Popup/SelectTemplate?site=jpw-example.com" | grep -c 'show only on <strong>jpw-example.com')"
@@ -159,6 +160,15 @@ csave $SP --data-urlencode 'Heading=JPW site' -d site= > /dev/null
 echo "SITE_UNSCOPE=$(sqlite3 $DB "select TargetingRules from Popups where Id=$SP") rescope=$(csave $SP --data-urlencode 'Heading=JPW site' -d site=jpw-example.com >/dev/null; sqlite3 $DB "select json_extract(TargetingRules,'\$.urlTargeting') from Popups where Id=$SP")"
 curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":4,"email":"jpw-site-lead@example.com","source":"https://www.jpw-example.com/pricing"}' $T/api/leads/capture; sleep 4
 echo "SITE_ROUTE=$(sqlite3 $DB "select substr(LastStatus,1,12) from Sites where Id=$SID") tenant_hook_untouched=$(sqlite3 $DB "select count(*) from LeadWebhooks where TenantId=5 and LastAttemptAt > (select UpdatedAt from Sites where Id=$SID)") site_leads=$(curl -s -b $J $T/admin/Sites | grep -o '[0-9]* leads' | head -1)"
+# ---- launch kit (three popups per site)
+kit() { curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" "$@" $T/admin/Sites/kit | sed 's/.*msg=//'; }
+BEFORE=$(sqlite3 $DB 'select count(*) from Popups where TenantId=5')
+echo "KIT=$(kit -d id=$SID --data-urlencode 'offer=A free JPW audit' --data-urlencode 'button=Send my audit') created=$(( $(sqlite3 $DB 'select count(*) from Popups where TenantId=5') - BEFORE )) missing=$(kit -d id=999999 -d offer=x) unauth=$(curl -s -o /dev/null -w '%{http_code}' -d id=$SID $T/admin/Sites/kit) noorigin=$(curl -s -b $J -o /dev/null -w '%{http_code}' -d id=$SID $T/admin/Sites/kit)"
+echo "KIT_ROWS: $(sqlite3 $DB "select Name||'|'||Status||'|'||Trigger||'|'||DelayMs||'|'||json_extract(TargetingRules,'\$.urlTargeting')||'|'||json_extract(Content,'\$.layout.mode')||'|'||Title from Popups where TenantId=5 and Name like 'JPW Example - %'" | tr '\n' ' ')"
+echo "KIT_HTML: lower=$(sqlite3 $DB "select count(*) from Popups where Name='JPW Example - Exit intent' and Title='Before you go: a free JPW audit' and CallToAction='Send my audit'") form=$(sqlite3 $DB "select count(*) from Popups where Name like 'JPW Example - %' and json_extract(Content,'\$.html') like '%type=\"email\"%'") script_has=$(curl -s $T/Popup/GetTenantScript/5 | grep -o 'JPW Example - [A-Za-z -]*' | sort -u | tr '\n' ',')"
+sqlite3 $DB "update SubscriptionPlans set MaxPopups=3"
+echo "KIT_LIMIT=$(kit -d id=$SID -d offer=x) count_unchanged=$(( $(sqlite3 $DB 'select count(*) from Popups where TenantId=5') - BEFORE ))"
+sqlite3 $DB "update SubscriptionPlans set MaxPopups=100"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1

@@ -2235,41 +2235,66 @@ public sealed class LeadsMiddleware
         }
 
         var o = ParseOptions(options);
-        var content = type == 5
-            ? WheelContent(WheelSettings(o))
-            : JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o });
-        var now = Timestamp(DateTime.UtcNow);
-        long newId;
-        await using (var cmd = db.CreateCommand())
-        {
-            cmd.CommandText =
-                "insert into Popups (Name, Type, Status, Content, Title, Subtitle, CallToAction, TargetingRules, Trigger, DelayMs, Frequency, " +
-                "ShowOnMobile, ShowOnDesktop, TenantId, CreatedById, Views, Clicks, Conversions, CreatedAt, UpdatedAt) " +
-                "values (@name, @type, 0, @content, @title, @subtitle, @cta, @targeting, @trigger, @delay, @frequency, 1, 1, @tenant, @user, 0, 0, 0, @now, @now); " +
-                "select last_insert_rowid();";
-            cmd.Parameters.AddWithValue("@name", Clip(name, 180));
-            cmd.Parameters.AddWithValue("@targeting", targeting);
-            cmd.Parameters.AddWithValue("@type", type);
-            cmd.Parameters.AddWithValue("@content", content);
-            cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
-            cmd.Parameters.AddWithValue("@subtitle", Nullable(Clip(Opt(o, "SubHeading", Opt(o, "Description")), 500)));
-            cmd.Parameters.AddWithValue("@cta", Nullable(Clip(Opt(o, "ButtonText", Opt(o, "CTAText")), 100)));
-            cmd.Parameters.AddWithValue("@trigger", trigger);
-            cmd.Parameters.AddWithValue("@delay", delay);
-            cmd.Parameters.AddWithValue("@frequency", frequency);
-            cmd.Parameters.AddWithValue("@tenant", viewer.TenantId);
-            cmd.Parameters.AddWithValue("@user", viewer.UserId);
-            cmd.Parameters.AddWithValue("@now", now);
-            newId = Convert.ToInt64(await cmd.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
-        }
-        await using (var cmd = db.CreateCommand())
-        {
-            cmd.CommandText = "update Tenants set PopupCount = (select count(*) from Popups where TenantId = @t) where Id = @t";
-            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        var newId = await InsertPopup(db, viewer.TenantId, viewer.UserId, name, type, o, null, targeting, trigger, delay, frequency, status: 0);
+        await RefreshPopupCount(db, viewer.TenantId);
 
         ctx.Response.Redirect((type == 5 ? "/Popup/Wheel/" : "/Popup/Content/") + newId.ToString(CultureInfo.InvariantCulture));
+    }
+
+    // Creates a popup from template settings, rendering its HTML the same way the editor does.
+    // status 0 = draft, 1 = active. Returns the new popup id.
+    internal static async Task<long> InsertPopup(SqliteConnection db, long tenantId, long userId, string name, long type, JsonElement o,
+        Dictionary<string, object>? layout, string targeting, long trigger, long delay, long frequency, long status)
+    {
+        var content = type == 5
+            ? WheelContent(WheelSettings(o))
+            : layout == null
+                ? JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o })
+                : JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o, layout });
+        var now = Timestamp(DateTime.UtcNow);
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText =
+            "insert into Popups (Name, Type, Status, Content, Title, Subtitle, CallToAction, TargetingRules, Trigger, DelayMs, Frequency, " +
+            "ShowOnMobile, ShowOnDesktop, TenantId, CreatedById, Views, Clicks, Conversions, CreatedAt, UpdatedAt) " +
+            "values (@name, @type, @status, @content, @title, @subtitle, @cta, @targeting, @trigger, @delay, @frequency, 1, 1, @tenant, @user, 0, 0, 0, @now, @now); " +
+            "select last_insert_rowid();";
+        cmd.Parameters.AddWithValue("@name", Clip(name, 180));
+        cmd.Parameters.AddWithValue("@status", status);
+        cmd.Parameters.AddWithValue("@targeting", targeting);
+        cmd.Parameters.AddWithValue("@type", type);
+        cmd.Parameters.AddWithValue("@content", content);
+        cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
+        cmd.Parameters.AddWithValue("@subtitle", Nullable(Clip(Opt(o, "SubHeading", Opt(o, "Description")), 500)));
+        cmd.Parameters.AddWithValue("@cta", Nullable(Clip(Opt(o, "ButtonText", Opt(o, "CTAText")), 100)));
+        cmd.Parameters.AddWithValue("@trigger", trigger);
+        cmd.Parameters.AddWithValue("@delay", delay);
+        cmd.Parameters.AddWithValue("@frequency", frequency);
+        cmd.Parameters.AddWithValue("@tenant", tenantId);
+        cmd.Parameters.AddWithValue("@user", userId);
+        cmd.Parameters.AddWithValue("@now", now);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(), CultureInfo.InvariantCulture);
+    }
+
+    internal static async Task RefreshPopupCount(SqliteConnection db, long tenantId)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "update Tenants set PopupCount = (select count(*) from Popups where TenantId = @t) where Id = @t";
+        cmd.Parameters.AddWithValue("@t", tenantId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    // How many more popups this tenant may create (-1 = unlimited).
+    internal static async Task<long> PopupsRemaining(SqliteConnection db, long tenantId)
+    {
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText =
+            "select ifnull((select p.MaxPopups from Tenants t join SubscriptionPlans p on p.Id = t.SubscriptionPlanId where t.Id = @t), -1), " +
+            "(select count(*) from Popups where TenantId = @t)";
+        cmd.Parameters.AddWithValue("@t", tenantId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return -1;
+        var limit = reader.GetInt64(0);
+        return limit < 0 ? -1 : Math.Max(0, limit - reader.GetInt64(1));
     }
 
     // ----------------------------------------------------------- integrations
