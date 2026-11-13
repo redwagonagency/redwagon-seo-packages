@@ -130,9 +130,9 @@ public sealed class LeadsMiddleware
             return;
         }
 
-        if (ShouldAddMenuLink(ctx, path))
+        if (IsPageView(ctx, path))
         {
-            await AddMenuLink(ctx);
+            await PolishPage(ctx);
             return;
         }
 
@@ -145,19 +145,20 @@ public sealed class LeadsMiddleware
         "<a\\b[^>]*href=\"/admin/Analytics\"[^>]*>.*?</a>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-    // Signed-in page views only; never scripts, APIs or static files.
-    private static bool ShouldAddMenuLink(HttpContext ctx, string path)
+    // Page views only; never scripts, APIs or static files.
+    private static bool IsPageView(HttpContext ctx, string path)
     {
         if (!HttpMethods.IsGet(ctx.Request.Method)) return false;
         if (ctx.Request.Headers.ContainsKey("Upgrade")) return false;
         if (path.Contains('.')) return false;
         if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)) return false;
         if (path.StartsWith("/Popup/GetTenant", StringComparison.OrdinalIgnoreCase)) return false;
-        return ctx.Request.Cookies.ContainsKey(".AspNetCore.Identity.Application");
+        return true;
     }
 
-    private async Task AddMenuLink(HttpContext ctx)
+    private async Task PolishPage(HttpContext ctx)
     {
+        var signedIn = ctx.Request.Cookies.ContainsKey(".AspNetCore.Identity.Application");
         ctx.Request.Headers.Remove("Accept-Encoding");
         var original = ctx.Response.Body;
         using var buffer = new MemoryStream();
@@ -178,8 +179,9 @@ public sealed class LeadsMiddleware
             buffer.Length > 0 && buffer.Length < 2 * 1024 * 1024)
         {
             var html = Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
-            var updated = InjectLeadsLink(html);
-            if (!ReferenceEquals(updated, html))
+            var updated = CleanUpPage(html);
+            if (signedIn) updated = InjectLeadsLink(updated);
+            if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
                 var bytes = Encoding.UTF8.GetBytes(updated);
                 if (ctx.Response.ContentLength != null) ctx.Response.ContentLength = bytes.Length;
@@ -190,6 +192,32 @@ public sealed class LeadsMiddleware
 
         buffer.Position = 0;
         await buffer.CopyToAsync(original);
+    }
+
+    private static readonly Regex TitleTag = new(
+        "<title>(.*?)</title>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+    // Fixes left over from the app's earlier name and unfinished pages. The compiled app
+    // cannot be edited, so its HTML is corrected on the way out.
+    private static string CleanUpPage(string html)
+    {
+        html = html.Replace("support@popupmanagerpro.com", "contact@optinyeti.com", StringComparison.OrdinalIgnoreCase)
+                   .Replace("sales@popupmanagerpro.com", "contact@optinyeti.com", StringComparison.OrdinalIgnoreCase)
+                   .Replace("Popup Manager Pro", "OptinYeti")
+                   .Replace("Popup Manager", "OptinYeti")
+                   .Replace(">?? <strong>Limited Time", "><strong>Limited Time");
+
+        html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Schedule a Demo</a>", "<a href=\"/Home/Demo\"$1>Schedule a Demo</a>");
+        html = Regex.Replace(html, "<a href=\"#\"([^>]*)>FAQ</a>", "<a href=\"/Home/Pricing\"$1>FAQ</a>");
+        html = Regex.Replace(html, "<a href=\"#\"([^>]*)>Video Tutorials</a>", "<a href=\"/Blog\"$1>Video Tutorials</a>");
+
+        return TitleTag.Replace(html, match =>
+        {
+            var title = Regex.Replace(match.Groups[1].Value, "\\s+", " ").Trim();
+            while (title.Contains("OptinYeti - OptinYeti", StringComparison.Ordinal))
+                title = title.Replace("OptinYeti - OptinYeti", "OptinYeti");
+            return "<title>" + title + "</title>";
+        }, 1);
     }
 
     private static string InjectLeadsLink(string html)

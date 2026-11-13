@@ -58,6 +58,10 @@ echo "HOOK_ROW=$(sqlite3 $DB 'select TenantId, Url, IsEnabled from LeadWebhooks'
 echo "TEST_SEND=$(curl -s -b $J -o /dev/null -w '%{redirect_url}' -H "Origin: $T" -X POST $T/admin/Integrations/test | sed 's/.*msg=//') status=$(sqlite3 $DB 'select LastStatus from LeadWebhooks')"
 curl -s -X POST -H 'Content-Type: application/json' -o /dev/null -d '{"popupId":4,"email":"jpw-hook@example.com"}' $T/api/leads/capture; sleep 4
 echo "CAPTURE_FIRES_HOOK=$(sqlite3 $DB 'select LastStatus, LastAttemptAt from LeadWebhooks')"
+pub() { curl -s "$T$1"; }
+echo "TITLES: features=[$(pub /Home/Features | grep -o '<title>[^<]*</title>')] demo=[$(pub /Home/Demo | grep -o '<title>[^<]*</title>')]"
+echo "CONTACT: old_email=$(pub /Home/Contact | grep -c -i 'popupmanagerpro') new_email=$(pub /Home/Contact | grep -o 'contact@optinyeti.com' | wc -l) dead_named=$(pub /Home/Contact | grep -c -E 'href=\"#\"[^>]*>(FAQ|Schedule a Demo|Video Tutorials)')"
+echo "PRICING_QQ=$(pub /Home/Pricing | grep -c '?? <strong>') BLOG_OLD_NAME=$(pub /Blog | grep -c 'Popup Manager') PRICING_OK=$(pub /Home/Pricing | grep -c 'Compare All Features') SCRIPT_OK=$(pub /Popup/GetTenantScript/5 | grep -c 'PopupManager')"
 echo "ADDON_ERRORS=$(docker logs optinyeti-test 2>&1 | grep -c 'OptinYeti.Leads\]')"
 
 docker rm -f optinyeti-test >/dev/null 2>&1
