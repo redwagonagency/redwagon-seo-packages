@@ -50,9 +50,9 @@ internal static class Jobs
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("[OptinYeti.Leads] job file " + file + " could not be renamed: " + ex.Message);
+                Console.Error.WriteLine("[OptinYeti.Leads jobs] job file " + file + " could not be renamed: " + ex.Message);
             }
-            Console.WriteLine("[OptinYeti.Leads] job " + Path.GetFileName(file) + (ok ? " done" : " failed"));
+            Console.WriteLine("[OptinYeti.Leads jobs] job " + Path.GetFileName(file) + (ok ? " done" : " failed"));
         }
     }
 
