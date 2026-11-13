@@ -1223,8 +1223,12 @@ public sealed class LeadsMiddleware
         }
         var root = ParseOptions(content);
         var settings = ParseOptions("{}");
-        var hasSettings = root.ValueKind == JsonValueKind.Object && TryGet(root, "settings", out var stored) && stored.ValueKind == JsonValueKind.Object;
-        if (hasSettings) settings = stored;
+        var hasSettings = false;
+        if (root.ValueKind == JsonValueKind.Object && TryGet(root, "settings", out var stored) && stored.ValueKind == JsonValueKind.Object)
+        {
+            settings = stored;
+            hasSettings = true;
+        }
         var fields = FieldsFor(type);
         ctx.Response.ContentType = "text/html; charset=utf-8";
         ctx.Response.Headers["Cache-Control"] = "no-store";
