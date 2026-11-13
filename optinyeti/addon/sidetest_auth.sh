@@ -16,6 +16,7 @@ sqlite3 "file:/srv/apps/optinyeti/PopupManager.db?mode=ro" ".backup $DB"
 sqlite3 $DB "insert or ignore into Sites (TenantId, Domain, Name, CreatedAt, UpdatedAt) values (5, 'jpw-job.example.com', 'JPW Job', datetime('now'), datetime('now'))"
 mkdir -p $D/jobs && printf '{"job":"launch-kit","tenantId":5,"sites":[{"domain":"jpw-job.example.com","offer":"a free JPW job audit","button":"Run it"},{"domain":"not-registered.example.com","offer":"x"}]}' > $D/jobs/jpw-kit.json
 printf '{"job":"no-such-job"}' > $D/jobs/zz-unknown.json
+mkdir -p $D/downloads && printf '%%PDF-1.4 jpw test' > $D/downloads/jpw-test.pdf
 printf '{"job":"popups","tenantId":5,"domain":"jpw-job.example.com","replace":["JPW Job - Welcome bar"],"popups":[{"name":"JPW Job - Blog banner","type":1,"options":{"Heading":"JPW banner","ButtonText":"Go","DownloadUrl":"https://example.com/jpw.pdf","DownloadText":"Get the PDF"},"layout":{"mode":"inline","selector":".entry-content","afterParagraphs":2,"required":true,"closable":false},"urlTargeting":"jpw-job.example.com/blog","trigger":0,"frequency":0,"status":1},{"name":"JPW Job - Blog banner","type":1,"options":{}}]}' > $D/jobs/jpw-strategy.json
 docker run -d --name optinyeti-test -p 127.0.0.1:3299:80 -v $D:/data \
   -e "ConnectionStrings__DefaultConnection=Data Source=/data/PopupManager.db" \
@@ -170,6 +171,7 @@ echo "JOBS: files=$(ls $D/jobs | tr '\n' ' ') kit_log=$(cat $D/jobs/jpw-kit.done
 echo "JOB_POPUPS: log=$(cat $D/jobs/jpw-strategy.done.log 2>/dev/null | tr '\n' ';') bar_removed=$(sqlite3 $DB "select count(*) from Popups where Name='JPW Job - Welcome bar'") banner=$(sqlite3 $DB "select json_extract(Content,'\$.layout.required')||'/'||json_extract(Content,'\$.layout.afterParagraphs')||'/'||json_extract(TargetingRules,'\$.urlTargeting')||'/'||Frequency from Popups where Name='JPW Job - Blog banner'") download=$(sqlite3 $DB "select count(*) from Popups where Name='JPW Job - Blog banner' and json_extract(Content,'\$.html') like '%href=\"https://example.com/jpw.pdf\"%Get the PDF%'")"
 FREQ_NAMES=$(curl -s $T/Popup/GetTenantPopups/5 | python3 -c "import json,sys;d=json.load(sys.stdin);print(sorted(set(p['frequency'] for p in d)))")
 echo "FREQ_NAMES=$FREQ_NAMES"
+echo "DOWNLOADS: ok=$(curl -s -o /dev/null -w '%{http_code}/%{content_type}' $T/downloads/jpw-test.pdf) missing=$(curl -s -o /dev/null -w '%{http_code}' $T/downloads/nope.pdf) traversal=$(curl -s -o /dev/null -w '%{http_code}' --path-as-is '$T/downloads/../PopupManager.db') notpdf=$(curl -s -o /dev/null -w '%{http_code}' $T/downloads/jpw-test.txt)"
 node -e "
 const fs=require('fs');const src=fs.readFileSync('/tmp/oy_eng.js','utf8');
 global.window={location:{href:'https://x.test/blog/post'},addEventListener(){} };global.document={querySelector:(s)=>s==='.entry-content'?{}:null,getElementById:()=>null,body:{},head:{appendChild(){}},createElement:()=>({style:{},setAttribute(){},appendChild(){},querySelectorAll:()=>[]})};global.navigator={};

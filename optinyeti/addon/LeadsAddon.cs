@@ -71,6 +71,8 @@ public sealed class LeadsMiddleware
 
     private static readonly ConcurrentDictionary<string, (long Window, int Count)> RateWindows = new();
 
+    private static readonly Regex DownloadName = new("^[a-z0-9][a-z0-9-]{0,80}\\.pdf$", RegexOptions.Compiled);
+
     private static readonly string DbPath =
         Environment.GetEnvironmentVariable("OPTINYETI_DB")
         ?? Path.Combine(AppContext.BaseDirectory, "PopupManager.db");
@@ -207,6 +209,24 @@ public sealed class LeadsMiddleware
         if (path.Equals("/css/site.css", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(ctx.Request.Method))
         {
             await RecolorStylesheet(ctx);
+            return;
+        }
+
+        // Hosted lead magnets: PDFs the owner drops in <db folder>/downloads/, served at /downloads/<name>.pdf.
+        if (path.StartsWith("/downloads/", StringComparison.OrdinalIgnoreCase) && HttpMethods.IsGet(ctx.Request.Method))
+        {
+            var name = path["/downloads/".Length..];
+            var file = Path.Combine(Path.GetDirectoryName(DbPath) ?? ".", "downloads", name);
+            if (!DownloadName.IsMatch(name) || !File.Exists(file))
+            {
+                ctx.Response.StatusCode = 404;
+                await ctx.Response.WriteAsync("Not found");
+                return;
+            }
+            ctx.Response.ContentType = "application/pdf";
+            ctx.Response.Headers["Cache-Control"] = "public, max-age=3600";
+            ctx.Response.Headers["Content-Disposition"] = "inline; filename=\"" + name + "\"";
+            await ctx.Response.SendFileAsync(file);
             return;
         }
 
