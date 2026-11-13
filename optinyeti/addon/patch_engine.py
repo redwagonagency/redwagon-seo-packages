@@ -53,7 +53,9 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         });
         return data;
       }
-      function done() {
+      function done(root) {
+        var custom = root && root.getAttribute ? root.getAttribute('data-success') : null;
+        if (custom) { wrapper.innerHTML = custom; return; }
         wrapper.innerHTML = '<div style="text-align:center;padding:30px 10px;">' +
           '<h3 style="font-size:24px;font-weight:700;color:#111827;margin:0 0 10px;">Thank you!</h3>' +
           '<p style="font-size:16px;color:#6b7280;margin:0;">You\'re on the list.</p></div>';
@@ -70,7 +72,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         data.email = email;
         if (!alreadyTracked) self.track('conversion', popup.id, { formName: 'popup' }, data);
         self.submitLead(popup, data);
-        done();
+        done(root);
       }
       wrapper.querySelectorAll('form').forEach(function(form) {
         form.addEventListener('submit', function(e) { e.preventDefault(); handle(form, true); });
