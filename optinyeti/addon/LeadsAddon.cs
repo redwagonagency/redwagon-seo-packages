@@ -729,6 +729,8 @@ public sealed class LeadsMiddleware
 
     private const long SpinWheelType = 5; // needs script to run; not offered until the engine supports it
 
+    private static readonly Regex UnstyledButton = new("<(button|a class=\"btn[^\"]*\")(?![^>]*\\sstyle=)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex HexColor = new("^#[0-9a-fA-F]{3,8}$", RegexOptions.Compiled);
 
     private static JsonElement ParseOptions(string json)
@@ -834,8 +836,10 @@ public sealed class LeadsMiddleware
                               codeBg + ";color:" + codeText + ";\">" + H(Opt(o, "CouponCode", "WELCOME")) + "</div>";
                 var description = Opt(o, "Description");
                 var value = Opt(o, "DiscountValue");
-                var top = Heading(Opt(o, "Heading")) +
-                          (value.Length == 0 ? "" : "<p style=\"font-size:34px;font-weight:800;margin:0 0 12px;color:inherit;\">" + H(value) + "</p>");
+                var heading = Opt(o, "Heading");
+                // Skip the big discount line when the heading already states a number.
+                var top = Heading(heading) +
+                          (value.Length == 0 || heading.Any(char.IsDigit) ? "" : "<p style=\"font-size:34px;font-weight:800;margin:0 0 12px;color:inherit;\">" + H(value) + "</p>");
                 if (!Bool(o, "RequireEmail"))
                     return Shell(bg, TextOn(bg), top + codeBox + Lead(description));
                 var reveal = "<div style=\"text-align:center;padding:30px 10px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;\"><h3 style=\"font-size:22px;margin:0 0 16px;color:#0B1F2B;\">Here is your code</h3>" +
@@ -870,7 +874,9 @@ public sealed class LeadsMiddleware
             case 4: // inline call to action
             {
                 var bg = ColorOpt(o, "BackgroundColor", "#F3F9F9");
-                return Shell(bg, TextOn(bg), Opt(o, "Content"));
+                var inner = UnstyledButton.Replace(Opt(o, "Content"),
+                    m => "<" + m.Groups[1].Value + " style=\"" + ButtonStyle("#0F6B6B").Replace("display:block;width:100%;", "display:inline-block;margin-top:14px;") + "\"");
+                return Shell(bg, TextOn(bg), inner);
             }
             default: // message
             {
