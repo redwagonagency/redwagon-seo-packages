@@ -30,3 +30,15 @@ footer:not(#oy) a:hover{color:#fff !important;}
 :focus-visible{outline:3px solid var(--oy-thaw);outline-offset:2px;}
 /* Template thumbnails fill their frame */
 img[src^="/img/templates/"]{width:100%;height:auto;display:block;}
+
+/* Legacy Bootstrap screens (popup edit and friends) ship their own purple gradient styles. */
+body:has(> nav.navbar.fixed-top){background:#EAF6F7 !important;background-image:none !important;font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;}
+body:has(> nav.navbar.fixed-top) .card-header{background:#0B1F2B !important;background-image:none !important;color:#fff !important;}
+body:has(> nav.navbar.fixed-top) .btn-primary{background:#0F6B6B !important;background-image:none !important;border-color:#0F6B6B !important;}
+body:has(> nav.navbar.fixed-top) .btn-primary:hover{background:#0a4d4d !important;border-color:#0a4d4d !important;}
+body:has(> nav.navbar.fixed-top) h1,body:has(> nav.navbar.fixed-top) h2,body:has(> nav.navbar.fixed-top) h3,body:has(> nav.navbar.fixed-top) h4,body:has(> nav.navbar.fixed-top) h5{font-family:"Baloo 2",system-ui,sans-serif;}
+body > nav.navbar.fixed-top{background:#fff !important;border-bottom:1px solid #cfe8e6;}
+body > nav.navbar.fixed-top .navbar-brand{font-family:"Baloo 2",system-ui,sans-serif;font-weight:700;color:#0B1F2B !important;display:inline-flex;align-items:center;gap:8px;}
+body > nav.navbar.fixed-top .navbar-brand i{display:none;}
+body > nav.navbar.fixed-top .navbar-brand::before{content:"";width:30px;height:30px;border-radius:50%;background:url(/img/yeti-logo.png) center/cover no-repeat;}
+body:has(> nav.navbar.fixed-top) .form-control:focus,body:has(> nav.navbar.fixed-top) .form-select:focus{border-color:#0F6B6B;box-shadow:0 0 0 .2rem rgba(15,107,107,.2);}
