@@ -767,7 +767,7 @@ public sealed class LeadsMiddleware
 
     private static readonly string[] WheelColors = { "#0F6B6B", "#FF8A3D", "#4DD9D2", "#0B1F2B", "#FACC15", "#EAF6F7" };
 
-    private sealed record Prize(string Label, string Code);
+    private sealed record Prize(string Label, string Code, double Weight = 1);
 
     // Prizes come from the template's settings when it lists any; otherwise a sensible starter set.
     private static List<Prize> WheelPrizes(JsonElement o)
@@ -783,23 +783,29 @@ public sealed class LeadsMiddleware
                 foreach (var item in property.Value.EnumerateArray())
                 {
                     string label = "", code = "";
+                    double weight = 1;
                     if (item.ValueKind == JsonValueKind.String) label = item.GetString() ?? "";
                     else if (item.ValueKind == JsonValueKind.Object)
                     {
                         foreach (var field in item.EnumerateObject())
                         {
-                            if (field.Value.ValueKind != JsonValueKind.String) continue;
                             var name = field.Name.ToLowerInvariant();
+                            if (field.Value.ValueKind == JsonValueKind.Number && name is "probability" or "weight" or "chance")
+                            {
+                                if (field.Value.TryGetDouble(out var w) && w >= 0) weight = w;
+                                continue;
+                            }
+                            if (field.Value.ValueKind != JsonValueKind.String) continue;
                             if (label.Length == 0 && name is "label" or "text" or "name" or "title") label = field.Value.GetString() ?? "";
-                            else if (code.Length == 0 && name.Contains("code")) code = field.Value.GetString() ?? "";
+                            else if (code.Length == 0 && (name == "value" || name.Contains("code"))) code = field.Value.GetString() ?? "";
                         }
                     }
                     label = Clip(label.Trim(), 24);
-                    if (label.Length > 0 && prizes.Count < 12) prizes.Add(new Prize(label, Clip(code.Trim(), 30)));
+                    if (label.Length > 0 && prizes.Count < 12) prizes.Add(new Prize(label, Clip(code.Trim(), 30), weight));
                 }
             }
         }
-        if (prizes.Count >= 2) return prizes;
+        if (prizes.Count >= 2 && prizes.Sum(p => p.Weight) > 0) return prizes;
         return new List<Prize>
         {
             new("10% off", "SPIN10"), new("Free shipping", "FREESHIP"), new("5% off", "SPIN5"),
@@ -945,7 +951,7 @@ public sealed class LeadsMiddleware
                         .Append("deg);\"><span style=\"position:absolute;left:-42px;top:-104px;width:84px;text-align:center;font-size:12px;line-height:1.15;font-weight:700;color:")
                         .Append(TextOn(color)).Append(";\">").Append(H(prizes[i].Label)).Append("</span></span>");
                 }
-                var data = JsonSerializer.Serialize(prizes.Select(p => new { label = p.Label, code = p.Code }));
+                var data = JsonSerializer.Serialize(prizes.Select(p => new { label = p.Label, code = p.Code, weight = p.Weight }));
                 var wheel = "<div style=\"position:relative;width:240px;height:240px;margin:0 auto 22px;\">" +
                             "<div data-oy-wheel-disc style=\"position:relative;width:100%;height:100%;box-sizing:border-box;border-radius:50%;border:6px solid #0B1F2B;transition:transform 4s cubic-bezier(.17,.67,.2,1);background:conic-gradient(" +
                             stops + ");\">" + labels + "</div>" +
@@ -1163,7 +1169,10 @@ public sealed class LeadsMiddleware
     var prizes = [];
     try { prizes = JSON.parse(box.getAttribute('data-oy-wheel')) || []; } catch (e) {}
     if (!disc || !prizes.length) return;
-    var i = Math.floor(Math.random() * prizes.length), step = 360 / prizes.length;
+    var total = 0, i = 0, step = 360 / prizes.length;
+    prizes.forEach(function(p){ total += (typeof p.weight === 'number' ? p.weight : 1); });
+    var roll = Math.random() * total;
+    for (var k = 0; k < prizes.length; k++) { roll -= (typeof prizes[k].weight === 'number' ? prizes[k].weight : 1); if (roll < 0) { i = k; break; } }
     var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (still) disc.style.transition = 'none';
     disc.style.transform = 'rotate(' + (1800 - (i + 0.5) * step) + 'deg)';

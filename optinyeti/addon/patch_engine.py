@@ -90,7 +90,10 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
       var prizes = [];
       try { prizes = JSON.parse(box.getAttribute('data-oy-wheel')) || []; } catch (e) {}
       if (!disc || !prizes.length) return;
-      var i = Math.floor(Math.random() * prizes.length), step = 360 / prizes.length;
+      var total = 0, i = 0, step = 360 / prizes.length;
+    prizes.forEach(function(p){ total += (typeof p.weight === 'number' ? p.weight : 1); });
+    var roll = Math.random() * total;
+    for (var k = 0; k < prizes.length; k++) { roll -= (typeof prizes[k].weight === 'number' ? prizes[k].weight : 1); if (roll < 0) { i = k; break; } }
       var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       if (still) disc.style.transition = 'none';
       disc.style.transform = 'rotate(' + (1800 - (i + 0.5) * step) + 'deg)';
