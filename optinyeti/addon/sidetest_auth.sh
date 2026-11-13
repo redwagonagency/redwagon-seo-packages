@@ -67,13 +67,13 @@ echo "OLD_NAMES: popupx=$(for u in / /Home/Features /Home/Pricing /Home/Demo /Ho
 echo "APP_GTM_COPIES=$(pub /Home/Pricing | grep -o 'googletagmanager.com/gtm.js' | wc -l) (expected 0 here; the web server adds one in production)"
 # ---- templates
 curl -s -b $J -o /tmp/oy_gal.html $T/Popup/SelectTemplate
-echo "GALLERY=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/Popup/SelectTemplate) cards=$(grep -o 'class="tpl"' /tmp/oy_gal.html | wc -l) db_usable=$(sqlite3 $DB 'select count(*) from PopupTemplates where IsActive=1 and Type<>5') thumbs=$(grep -o 'src="/img/templates/' /tmp/oy_gal.html | wc -l) sections=$(grep -o '<section id=' /tmp/oy_gal.html | wc -l) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/Popup/SelectTemplate)"
+echo "GALLERY=$(curl -s -b $J -o /dev/null -w '%{http_code}' $T/Popup/SelectTemplate) cards=$(grep -o 'class="tpl"' /tmp/oy_gal.html | wc -l) db_usable=$(sqlite3 $DB 'select count(*) from PopupTemplates where IsActive=1') thumbs=$(grep -o 'src="/img/templates/' /tmp/oy_gal.html | wc -l) sections=$(grep -o '<section id=' /tmp/oy_gal.html | wc -l) unauth=$(curl -s -o /dev/null -w '%{http_code}' $T/Popup/SelectTemplate)"
 use() { curl -s -b $J -o /dev/null -w '%{http_code} %{redirect_url}' -H "Origin: $T" -d "id=$1" $T/Popup/UseTemplate | sed "s#$T##"; }
 sqlite3 $DB "update SubscriptionPlans set MaxPopups=100"
 BEFORE=$(sqlite3 $DB 'select count(*) from Popups')
 echo "USE_NO_ORIGIN=$(curl -s -b $J -o /dev/null -w '%{http_code}' -d id=1 $T/Popup/UseTemplate) USE_UNAUTH=$(curl -s -o /dev/null -w '%{http_code}' -H "Origin: $T" -d id=1 $T/Popup/UseTemplate) rows_added=$(( $(sqlite3 $DB 'select count(*) from Popups') - BEFORE ))"
-echo "USE_SPIN=$(use "$(sqlite3 $DB 'select Id from PopupTemplates where Type=5 limit 1')") USE_MISSING=$(use 999999)"
-for TY in 0 1 2 3 4 6 7; do
+echo "USE_MISSING=$(use 999999) SPIN_OPTIONS=$(sqlite3 $DB 'select substr(TypeSpecificOptions,1,300) from PopupTemplates where Id=6')"
+for TY in 0 1 2 3 4 5 6 7; do
   TID=$(sqlite3 $DB "select Id from PopupTemplates where IsActive=1 and Type=$TY order by Id desc limit 1")
   [ -z "$TID" ] && { echo "USE_TYPE_$TY=no template"; continue; }
   R=$(use $TID); NID=$(echo "$R" | grep -o '[0-9]*$')
@@ -82,6 +82,7 @@ done
 EID=$(sqlite3 $DB "select max(Id) from Popups where Type=1")
 echo "EMAIL_POPUP: form=$(sqlite3 $DB "select Content from Popups where Id=$EID" | grep -c 'type=..\"email') success=$(sqlite3 $DB "select Content from Popups where Id=$EID" | grep -c 'data-success') script_tags=$(sqlite3 $DB "select count(*) from Popups where Id>$BEFORE and Content like '%<script%'")"
 sqlite3 $DB "update Popups set Status=(select Status from Popups where Id=4) where Id=$EID"
+echo "WHEEL: popup=$(sqlite3 $DB "select count(*) from Popups where Type=5 and Content like '%data-oy-wheel-disc%' and Content like '%conic-gradient%'") engine=$(curl -s $T/js/popup-engine.js | grep -c 'spinWheel')"
 echo "SERVED=$(curl -s $T/Popup/GetTenantPopups/5 | grep -o "\"id\":$EID" | head -1) engine_success_hook=$(curl -s $T/js/popup-engine.js | grep -c 'data-success')"
 echo "TENANT_COUNT=$(sqlite3 $DB 'select PopupCount from Tenants where Id=5') actual=$(sqlite3 $DB 'select count(*) from Popups where TenantId=5')"
 sqlite3 $DB "update SubscriptionPlans set MaxPopups=3"

@@ -763,7 +763,49 @@ public sealed class LeadsMiddleware
 
     // -------------------------------------------------------------- templates
 
-    private const long SpinWheelType = 5; // needs script to run; not offered until the engine supports it
+    private const long SpinWheelType = -1; // no template type is hidden any more (-1 matches nothing)
+
+    private static readonly string[] WheelColors = { "#0F6B6B", "#FF8A3D", "#4DD9D2", "#0B1F2B", "#FACC15", "#EAF6F7" };
+
+    private sealed record Prize(string Label, string Code);
+
+    // Prizes come from the template's settings when it lists any; otherwise a sensible starter set.
+    private static List<Prize> WheelPrizes(JsonElement o)
+    {
+        var prizes = new List<Prize>();
+        if (o.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in o.EnumerateObject())
+            {
+                if (property.Value.ValueKind != JsonValueKind.Array) continue;
+                if (!property.Name.Contains("segment", StringComparison.OrdinalIgnoreCase) &&
+                    !property.Name.Contains("prize", StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var item in property.Value.EnumerateArray())
+                {
+                    string label = "", code = "";
+                    if (item.ValueKind == JsonValueKind.String) label = item.GetString() ?? "";
+                    else if (item.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var field in item.EnumerateObject())
+                        {
+                            if (field.Value.ValueKind != JsonValueKind.String) continue;
+                            var name = field.Name.ToLowerInvariant();
+                            if (label.Length == 0 && name is "label" or "text" or "name" or "title") label = field.Value.GetString() ?? "";
+                            else if (code.Length == 0 && name.Contains("code")) code = field.Value.GetString() ?? "";
+                        }
+                    }
+                    label = Clip(label.Trim(), 24);
+                    if (label.Length > 0 && prizes.Count < 12) prizes.Add(new Prize(label, Clip(code.Trim(), 30)));
+                }
+            }
+        }
+        if (prizes.Count >= 2) return prizes;
+        return new List<Prize>
+        {
+            new("10% off", "SPIN10"), new("Free shipping", "FREESHIP"), new("5% off", "SPIN5"),
+            new("15% off", "SPIN15"), new("Free gift", "GIFT"), new("20% off", "SPIN20")
+        };
+    }
 
     private static readonly Regex UnstyledButton = new("<(button|a class=\"btn[^\"]*\")(?![^>]*\\sstyle=)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -884,6 +926,36 @@ public sealed class LeadsMiddleware
                     "<form style=\"margin:0;\" data-success=\"" + H(reveal) + "\">" +
                     "<input type=\"email\" name=\"email\" required placeholder=\"you@company.com\" autocomplete=\"email\" style=\"" + FieldStyle + "\">" +
                     "<button type=\"submit\" style=\"" + ButtonStyle("#0F6B6B") + "\">" + H(Opt(o, "ButtonText", "Get my code")) + "</button></form>");
+            }
+            case 5: // spin wheel
+            {
+                var bg = ColorOpt(o, "BackgroundColor", "#ffffff");
+                var prizes = WheelPrizes(o);
+                var step = 360.0 / prizes.Count;
+                var stops = new StringBuilder();
+                var labels = new StringBuilder();
+                for (var i = 0; i < prizes.Count; i++)
+                {
+                    var color = WheelColors[i % WheelColors.Length];
+                    if (i > 0) stops.Append(',');
+                    stops.Append(color).Append(' ').Append((i * step).ToString("0.##", CultureInfo.InvariantCulture)).Append("deg ")
+                        .Append(((i + 1) * step).ToString("0.##", CultureInfo.InvariantCulture)).Append("deg");
+                    labels.Append("<span style=\"position:absolute;left:50%;top:50%;width:0;height:0;transform:rotate(")
+                        .Append(((i + 0.5) * step).ToString("0.##", CultureInfo.InvariantCulture))
+                        .Append("deg);\"><span style=\"position:absolute;left:-42px;top:-104px;width:84px;text-align:center;font-size:12px;line-height:1.15;font-weight:700;color:")
+                        .Append(TextOn(color)).Append(";\">").Append(H(prizes[i].Label)).Append("</span></span>");
+                }
+                var data = JsonSerializer.Serialize(prizes.Select(p => new { label = p.Label, code = p.Code }));
+                var wheel = "<div style=\"position:relative;width:240px;height:240px;margin:0 auto 22px;\">" +
+                            "<div data-oy-wheel-disc style=\"position:relative;width:100%;height:100%;box-sizing:border-box;border-radius:50%;border:6px solid #0B1F2B;transition:transform 4s cubic-bezier(.17,.67,.2,1);background:conic-gradient(" +
+                            stops + ");\">" + labels + "</div>" +
+                            "<div style=\"position:absolute;left:50%;top:-8px;margin-left:-11px;width:0;height:0;border-left:11px solid transparent;border-right:11px solid transparent;border-top:20px solid #FF8A3D;\"></div>" +
+                            "<div style=\"position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:#0B1F2B;border:3px solid #ffffff;box-sizing:border-box;\"></div></div>";
+                return Shell(bg, TextOn(bg),
+                    "<div data-oy-wheel=\"" + H(data) + "\">" + Heading(Opt(o, "Heading", "Spin to win")) + Lead(Opt(o, "SubHeading")) + wheel +
+                    "<form data-oy-spin style=\"margin:0;\">" +
+                    "<input type=\"email\" name=\"email\" required placeholder=\"you@company.com\" autocomplete=\"email\" style=\"" + FieldStyle + "\">" +
+                    "<button type=\"submit\" style=\"" + ButtonStyle(ColorOpt(o, "ButtonColor", "#0F6B6B")) + "\">" + H(Opt(o, "ButtonText", "Spin the wheel")) + "</button></form></div>");
             }
             case 6: // video
             {
@@ -1086,6 +1158,33 @@ public sealed class LeadsMiddleware
   if (!dlg || !dlg.showModal) return;
   var stage = dlg.querySelector('.pv-stage');
   var title = dlg.querySelector('.pv-title');
+  function spin(form){
+    var box = stage.querySelector('[data-oy-wheel]'), disc = stage.querySelector('[data-oy-wheel-disc]');
+    var prizes = [];
+    try { prizes = JSON.parse(box.getAttribute('data-oy-wheel')) || []; } catch (e) {}
+    if (!disc || !prizes.length) return;
+    var i = Math.floor(Math.random() * prizes.length), step = 360 / prizes.length;
+    var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) disc.style.transition = 'none';
+    disc.style.transform = 'rotate(' + (1800 - (i + 0.5) * step) + 'deg)';
+    form.style.visibility = 'hidden';
+    setTimeout(function(){
+      if (!form.isConnected) return;
+      var out = document.createElement('div');
+      out.style.cssText = 'text-align:center;';
+      var h = document.createElement('p');
+      h.style.cssText = 'font-size:20px;font-weight:700;margin:0 0 10px;color:inherit;';
+      h.textContent = 'You won: ' + prizes[i].label;
+      out.appendChild(h);
+      if (prizes[i].code) {
+        var c = document.createElement('div');
+        c.style.cssText = 'display:inline-block;padding:10px 22px;border:2px dashed #0B1F2B;border-radius:10px;font-size:20px;font-weight:700;letter-spacing:2px;background:#ffffff;color:#0B1F2B;';
+        c.textContent = prizes[i].code;
+        out.appendChild(c);
+      }
+      form.replaceWith(out);
+    }, still ? 50 : 4200);
+  }
   function open(card){
     var t = card.querySelector('template');
     stage.innerHTML = t ? t.innerHTML : '';
@@ -1098,6 +1197,7 @@ public sealed class LeadsMiddleware
     stage.querySelectorAll('form').forEach(function(f){
       f.addEventListener('submit', function(e){
         e.preventDefault();
+        if (f.hasAttribute('data-oy-spin')) { spin(f); return; }
         var s = f.getAttribute('data-success');
         if (s) stage.innerHTML = s;
       });

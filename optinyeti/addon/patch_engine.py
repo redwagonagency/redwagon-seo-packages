@@ -72,6 +72,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         data.email = email;
         if (!alreadyTracked) self.track('conversion', popup.id, { formName: 'popup' }, data);
         self.submitLead(popup, data);
+        if (root.hasAttribute && root.hasAttribute('data-oy-spin')) { self.spinWheel(wrapper, root); return; }
         done(root);
       }
       wrapper.querySelectorAll('form').forEach(function(form) {
@@ -82,6 +83,34 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
           btn.addEventListener('click', function(e) { e.preventDefault(); handle(wrapper, false); });
         });
       }
+    },
+
+    spinWheel: function(wrapper, form) {
+      var box = wrapper.querySelector('[data-oy-wheel]'), disc = wrapper.querySelector('[data-oy-wheel-disc]');
+      var prizes = [];
+      try { prizes = JSON.parse(box.getAttribute('data-oy-wheel')) || []; } catch (e) {}
+      if (!disc || !prizes.length) return;
+      var i = Math.floor(Math.random() * prizes.length), step = 360 / prizes.length;
+      var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (still) disc.style.transition = 'none';
+      disc.style.transform = 'rotate(' + (1800 - (i + 0.5) * step) + 'deg)';
+      form.style.visibility = 'hidden';
+      setTimeout(function() {
+        if (!form.parentNode) return;
+        var out = document.createElement('div');
+        out.style.cssText = 'text-align:center;';
+        var h = document.createElement('p');
+        h.style.cssText = 'font-size:20px;font-weight:700;margin:0 0 10px;color:inherit;';
+        h.textContent = 'You won: ' + prizes[i].label;
+        out.appendChild(h);
+        if (prizes[i].code) {
+          var c = document.createElement('div');
+          c.style.cssText = 'display:inline-block;padding:10px 22px;border:2px dashed #0B1F2B;border-radius:10px;font-size:20px;font-weight:700;letter-spacing:2px;background:#ffffff;color:#0B1F2B;';
+          c.textContent = prizes[i].code;
+          out.appendChild(c);
+        }
+        form.parentNode.replaceChild(out, form);
+      }, still ? 50 : 4200);
     },
 
     submitLead: function(popup, data) {
