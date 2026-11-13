@@ -126,6 +126,11 @@ public sealed class LeadsMiddleware
                 await HandleTestPage(ctx, path);
                 return;
             }
+            if (path.StartsWith("/Popup/Content/", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleContentEditor(ctx, path);
+                return;
+            }
             if (path.StartsWith("/Popup/Wheel/", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleWheelEditor(ctx, path);
@@ -266,7 +271,9 @@ public sealed class LeadsMiddleware
                     const string pill = "color:#fff;font-weight:600;padding:12px 20px;border-radius:999px;text-decoration:none;box-shadow:0 8px 24px rgba(11,31,43,.25);";
                     var links = "<div style=\"position:fixed;right:22px;bottom:22px;z-index:50;display:flex;gap:10px;\">" +
                                 "<a href=\"/Popup/Test/" + editId + "\" style=\"background:#0F6B6B;" + pill + "\">A/B test</a>" +
-                                (await IsWheelEditPage(pagePath) ? "<a href=\"/Popup/Wheel/" + editId + "\" style=\"background:#FF8A3D;" + pill + "\">Edit wheel prizes</a>" : "") +
+                                (await IsWheelEditPage(pagePath)
+                                    ? "<a href=\"/Popup/Wheel/" + editId + "\" style=\"background:#FF8A3D;" + pill + "\">Edit wheel prizes</a>"
+                                    : "<a href=\"/Popup/Content/" + editId + "\" style=\"background:#FF8A3D;" + pill + "\">Edit words and colors</a>") +
                                 "</div>";
                     updated = updated.Insert(at, links);
                 }
@@ -939,6 +946,27 @@ public sealed class LeadsMiddleware
         "<div style=\"margin:-40px;padding:46px 38px 40px;border-radius:12px;text-align:center;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:" +
         background + ";color:" + text + ";\">" + inner + "</div>";
 
+    // Optional picture across the top of a popup.
+    private static string Hero(JsonElement o)
+    {
+        var url = SafeUrl(Opt(o, "ImageUrl"), "");
+        return url.Length == 0
+            ? ""
+            : "<img src=\"" + H(url) + "\" alt=\"\" style=\"display:block;width:calc(100% + 76px);max-width:none;height:180px;object-fit:cover;margin:-46px -38px 24px;border-radius:12px 12px 0 0;\">";
+    }
+
+    private static readonly Regex YouTubeLink = new("^https?://(?:www\\.|m\\.)?(?:youtube\\.com/(?:watch\\?(?:.*&)?v=|shorts/)|youtu\\.be/)([A-Za-z0-9_-]{6,20})", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex VimeoLink = new("^https?://(?:www\\.)?vimeo\\.com/(\\d{4,14})", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Accepts the link people actually copy from YouTube or Vimeo and returns the embeddable one.
+    private static string EmbedUrl(string url)
+    {
+        var yt = YouTubeLink.Match(url);
+        if (yt.Success) return "https://www.youtube.com/embed/" + yt.Groups[1].Value;
+        var vm = VimeoLink.Match(url);
+        return vm.Success ? "https://player.vimeo.com/video/" + vm.Groups[1].Value : url;
+    }
+
     private static string Heading(string text) =>
         text.Length == 0 ? "" : "<h2 style=\"font-size:27px;line-height:1.2;font-weight:700;margin:0 0 10px;color:inherit;\">" + H(text) + "</h2>";
 
@@ -963,7 +991,7 @@ public sealed class LeadsMiddleware
                            (Bool(o, "CollectPhone") ? "<input type=\"tel\" name=\"phone\" placeholder=\"Phone number\" autocomplete=\"tel\" style=\"" + FieldStyle + "\">" : "") +
                            "<button type=\"submit\" style=\"" + ButtonStyle(button) + "\">" + H(Opt(o, "ButtonText", "Subscribe")) + "</button></form>";
                 var privacy = Opt(o, "PrivacyText");
-                return Shell(bg, text, Heading(Opt(o, "Heading")) + Lead(Opt(o, "SubHeading")) + form +
+                return Shell(bg, text, Hero(o) + Heading(Opt(o, "Heading")) + Lead(Opt(o, "SubHeading")) + form +
                     (privacy.Length == 0 ? "" : "<p style=\"font-size:12px;margin:14px 0 0;opacity:.7;color:inherit;\">" + H(privacy) + "</p>"));
             }
             case 2: // advertising
@@ -971,7 +999,7 @@ public sealed class LeadsMiddleware
                 var bg = ColorOpt(o, "BackgroundColor", "#ffffff");
                 var button = ColorOpt(o, "ButtonColor", "#0F6B6B");
                 var code = Opt(o, "DiscountCode");
-                return Shell(bg, TextOn(bg), Heading(Opt(o, "Heading")) + Lead(Opt(o, "SubHeading")) +
+                return Shell(bg, TextOn(bg), Hero(o) + Heading(Opt(o, "Heading")) + Lead(Opt(o, "SubHeading")) +
                     (code.Length == 0 ? "" : "<p style=\"font-size:15px;margin:0 0 18px;color:inherit;\">Use code <strong style=\"letter-spacing:1px;\">" + H(code) + "</strong></p>") +
                     "<a class=\"cta-button\" href=\"" + H(SafeUrl(Opt(o, "ButtonUrl", "#"))) + "\" style=\"" + ButtonStyle(button) + "\">" + H(Opt(o, "ButtonText", "Learn more")) + "</a>");
             }
@@ -986,7 +1014,7 @@ public sealed class LeadsMiddleware
                 var value = Opt(o, "DiscountValue");
                 var heading = Opt(o, "Heading");
                 // Skip the big discount line when the heading already states a number.
-                var top = Heading(heading) +
+                var top = Hero(o) + Heading(heading) +
                           (value.Length == 0 || heading.Any(char.IsDigit) ? "" : "<p style=\"font-size:34px;font-weight:800;margin:0 0 12px;color:inherit;\">" + H(value) + "</p>");
                 if (!Bool(o, "RequireEmail"))
                     return Shell(bg, TextOn(bg), top + codeBox + Lead(description));
@@ -1029,10 +1057,11 @@ public sealed class LeadsMiddleware
             }
             case 6: // video
             {
-                var url = Opt(o, "VideoUrl");
+                var url = EmbedUrl(Opt(o, "VideoUrl"));
                 var embeddable = url.StartsWith("https://www.youtube.com/embed/", StringComparison.Ordinal) ||
                                  url.StartsWith("https://www.youtube-nocookie.com/embed/", StringComparison.Ordinal) ||
                                  url.StartsWith("https://player.vimeo.com/video/", StringComparison.Ordinal);
+                if (url.Contains("YOUR_VIDEO_ID", StringComparison.Ordinal)) embeddable = false;
                 var player = embeddable
                     ? "<div style=\"position:relative;height:0;padding-bottom:56.25%;margin:0 0 20px;border-radius:10px;overflow:hidden;background:#000;\"><iframe src=\"" + H(url) +
                       "\" title=\"Video\" allow=\"encrypted-media; picture-in-picture\" allowfullscreen style=\"position:absolute;top:0;left:0;width:100%;height:100%;border:0;\"></iframe></div>"
@@ -1104,6 +1133,191 @@ public sealed class LeadsMiddleware
     }
 
     private const string PickCookie = "oy_tpl";
+
+    // ----------------------------------------------------------- content editor
+
+    private sealed record Field(string Key, string Label, string Kind, string Hint = "");
+
+    private static Field[] FieldsFor(long type) => type switch
+    {
+        1 => new[]
+        {
+            new Field("Heading", "Headline", "text"), new Field("SubHeading", "Line under the headline", "text"),
+            new Field("ButtonText", "Button text", "text"), new Field("SuccessMessage", "Thank-you message", "text"),
+            new Field("PrivacyText", "Small print", "text"), new Field("ImageUrl", "Picture across the top", "url", "Paste an image address. Leave empty for no picture."),
+            new Field("CollectName", "Ask for a name", "bool"), new Field("CollectPhone", "Ask for a phone number", "bool"),
+            new Field("BackgroundColor", "Background", "color"), new Field("ButtonColor", "Button", "color")
+        },
+        2 => new[]
+        {
+            new Field("Heading", "Headline", "text"), new Field("SubHeading", "Line under the headline", "text"),
+            new Field("DiscountCode", "Discount code", "text", "Optional."), new Field("ButtonText", "Button text", "text"),
+            new Field("ButtonUrl", "Button link", "url", "Where the button takes people."),
+            new Field("ImageUrl", "Picture across the top", "url", "Paste an image address. Leave empty for no picture."),
+            new Field("BackgroundColor", "Background", "color"), new Field("ButtonColor", "Button", "color")
+        },
+        7 => new[]
+        {
+            new Field("Heading", "Headline", "text"), new Field("DiscountValue", "Offer", "text", "For example 15% OFF."),
+            new Field("CouponCode", "Coupon code", "text", "Use a code that exists in your store."), new Field("Description", "Line under the code", "text"),
+            new Field("RequireEmail", "Ask for an email before showing the code", "bool"), new Field("ButtonText", "Button text", "text"),
+            new Field("ImageUrl", "Picture across the top", "url", "Paste an image address. Leave empty for no picture."),
+            new Field("BackgroundColor", "Background", "color"), new Field("CodeBackgroundColor", "Code box", "color"), new Field("CodeTextColor", "Code text", "color")
+        },
+        6 => new[]
+        {
+            new Field("VideoUrl", "Video link", "url", "A YouTube or Vimeo link. The normal watch link works."),
+            new Field("Heading", "Headline", "text"), new Field("Description", "Line under the headline", "text"),
+            new Field("ShowCTA", "Show a button under the video", "bool"), new Field("CTAText", "Button text", "text"), new Field("CTAUrl", "Button link", "url")
+        },
+        3 => new[] { new Field("ImageUrl", "Image", "url", "Paste the address of the image to show.") },
+        4 => new[] { new Field("Content", "Content (HTML)", "html"), new Field("BackgroundColor", "Background", "color") },
+        0 => new[] { new Field("Message", "Message", "text"), new Field("MessageType", "Style", "select") },
+        _ => Array.Empty<Field>()
+    };
+
+    private static async Task HandleContentEditor(HttpContext ctx, string path)
+    {
+        var isPost = HttpMethods.IsPost(ctx.Request.Method);
+        if (!isPost && !HttpMethods.IsGet(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        if (isPost && !SameOrigin(ctx))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+        if (!long.TryParse(path["/Popup/Content/".Length..].TrimEnd('/'), NumberStyles.None, CultureInfo.InvariantCulture, out var popupId))
+        {
+            ctx.Response.StatusCode = 404;
+            return;
+        }
+
+        await using var db = await Open();
+        string name = "", content = "";
+        long type = -1;
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Name, Content, Type from Popups where Id = @id and (@all = 1 or TenantId = @t)";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            cmd.Parameters.AddWithValue("@all", viewer.SeesAllTenants ? 1 : 0);
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                name = Text(reader, 0);
+                content = Text(reader, 1);
+                type = reader.GetInt64(2);
+            }
+        }
+        var id = popupId.ToString(CultureInfo.InvariantCulture);
+        if (type == 5)
+        {
+            ctx.Response.Redirect("/Popup/Wheel/" + id);
+            return;
+        }
+        var root = ParseOptions(content);
+        var hasSettings = root.ValueKind == JsonValueKind.Object && TryGet(root, "settings", out var settings) && settings.ValueKind == JsonValueKind.Object;
+        if (!hasSettings) settings = ParseOptions("{}");
+        var fields = FieldsFor(type);
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        if (type < 0 || !hasSettings || fields.Length == 0)
+        {
+            ctx.Response.StatusCode = type < 0 ? 404 : 200;
+            await ctx.Response.WriteAsync(Chrome("Templates") + (type < 0
+                ? "<div class=\"empty\"><h2>Popup not found</h2><p><a href=\"/Popup\">Back to your popups</a></p></div>"
+                : "<div class=\"empty\"><h2>This popup was not made from a template</h2><p>Its content is custom, so there are no simple fields for it. Use the <a href=\"/Popup/Designer/" + id +
+                  "\">designer</a>, or <a href=\"/Popup/SelectTemplate\">start a new popup from a template</a>.</p></div>") + PageBottom);
+            return;
+        }
+
+        if (isPost)
+        {
+            var form = await ctx.Request.ReadFormAsync();
+            var next = new Dictionary<string, object>();
+            foreach (var property in settings.EnumerateObject())
+                next[property.Name] = property.Value.Clone();
+            foreach (var field in fields)
+            {
+                var raw = form[field.Key].ToString();
+                switch (field.Kind)
+                {
+                    case "bool": next[field.Key] = raw == "1"; break;
+                    case "color": next[field.Key] = HexColor.IsMatch(raw) ? raw : Opt(settings, field.Key, "#ffffff"); break;
+                    case "url":
+                        raw = raw.Trim();
+                        next[field.Key] = raw.Length == 0 ? "" : SafeUrl(raw, "");
+                        break;
+                    case "select": next[field.Key] = raw is "success" or "warning" or "error" ? raw : "info"; break;
+                    case "html": next[field.Key] = raw.Length <= 20000 ? raw : raw[..20000]; break;
+                    default: next[field.Key] = Clip(raw.Trim(), 300); break;
+                }
+            }
+            var o = ParseOptions(JsonSerializer.Serialize(next));
+            await using (var cmd = db.CreateCommand())
+            {
+                cmd.CommandText = "update Popups set Content = @c, Title = @title, Subtitle = @sub, CallToAction = @cta, UpdatedAt = @now where Id = @id";
+                cmd.Parameters.AddWithValue("@c", JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o }));
+                cmd.Parameters.AddWithValue("@title", Nullable(Clip(Opt(o, "Heading", Opt(o, "Message")), 300)));
+                cmd.Parameters.AddWithValue("@sub", Nullable(Clip(Opt(o, "SubHeading", Opt(o, "Description")), 500)));
+                cmd.Parameters.AddWithValue("@cta", Nullable(Clip(Opt(o, "ButtonText", Opt(o, "CTAText")), 100)));
+                cmd.Parameters.AddWithValue("@now", Timestamp(DateTime.UtcNow));
+                cmd.Parameters.AddWithValue("@id", popupId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            ctx.Response.Redirect("/Popup/Content/" + id + "?msg=saved");
+            return;
+        }
+
+        var inputs = new StringBuilder();
+        var colors = new StringBuilder();
+        foreach (var field in fields)
+        {
+            var key = H(field.Key);
+            var hint = field.Hint.Length == 0 ? "" : "<span class=\"hint\">" + H(field.Hint) + "</span>";
+            switch (field.Kind)
+            {
+                case "bool":
+                    inputs.Append("<label class=\"check\"><input type=\"checkbox\" name=\"").Append(key).Append("\" value=\"1\"").Append(Bool(settings, field.Key) ? " checked" : "").Append("> ").Append(H(field.Label)).Append("</label>");
+                    break;
+                case "color":
+                    colors.Append("<label>").Append(H(field.Label)).Append(" <input type=\"color\" name=\"").Append(key).Append("\" value=\"").Append(H(ColorOpt(settings, field.Key, "#ffffff"))).Append("\"></label>");
+                    break;
+                case "select":
+                    inputs.Append("<label for=\"f-").Append(key).Append("\">").Append(H(field.Label)).Append("</label><select id=\"f-").Append(key).Append("\" name=\"").Append(key).Append("\">");
+                    foreach (var option in new[] { "info", "success", "warning", "error" })
+                        inputs.Append("<option value=\"").Append(option).Append('"').Append(Opt(settings, field.Key, "info") == option ? " selected" : "").Append('>').Append(char.ToUpperInvariant(option[0])).Append(option[1..]).Append("</option>");
+                    inputs.Append("</select>");
+                    break;
+                case "html":
+                    inputs.Append("<label for=\"f-").Append(key).Append("\">").Append(H(field.Label)).Append("</label><textarea id=\"f-").Append(key).Append("\" name=\"").Append(key).Append("\" rows=\"8\" spellcheck=\"false\">").Append(H(Opt(settings, field.Key))).Append("</textarea>");
+                    break;
+                default:
+                    inputs.Append("<label for=\"f-").Append(key).Append("\">").Append(H(field.Label)).Append("</label><input id=\"f-").Append(key).Append("\" name=\"").Append(key)
+                        .Append("\" maxlength=\"300\" value=\"").Append(H(Opt(settings, field.Key))).Append("\">").Append(hint);
+                    break;
+            }
+        }
+
+        var body = new StringBuilder();
+        body.Append("<div class=\"head\"><div><h1>Words and colors</h1><p class=\"sub\">").Append(H(name))
+            .Append("</p></div><div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Test/").Append(id).Append("\">A/B test</a><a class=\"btn ghost\" href=\"/Popup/Edit/").Append(id)
+            .Append("\">Targeting, trigger and publishing</a></div></div>")
+            .Append(ctx.Request.Query["msg"] == "saved" ? "<div class=\"notice ok\">Saved. The popup now shows this version.</div>" : "")
+            .Append("<div class=\"wheel-grid\"><form method=\"post\" action=\"/Popup/Content/").Append(id).Append("\" class=\"card pad\" style=\"max-width:none\"><div class=\"stack\">")
+            .Append(inputs).Append(colors.Length == 0 ? "" : "<div class=\"row\">" + colors + "</div>")
+            .Append("</div><div class=\"row\"><button type=\"submit\" class=\"btn\">Save</button></div></form>")
+            .Append("<div><p class=\"sub\" style=\"margin:0 0 10px\">Saved version</p><div class=\"pv-stage\" inert>")
+            .Append(TryGet(root, "html", out var saved) && saved.ValueKind == JsonValueKind.String ? saved.GetString() : "")
+            .Append("</div></div></div>");
+        await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
+    }
 
     // ---------------------------------------------------------------- A/B tests
 
@@ -1364,8 +1578,8 @@ public sealed class LeadsMiddleware
                     msg = "keptA";
                     break;
                 case "useB":
-                    cmd.CommandText = "update Popups set Content = json_set(case when json_valid(Content) then Content else '{}' end, '$.html', " +
-                                      "(select Html from PopupTests where PopupId = @id)), UpdatedAt = @now " +
+                    cmd.CommandText = "update Popups set Content = json_remove(json_set(case when json_valid(Content) then Content else '{}' end, '$.html', " +
+                                      "(select Html from PopupTests where PopupId = @id)), '$.settings'), UpdatedAt = @now " +
                                       "where Id = @id and exists (select 1 from PopupTests where PopupId = @id); " +
                                       "delete from PopupTests where PopupId = @id";
                     msg = "usedB";
@@ -1891,7 +2105,7 @@ public sealed class LeadsMiddleware
         var o = ParseOptions(options);
         var content = type == 5
             ? WheelContent(WheelSettings(o))
-            : JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o) });
+            : JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o), settings = o });
         var now = Timestamp(DateTime.UtcNow);
         long newId;
         await using (var cmd = db.CreateCommand())
@@ -1922,7 +2136,7 @@ public sealed class LeadsMiddleware
             await cmd.ExecuteNonQueryAsync();
         }
 
-        ctx.Response.Redirect((type == 5 ? "/Popup/Wheel/" : "/Popup/Edit/") + newId.ToString(CultureInfo.InvariantCulture));
+        ctx.Response.Redirect((type == 5 ? "/Popup/Wheel/" : "/Popup/Content/") + newId.ToString(CultureInfo.InvariantCulture));
     }
 
     // ----------------------------------------------------------- integrations
@@ -2405,6 +2619,8 @@ public sealed class LeadsMiddleware
   .wheel-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:28px;align-items:start;}
   .wheel-grid .stack input:not([type=color]){padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;}
   .wheel-grid textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;}
+  .wheel-grid select{padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;background:#fff;}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:-4px;}
   .wheel-grid details summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--teal);margin-top:6px;}
   .prizes td{padding:6px 8px;border-bottom:0;}
   .prizes th{padding:8px;}
