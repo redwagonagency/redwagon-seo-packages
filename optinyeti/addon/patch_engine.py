@@ -129,6 +129,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         var pos = layout.position || 'bottom-right';
         container.style.position = 'fixed';
         container.style.width = 'min(380px, calc(100vw - 32px))';
+        container.style.maxHeight = 'calc(100vh - 32px)';
         container.style.maxWidth = 'none';
         container.style.margin = '0';
         container.style.boxShadow = '0 16px 48px rgba(0,0,0,0.22)';
@@ -146,6 +147,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
         container.style.borderRadius = '0';
         container.style.boxShadow = edge === 'top' ? '0 6px 24px rgba(0,0,0,0.18)' : '0 -6px 24px rgba(0,0,0,0.18)';
         container.style.animation = 'oyBarIn 0.35s ease-out';
+        container.style.maxHeight = '45vh';
         var wrap = container.lastElementChild;
         if (wrap) {
           wrap.style.padding = '14px 56px 14px 24px'; wrap.style.maxWidth = '1100px'; wrap.style.margin = '0 auto';
