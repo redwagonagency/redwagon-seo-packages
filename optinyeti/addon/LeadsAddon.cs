@@ -10,6 +10,7 @@
 //   POST /admin/Integrations/save, /admin/Integrations/test
 //   GET  /Popup/SelectTemplate   template gallery driven by the PopupTemplates table
 //   GET  /Templates              public template gallery with live previews
+//   GET/POST /Popup/Wheel/{id}   prize editor for spin-to-win popups
 //   POST /Popup/UseTemplate      creates a ready-to-edit draft popup from a template
 // plus a "Leads" link in the app's own menu and a few baseline security headers.
 
@@ -106,6 +107,11 @@ public sealed class LeadsMiddleware
             if (path.Equals("/admin/leads/delete", StringComparison.OrdinalIgnoreCase))
             {
                 await HandleDelete(ctx);
+                return;
+            }
+            if (path.StartsWith("/Popup/Wheel/", StringComparison.OrdinalIgnoreCase))
+            {
+                await HandleWheelEditor(ctx, path);
                 return;
             }
             if (path.Equals("/Templates/Start", StringComparison.OrdinalIgnoreCase))
@@ -233,6 +239,14 @@ public sealed class LeadsMiddleware
             var updated = CleanUpPage(html);
             updated = InjectTemplatesLink(updated);
             if (signedIn) updated = InjectLeadsLink(updated);
+            if (signedIn && WheelEditLinks.Contains(ctx.Request.Path.Value ?? ""))
+            {
+                var wheelId = (ctx.Request.Path.Value ?? "").TrimEnd('/').Split('/').Last();
+                var at = updated.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
+                if (at >= 0 && long.TryParse(wheelId, NumberStyles.None, CultureInfo.InvariantCulture, out _))
+                    updated = updated.Insert(at, "<a href=\"/Popup/Wheel/" + wheelId +
+                        "\" style=\"position:fixed;right:22px;bottom:22px;z-index:50;background:#FF8A3D;color:#fff;font-weight:600;padding:12px 20px;border-radius:999px;text-decoration:none;box-shadow:0 8px 24px rgba(11,31,43,.25);\">Edit wheel prizes</a>");
+            }
             if (!string.Equals(updated, html, StringComparison.Ordinal))
             {
                 var bytes = Encoding.UTF8.GetBytes(updated);
@@ -1041,6 +1055,163 @@ public sealed class LeadsMiddleware
 
     private const string PickCookie = "oy_tpl";
 
+    // Edit pages of spin-to-win popups, so the stock editor can link to the prize editor.
+    private static readonly ConcurrentDictionary<string, byte> WheelEditLinksMap = new(StringComparer.OrdinalIgnoreCase);
+    private static ICollection<string> WheelEditLinks => WheelEditLinksMap.Keys;
+
+    private static Dictionary<string, object> WheelSettings(JsonElement o) => new()
+    {
+        ["Heading"] = Opt(o, "Heading", "Spin to win"),
+        ["SubHeading"] = Opt(o, "SubHeading"),
+        ["ButtonText"] = Opt(o, "ButtonText", "Spin the wheel"),
+        ["BackgroundColor"] = ColorOpt(o, "BackgroundColor", "#ffffff"),
+        ["ButtonColor"] = ColorOpt(o, "ButtonColor", "#0F6B6B"),
+        ["Segments"] = WheelPrizes(o).Select(p => new Dictionary<string, object> { ["Label"] = p.Label, ["Value"] = p.Code, ["Probability"] = p.Weight }).ToList()
+    };
+
+    // Popup content for a wheel: the rendered popup plus the settings it was rendered from.
+    private static string WheelContent(Dictionary<string, object> settings) =>
+        JsonSerializer.Serialize(new { html = RenderTemplateHtml(5, ParseOptions(JsonSerializer.Serialize(settings))), wheel = settings });
+
+    private static async Task HandleWheelEditor(HttpContext ctx, string path)
+    {
+        var isPost = HttpMethods.IsPost(ctx.Request.Method);
+        if (!isPost && !HttpMethods.IsGet(ctx.Request.Method))
+        {
+            ctx.Response.StatusCode = 405;
+            return;
+        }
+        if (isPost && !SameOrigin(ctx))
+        {
+            ctx.Response.StatusCode = 403;
+            await ctx.Response.WriteAsync("Forbidden");
+            return;
+        }
+        var viewer = await RequireViewer(ctx);
+        if (viewer == null) return;
+        if (!long.TryParse(path["/Popup/Wheel/".Length..].TrimEnd('/'), NumberStyles.None, CultureInfo.InvariantCulture, out var popupId))
+        {
+            ctx.Response.StatusCode = 404;
+            return;
+        }
+
+        await using var db = await Open();
+        string name = "", content = "";
+        var found = false;
+        await using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "select Name, Content from Popups where Id = @id and Type = 5 and (@all = 1 or TenantId = @t)";
+            cmd.Parameters.AddWithValue("@id", popupId);
+            cmd.Parameters.AddWithValue("@all", viewer.SeesAllTenants ? 1 : 0);
+            cmd.Parameters.AddWithValue("@t", viewer.TenantId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                found = true;
+                name = Text(reader, 0);
+                content = Text(reader, 1);
+            }
+        }
+        if (!found)
+        {
+            ctx.Response.StatusCode = 404;
+            ctx.Response.ContentType = "text/html; charset=utf-8";
+            await ctx.Response.WriteAsync(Chrome("Templates") + "<div class=\"empty\"><h2>Spin wheel not found</h2><p><a href=\"/Popup\">Back to your popups</a></p></div>" + PageBottom);
+            return;
+        }
+        var id = popupId.ToString(CultureInfo.InvariantCulture);
+        WheelEditLinksMap["/Popup/Edit/" + id] = 1;
+
+        if (isPost)
+        {
+            var form = await ctx.Request.ReadFormAsync();
+            var segments = new List<Dictionary<string, object>>();
+            for (var i = 1; i <= 8; i++)
+            {
+                var label = Clip(form["label" + i].ToString().Trim(), 24);
+                if (label.Length == 0) continue;
+                double.TryParse(form["chance" + i].ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var chance);
+                if (chance <= 0 || chance > 1000) chance = 1;
+                segments.Add(new Dictionary<string, object> { ["Label"] = label, ["Value"] = Clip(form["code" + i].ToString().Trim(), 30), ["Probability"] = chance });
+            }
+            if (segments.Count < 2)
+            {
+                ctx.Response.Redirect("/Popup/Wheel/" + id + "?msg=few");
+                return;
+            }
+            var bg = form["bg"].ToString();
+            var button = form["button"].ToString();
+            var settings = new Dictionary<string, object>
+            {
+                ["Heading"] = Clip(form["heading"].ToString().Trim(), 120),
+                ["SubHeading"] = Clip(form["sub"].ToString().Trim(), 200),
+                ["ButtonText"] = Clip(form["cta"].ToString().Trim(), 40),
+                ["BackgroundColor"] = HexColor.IsMatch(bg) ? bg : "#ffffff",
+                ["ButtonColor"] = HexColor.IsMatch(button) ? button : "#0F6B6B",
+                ["Segments"] = segments
+            };
+            await using (var cmd = db.CreateCommand())
+            {
+                cmd.CommandText = "update Popups set Content = @c, Title = @title, Subtitle = @sub, CallToAction = @cta, UpdatedAt = @now where Id = @id and Type = 5";
+                cmd.Parameters.AddWithValue("@c", WheelContent(settings));
+                cmd.Parameters.AddWithValue("@title", Nullable((string)settings["Heading"]));
+                cmd.Parameters.AddWithValue("@sub", Nullable((string)settings["SubHeading"]));
+                cmd.Parameters.AddWithValue("@cta", Nullable((string)settings["ButtonText"]));
+                cmd.Parameters.AddWithValue("@now", Timestamp(DateTime.UtcNow));
+                cmd.Parameters.AddWithValue("@id", popupId);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            ctx.Response.Redirect("/Popup/Wheel/" + id + "?msg=saved");
+            return;
+        }
+
+        var root = ParseOptions(content);
+        var wheel = root.ValueKind == JsonValueKind.Object && TryGet(root, "wheel", out var stored) ? stored : ParseOptions("{}");
+        var current = WheelSettings(wheel);
+        var prizes = WheelPrizes(wheel);
+        var total = prizes.Sum(p => p.Weight);
+
+        var notice = ctx.Request.Query["msg"].ToString() switch
+        {
+            "saved" => "<div class=\"notice ok\">Wheel saved.</div>",
+            "few" => "<div class=\"notice bad\">A wheel needs at least two prizes. Nothing was changed.</div>",
+            _ => ""
+        };
+        var rows = new StringBuilder();
+        for (var i = 1; i <= 8; i++)
+        {
+            var p = i <= prizes.Count ? prizes[i - 1] : null;
+            var n = i.ToString(CultureInfo.InvariantCulture);
+            rows.Append("<tr><td>").Append(n).Append("</td>")
+                .Append("<td><input name=\"label").Append(n).Append("\" maxlength=\"24\" aria-label=\"Prize ").Append(n).Append(" name\" value=\"").Append(H(p?.Label ?? "")).Append("\"></td>")
+                .Append("<td><input name=\"code").Append(n).Append("\" maxlength=\"30\" aria-label=\"Prize ").Append(n).Append(" coupon code\" value=\"").Append(H(p?.Code ?? "")).Append("\"></td>")
+                .Append("<td><input name=\"chance").Append(n).Append("\" type=\"number\" min=\"0\" max=\"1000\" step=\"any\" aria-label=\"Prize ").Append(n).Append(" chance\" value=\"")
+                .Append(p == null ? "" : p.Weight.ToString("0.##", CultureInfo.InvariantCulture)).Append("\"></td>")
+                .Append("<td class=\"when\">").Append(p == null || total <= 0 ? "" : (p.Weight / total * 100).ToString("0.#", CultureInfo.InvariantCulture) + "%").Append("</td></tr>");
+        }
+
+        var body = new StringBuilder();
+        body.Append("<div class=\"head\"><div><h1>Wheel prizes</h1><p class=\"sub\">").Append(H(name))
+            .Append("</p></div><div class=\"actions\"><a class=\"btn ghost\" href=\"/Popup/Edit/").Append(id)
+            .Append("\">Targeting and display settings</a></div></div>").Append(notice)
+            .Append("<div class=\"wheel-grid\"><form method=\"post\" action=\"/Popup/Wheel/").Append(id).Append("\" class=\"card pad\" style=\"max-width:none\">")
+            .Append("<div class=\"stack\"><label for=\"heading\">Heading</label><input id=\"heading\" name=\"heading\" maxlength=\"120\" value=\"").Append(H((string)current["Heading"])).Append("\">")
+            .Append("<label for=\"sub\">Line under the heading</label><input id=\"sub\" name=\"sub\" maxlength=\"200\" value=\"").Append(H((string)current["SubHeading"])).Append("\">")
+            .Append("<label for=\"cta\">Button text</label><input id=\"cta\" name=\"cta\" maxlength=\"40\" value=\"").Append(H((string)current["ButtonText"])).Append("\">")
+            .Append("<div class=\"row\"><label>Background <input type=\"color\" name=\"bg\" value=\"").Append(H((string)current["BackgroundColor"])).Append("\"></label>")
+            .Append("<label>Button <input type=\"color\" name=\"button\" value=\"").Append(H((string)current["ButtonColor"])).Append("\"></label></div></div>")
+            .Append("<h2>Prizes</h2><p class=\"sub\" style=\"margin-bottom:12px\">Use coupon codes that exist in your store. Chance is relative: a prize with 40 comes up twice as often as one with 20. Leave a row empty to remove it.</p>")
+            .Append("<table class=\"prizes\"><thead><tr><th></th><th>Prize</th><th>Coupon code</th><th>Chance</th><th>Odds now</th></tr></thead><tbody>").Append(rows)
+            .Append("</tbody></table><div class=\"row\" style=\"margin-top:18px\"><button type=\"submit\" class=\"btn\">Save wheel</button></div></form>")
+            .Append("<div><p class=\"sub\" style=\"margin:0 0 10px\">Saved version</p><div class=\"pv-stage\" inert>")
+            .Append(TryGet(root, "html", out var saved) && saved.ValueKind == JsonValueKind.String ? saved.GetString() : RenderTemplateHtml(5, wheel))
+            .Append("</div></div></div>");
+
+        ctx.Response.ContentType = "text/html; charset=utf-8";
+        ctx.Response.Headers["Cache-Control"] = "no-store";
+        await ctx.Response.WriteAsync(Chrome("Templates") + body + PageBottom);
+    }
+
     // Remembers the chosen template through sign-up or sign-in, then sends the visitor on.
     private static void HandleTemplateStart(HttpContext ctx)
     {
@@ -1310,7 +1481,9 @@ public sealed class LeadsMiddleware
         }
 
         var o = ParseOptions(options);
-        var content = JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o) });
+        var content = type == 5
+            ? WheelContent(WheelSettings(o))
+            : JsonSerializer.Serialize(new { html = RenderTemplateHtml(type, o) });
         var now = Timestamp(DateTime.UtcNow);
         long newId;
         await using (var cmd = db.CreateCommand())
@@ -1341,7 +1514,7 @@ public sealed class LeadsMiddleware
             await cmd.ExecuteNonQueryAsync();
         }
 
-        ctx.Response.Redirect("/Popup/Edit/" + newId.ToString(CultureInfo.InvariantCulture));
+        ctx.Response.Redirect((type == 5 ? "/Popup/Wheel/" : "/Popup/Edit/") + newId.ToString(CultureInfo.InvariantCulture));
     }
 
     // ----------------------------------------------------------- integrations
@@ -1815,7 +1988,13 @@ public sealed class LeadsMiddleware
   .tpl .thumb:hover .peek,.tpl .thumb:focus-visible .peek{opacity:1;}
   .tpl-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:6px;}
   .tpl-actions .btn{text-align:center;padding:10px 8px;}
-  dialog#pv{border:0;background:transparent;padding:16px;max-width:none;max-height:none;width:min(548px,100vw);color:var(--ink);}
+  dialog#pv{border:0;background:transparent;padding:16px;max-width:none;max-height:100vh;overflow:auto;box-sizing:border-box;width:min(548px,100vw);color:var(--ink);}
+  .wheel-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:28px;align-items:start;}
+  .wheel-grid .stack input:not([type=color]){padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;width:100%;}
+  .prizes td{padding:6px 8px;border-bottom:0;}
+  .prizes th{padding:8px;}
+  .prizes input{width:100%;padding:9px 10px;border:1.5px solid var(--line);border-radius:8px;font:inherit;}
+  @media (max-width:900px){.wheel-grid{grid-template-columns:1fr;}}
   dialog#pv::backdrop{background:rgba(11,31,43,.78);}
   .pv-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;color:#fff;margin-bottom:12px;font-size:17px;}
   .pv-close{background:none;border:1.5px solid rgba(255,255,255,.5);color:#fff;border-radius:999px;padding:5px 14px;font:inherit;font-size:14px;cursor:pointer;}
