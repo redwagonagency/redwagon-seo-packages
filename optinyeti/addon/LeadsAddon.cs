@@ -2243,7 +2243,7 @@ public sealed class LeadsMiddleware
 
     // Creates a popup from template settings, rendering its HTML the same way the editor does.
     // status 0 = draft, 1 = active. Returns the new popup id.
-    internal static async Task<long> InsertPopup(SqliteConnection db, long tenantId, long userId, string name, long type, JsonElement o,
+    internal static async Task<long> InsertPopup(SqliteConnection db, long tenantId, string userId, string name, long type, JsonElement o,
         Dictionary<string, object>? layout, string targeting, long trigger, long delay, long frequency, long status)
     {
         var content = type == 5
