@@ -60,6 +60,12 @@ src = sub_once(
     "layout",
 )
 
+# 2c2. Non-blocking formats (in-article banners, bars, slide-ins) must not stop other popups from
+#      showing; only a centered popup or a takeover counts as "something is already open".
+src, n_block = re.subn(r"!document\.querySelector\('\[id\^=\"popup-overlay-\"\]'\)", "!this.blockingPopupShown()", src)
+if n_block < 1:
+    sys.exit("patch point 'blocking-check' matched 0 times")
+
 # 2d. No popups while a heat map is being viewed.
 src = sub_once(r"shouldDisplayPopup: function\(popup\) \{", lambda m: m.group(0) + "\n      if (this.heatMode) return false;\n      if (!this.layoutTargetExists(popup)) return false;", src, "heat-mode")
 
@@ -116,6 +122,19 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
       }
     },
 
+    // True when a popup that covers the page (centered or takeover) is open. Banners inside the
+    // article, bars and slide-ins do not block other popups.
+    blockingPopupShown: function() {
+      var open = document.querySelectorAll('[id^="popup-overlay-"]');
+      for (var i = 0; i < open.length; i++) {
+        var el = open[i];
+        if (el.classList.contains('oy-inline')) continue;
+        if (el.getAttribute('data-oy-layout') === 'slide' || el.getAttribute('data-oy-layout') === 'bar') continue;
+        return true;
+      }
+      return false;
+    },
+
     // Inline popups marked "required" only show on pages that have their target element
     // (so a blog banner never falls back to a centered popup on the homepage).
     layoutTargetExists: function(popup) {
@@ -130,6 +149,7 @@ METHODS = r"""wireLeadCapture: function(wrapper, popup) {
     applyLayout: function(overlay, container, closeBtn, content) {
       var layout = (content && content.layout) || {};
       var mode = layout.mode || 'center';
+      overlay.setAttribute('data-oy-layout', mode);
       if (mode === 'center') return false;
       var hideOverlay = function() {
         overlay.style.background = 'transparent';
