@@ -145,6 +145,7 @@ try:
     print(f"DEBUG: SERVER_HOST resolves to {resolved}, matches known VPS IP: {resolved == '187.77.206.233'}")
 except Exception as e:
     print(f"DEBUG: could not resolve SERVER_HOST: {e}")
+print(f"DEBUG: HOST length={len(HOST)} starts_with_187={HOST.strip().startswith('187.')} has_whitespace={HOST != HOST.strip()} raw_repr={HOST!r}")
 print(f"DEBUG: SERVER_USER == 'root': {USER == 'root'}, length: {len(USER)}")
 if SSH_KEY:
     print(f"DEBUG: SSH key starts with '-----BEGIN': {SSH_KEY.strip().startswith('-----BEGIN')}, length: {len(SSH_KEY)}, line count: {len(SSH_KEY.strip().splitlines())}")
