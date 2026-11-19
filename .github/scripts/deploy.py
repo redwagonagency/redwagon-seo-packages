@@ -141,9 +141,15 @@ def sftp_write(client, remote_path, content):
 print(f"\nConnecting to {USER}@{HOST}:22 ...")
 try:
     import socket
-    print(f"DEBUG: SERVER_HOST resolves to {socket.gethostbyname(HOST)}")
+    resolved = socket.gethostbyname(HOST)
+    print(f"DEBUG: SERVER_HOST resolves to {resolved}, matches known VPS IP: {resolved == '187.77.206.233'}")
 except Exception as e:
     print(f"DEBUG: could not resolve SERVER_HOST: {e}")
+print(f"DEBUG: SERVER_USER == 'root': {USER == 'root'}, length: {len(USER)}")
+if SSH_KEY:
+    print(f"DEBUG: SSH key starts with '-----BEGIN': {SSH_KEY.strip().startswith('-----BEGIN')}, length: {len(SSH_KEY)}, line count: {len(SSH_KEY.strip().splitlines())}")
+else:
+    print("DEBUG: SERVER_SSH_KEY is empty!")
 
 # First: probe what auth methods the server supports
 transport = paramiko.Transport((HOST, 22))
