@@ -1,10 +1,5 @@
 const team = [
-  { name: "Marcus Webb", role: "CEO & Co-Founder", bio: "Former SEO director at a Fortune 500 company with 15 years building search strategies across e-commerce, media, and SaaS.", initials: "MW" },
-  { name: "Priya Nair", role: "CTO & Co-Founder", bio: "Ex-Google engineer who built crawling infrastructure at scale. Obsessed with making complex SEO data accessible to everyone.", initials: "PN" },
-  { name: "David Kim", role: "Head of Product", bio: "Product leader with experience at Moz and Semrush. Believes great SEO tools should be as intuitive as they are powerful.", initials: "DK" },
-  { name: "Ana Torres", role: "Head of Customer Success", bio: "Helped over 500 agencies optimize their workflows using data-driven SEO. Now builds the systems that help our customers thrive.", initials: "AT" },
-  { name: "Liam O'Brien", role: "Lead Engineer", bio: "Full-stack engineer specializing in large-scale data pipelines. Built the real-time rank tracking engine that powers our platform.", initials: "LB" },
-  { name: "Fatima Hassan", role: "Head of Marketing", bio: "Growth marketer who has scaled B2B SaaS products from 0 to 100K users. Our biggest advocate and our harshest critic.", initials: "FH" },
+  { name: "Joe Whyte", role: "Founder, Red Wagon Growth Marketing Agency", bio: "Agency owner and marketing technologist who builds the tools his own clients need — SearchAuditPro included — when nothing on the market fits how real agency work actually gets done.", initials: "JW" },
 ];
 
 const values = [
@@ -35,21 +30,25 @@ export default function AboutPage() {
           <div>
             <h2 style={{ fontSize: 32, fontWeight: 700, color: "#0f172a", marginBottom: 20 }}>Our Story</h2>
             <p style={{ fontSize: 16, color: "#374151", lineHeight: 1.8, marginBottom: 16 }}>
-              SearchAuditPro was founded in 2022 in Austin, Texas by Marcus Webb and Priya Nair after years of frustration with the status quo in SEO tooling. Enterprise tools were too expensive. Budget tools were too limited. And none of them tracked what was becoming the fastest-growing channel in search: AI-generated answers.
+              SearchAuditPro is built and run by{" "}
+              <a href="https://redwagon.agency/arizona/" target="_blank" rel="noopener noreferrer" style={{ color: "#1a56db" }}>
+                Red Wagon Growth Marketing Agency
+              </a>
+              , a working marketing agency. We built it because the audit and reporting tools on the market were either too expensive, too limited, or didn't match how real agency work actually gets done — and none of them tracked what's becoming one of the fastest-growing channels in search: AI-generated answers.
             </p>
             <p style={{ fontSize: 16, color: "#374151", lineHeight: 1.8, marginBottom: 16 }}>
-              We set out to build the platform we always wished existed — one that combines the data depth of enterprise tools with the simplicity and affordability that growing agencies and in-house teams actually need.
+              It started as an internal tool to run Red Wagon's own client audits — including the Arizona-market campaigns Red Wagon runs for local businesses across the state — and grew into a platform other agencies and in-house teams can use too.
             </p>
             <p style={{ fontSize: 16, color: "#374151", lineHeight: 1.8 }}>
-              Today, SearchAuditPro is trusted by 50,000+ SEO professionals across 90 countries, and we're just getting started.
+              It's still in active development, with new modules (LLM visibility tracking, autonomous link development, and more) shipping regularly.
             </p>
           </div>
           <div style={{ background: "linear-gradient(135deg,#1a56db14,#06b6d414)", border: "1px solid #e2e8f0", borderRadius: 16, padding: 40, textAlign: "center" }}>
             {[
-              { value: "50K+", label: "Active Users" },
-              { value: "90+", label: "Countries" },
-              { value: "2022", label: "Founded" },
-              { value: "40+", label: "Team Members" },
+              { value: "200+", label: "SEO Checks" },
+              { value: "100+", label: "Directories Audited" },
+              { value: "6", label: "Core Modules" },
+              { value: "2026", label: "In Active Development" },
             ].map(s => (
               <div key={s.label} style={{ marginBottom: 28 }}>
                 <div style={{ fontSize: 40, fontWeight: 800, color: "#1a56db" }}>{s.value}</div>
@@ -78,8 +77,8 @@ export default function AboutPage() {
 
       {/* Team */}
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 24px" }}>
-        <h2 style={{ fontSize: 32, fontWeight: 700, color: "#0f172a", textAlign: "center", marginBottom: 48 }}>Meet the Team</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
+        <h2 style={{ fontSize: 32, fontWeight: 700, color: "#0f172a", textAlign: "center", marginBottom: 48 }}>Who Built This</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28, maxWidth: 360, margin: "0 auto" }}>
           {team.map(member => (
             <div key={member.name} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 28 }}>
               <div style={{ width: 64, height: 64, background: "linear-gradient(135deg,#1a56db,#06b6d4)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 20, marginBottom: 16 }}>

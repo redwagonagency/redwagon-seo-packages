@@ -20,16 +20,10 @@ const features = [
 ];
 
 const stats = [
-  { value: "50K+", label: "Active Users" },
-  { value: "2M+", label: "Keywords Tracked" },
-  { value: "500M+", label: "Backlinks Indexed" },
+  { value: "200+", label: "SEO Checks" },
+  { value: "100+", label: "Directories Audited" },
+  { value: "6", label: "Core Modules" },
   { value: "99.9%", label: "Uptime SLA" },
-];
-
-const testimonials = [
-  { name: "Sarah Mitchell", title: "SEO Director, Nexus Digital", quote: "SearchAuditPro transformed our agency. We went from managing 12 clients to 45 clients with the same team. The automated audits save us 20+ hours per week.", avatar: "SM" },
-  { name: "James Rodriguez", title: "Head of Growth, TechVenture", quote: "The LLM visibility tracking is a game changer. We discovered our competitors were dominating AI answers and fixed it in 30 days. Our organic traffic is up 340%.", avatar: "JR" },
-  { name: "Emily Chen", title: "Marketing Manager, RetailCo", quote: "Local SEO citation tracking finally makes sense. We found 47 inconsistent NAP listings killing our rankings. Fixed them all through the platform in one week.", avatar: "EC" },
 ];
 
 export default function HomePage() {
@@ -44,7 +38,7 @@ export default function HomePage() {
         <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center", position: "relative" }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(6,182,212,0.15)", border: "1px solid rgba(6,182,212,0.3)", borderRadius: 24, padding: "6px 16px", marginBottom: 28 }}>
             <span style={{ width: 6, height: 6, background: "#06b6d4", borderRadius: "50%", display: "inline-block" }} />
-            <span style={{ color: "#06b6d4", fontSize: 13, fontWeight: 600 }}>Trusted by 50,000+ SEO Professionals</span>
+            <span style={{ color: "#06b6d4", fontSize: 13, fontWeight: 600 }}>Built by a Working Marketing Agency, Not a Lab</span>
           </div>
           <h1 style={{ fontSize: 56, fontWeight: 800, color: "#ffffff", lineHeight: 1.1, marginBottom: 20, letterSpacing: -1.5 }}>
             Find Out What&apos;s Holding{" "}
@@ -145,28 +139,21 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* TESTIMONIALS */}
+      {/* WHY WE BUILT THIS */}
       <section style={{ padding: "96px 24px", background: "#f8fafc" }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 64 }}>
-            <h2 style={{ fontSize: 40, fontWeight: 800, color: "#0f172a" }}>Loved by SEO Teams Worldwide</h2>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24 }}>
-            {testimonials.map(t => (
-              <div key={t.name} style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 32 }}>
-                <div style={{ display: "flex", gap: 2, marginBottom: 16 }}>
-                  {[1,2,3,4,5].map(i => <span key={i} style={{ color: "#f59e0b", fontSize: 16 }}>★</span>)}
-                </div>
-                <p style={{ color: "#334155", fontSize: 15, lineHeight: 1.7, marginBottom: 24, fontStyle: "italic" }}>"{t.quote}"</p>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 44, height: 44, background: "linear-gradient(135deg,#1a56db,#06b6d4)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14 }}>{t.avatar}</div>
-                  <div>
-                    <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{t.name}</div>
-                    <div style={{ color: "#64748b", fontSize: 12 }}>{t.title}</div>
-                  </div>
-                </div>
+        <div style={{ maxWidth: 800, margin: "0 auto", textAlign: "center" }}>
+          <h2 style={{ fontSize: 40, fontWeight: 800, color: "#0f172a", marginBottom: 32 }}>Built From Real Agency Work</h2>
+          <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 16, padding: 40 }}>
+            <p style={{ color: "#334155", fontSize: 17, lineHeight: 1.8, marginBottom: 24, fontStyle: "italic" }}>
+              "I built SearchAuditPro because I needed it for my own clients. Every check in here is one I actually run — this isn't a feature list dreamed up in a product meeting."
+            </p>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+              <div style={{ width: 44, height: 44, background: "linear-gradient(135deg,#1a56db,#06b6d4)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14 }}>JW</div>
+              <div style={{ textAlign: "left" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>Joe Whyte</div>
+                <div style={{ color: "#64748b", fontSize: 12 }}>Founder, Red Wagon Growth Marketing Agency</div>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </section>
@@ -216,7 +203,7 @@ export default function HomePage() {
       <section style={{ padding: "96px 24px", background: "linear-gradient(135deg,#1a56db,#0891b2)" }}>
         <div style={{ maxWidth: 700, margin: "0 auto", textAlign: "center" }}>
           <h2 style={{ fontSize: 40, fontWeight: 800, color: "#ffffff", marginBottom: 16 }}>Get Started with SearchAuditPro Today</h2>
-          <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 18, marginBottom: 36, lineHeight: 1.6 }}>Join 50,000+ SEO professionals who trust SearchAuditPro to grow their organic traffic.</p>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 18, marginBottom: 36, lineHeight: 1.6 }}>Run the same audits we run for our own agency clients — built around 200+ real SEO checks, not a marketing claim.</p>
           <div style={{ display: "flex", gap: 16, justifyContent: "center" }}>
             <Link href="/register" style={{ background: "#ffffff", color: "#1a56db", padding: "14px 32px", borderRadius: 10, fontWeight: 700, fontSize: 16, textDecoration: "none" }}>Start Your Free Trial</Link>
             <Link href="/contact" style={{ background: "rgba(255,255,255,0.15)", border: "2px solid rgba(255,255,255,0.3)", color: "#ffffff", padding: "14px 32px", borderRadius: 10, fontWeight: 700, fontSize: 16, textDecoration: "none" }}>Request a Demo</Link>

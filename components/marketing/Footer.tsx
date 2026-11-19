@@ -50,7 +50,12 @@ export default function MarketingFooter() {
         </div>
         <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
           <p style={{ fontSize: 13 }}>© 2026 SearchAuditPro. All rights reserved.</p>
-          <p style={{ fontSize: 13 }}>Made with ♥ for SEO professionals worldwide</p>
+          <p style={{ fontSize: 13 }}>
+            Built by{" "}
+            <a href="https://redwagon.agency/arizona/" target="_blank" rel="noopener noreferrer" style={{ color: "#94a3b8", textDecoration: "underline" }}>
+              Red Wagon Growth Marketing Agency
+            </a>
+          </p>
         </div>
       </div>
     </footer>

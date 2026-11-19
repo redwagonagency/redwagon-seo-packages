@@ -175,13 +175,13 @@ export default function RegisterPage() {
 
           <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 20, marginTop: 40 }}>
             <p style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.7, fontStyle: "italic", marginBottom: 12 }}>
-              &ldquo;SearchAuditPro saved our agency 20 hours per week. The automated audits and reports are a game-changer.&rdquo;
+              &ldquo;I built this to run my own agency's audits. Every check in here is one I actually use.&rdquo;
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 36, height: 36, background: "linear-gradient(135deg,#1a56db,#06b6d4)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14 }}>SM</div>
+              <div style={{ width: 36, height: 36, background: "linear-gradient(135deg,#1a56db,#06b6d4)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14 }}>JW</div>
               <div>
-                <p style={{ fontSize: 13, color: "#ffffff", fontWeight: 600 }}>Sarah Mitchell</p>
-                <p style={{ fontSize: 12, color: "#64748b" }}>SEO Director, Nexus Digital</p>
+                <p style={{ fontSize: 13, color: "#ffffff", fontWeight: 600 }}>Joe Whyte</p>
+                <p style={{ fontSize: 12, color: "#64748b" }}>Founder, Red Wagon Growth Marketing Agency</p>
               </div>
             </div>
           </div>
