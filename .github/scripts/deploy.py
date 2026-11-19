@@ -139,6 +139,11 @@ def sftp_write(client, remote_path, content):
 
 # ── Connect ───────────────────────────────────────────────────────────────────
 print(f"\nConnecting to {USER}@{HOST}:22 ...")
+try:
+    import socket
+    print(f"DEBUG: SERVER_HOST resolves to {socket.gethostbyname(HOST)}")
+except Exception as e:
+    print(f"DEBUG: could not resolve SERVER_HOST: {e}")
 
 # First: probe what auth methods the server supports
 transport = paramiko.Transport((HOST, 22))
