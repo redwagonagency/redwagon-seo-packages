@@ -22,6 +22,7 @@ jobs:
           SERVER_HOST:         ${{ secrets.SERVER_HOST }}
           SERVER_USER:         ${{ secrets.SERVER_USER }}
           SERVER_PASSWORD:     ${{ secrets.SERVER_PASSWORD }}
+          SERVER_SSH_KEY:      ${{ secrets.SERVER_SSH_KEY }}
           NEXTAUTH_SECRET:     ${{ secrets.NEXTAUTH_SECRET }}
           GOOGLE_CLIENT_ID:    ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

@@ -9,7 +9,8 @@ import paramiko
 # ── Config ────────────────────────────────────────────────────────────────────
 HOST     = os.environ["SERVER_HOST"]
 USER     = os.environ["SERVER_USER"]
-PASSWORD = os.environ["SERVER_PASSWORD"]
+PASSWORD = os.environ.get("SERVER_PASSWORD", "")
+SSH_KEY  = os.environ.get("SERVER_SSH_KEY", "")
 APP_DIR  = "/root/searchauditpro"
 APP2_DIR = "/root/unboundkeyword"
 REPO_URL = "https://github.com/redwagonagency/redwagon-seo-packages.git"
@@ -157,6 +158,29 @@ def ki_handler(title, instructions, prompts):
     return [PASSWORD for _ in prompts]
 
 connected = False
+
+# Method 0: public key (preferred when the server only allows publickey auth)
+if not connected and SSH_KEY and "publickey" in allowed:
+    import io
+    pkey = None
+    for key_cls in (paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey):
+        try:
+            pkey = key_cls.from_private_key(io.StringIO(SSH_KEY))
+            break
+        except Exception:
+            continue
+    if pkey is None:
+        print("Could not parse SERVER_SSH_KEY with any known key type")
+    else:
+        try:
+            transport.auth_publickey(USER, pkey)
+            print("Connected via public key!")
+            connected = True
+        except paramiko.AuthenticationException as e:
+            print(f"publickey auth failed: {e}")
+            transport.close()
+            transport = paramiko.Transport((HOST, 22))
+            transport.start_client(timeout=30)
 
 # Method 1: keyboard-interactive
 if not connected and "keyboard-interactive" in allowed:
